@@ -384,12 +384,24 @@ function computeNever(facilities){
   return Math.max(720, maxGap+180);
 }
 
-function rankStream(facilities, planStart, NEVER){
+function distanceContext(registry){
+  const known = registry.map(f=>f.distanceKm).filter(v=>v!=null).sort((a,b)=>a-b);
+  if(known.length < 3) return null;
+  const p90 = known[Math.floor(known.length*0.9)] || known[known.length-1];
+  const nrm = km => Math.min(1, Math.max(0, km/(p90||1)));
+  const mean = known.reduce((s,k)=>s+nrm(k),0)/known.length;
+  return {nrm, mean};
+}
+function distanceTerm(f, dctx, bias){
+  if(!dctx || f.distanceKm==null || !bias) return 1;
+  return Math.min(2, Math.max(0.15, 1 + bias*(dctx.nrm(f.distanceKm) - dctx.mean)));
+}
+function rankStream(facilities, planStart, NEVER, dctx, bias){
   const scored = facilities.map(f=>{
     const overdue = f.pinned ? Infinity
       : (f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER);
     const weight = f.weight==null?1:f.weight;
-    const score = overdue===Infinity ? Infinity : overdue*weight;
+    const score = overdue===Infinity ? Infinity : overdue*weight*distanceTerm(f, dctx, bias);
     return {f, overdue, score};
   });
   scored.sort((a,b)=>{
@@ -472,6 +484,7 @@ function sainteLagueAssign(pool, count, day, ctx){
   const chosen=[];
   const candidates = pool.filter(p=>p.active!==false);
   const usedToday = new Set();
+  const gamma = ctx.familiarityGamma==null ? 0.35 : ctx.familiarityGamma;
   for(let slot=0; slot<count; slot++){
     let best=null, bestKey=Infinity, bestIdx=-1;
     for(let idx=0; idx<candidates.length; idx++){
@@ -479,16 +492,16 @@ function sainteLagueAssign(pool, count, day, ctx){
       if(usedToday.has(p.id)) continue;
       if(ctx.isUnavailable && ctx.isUnavailable(p,day)) continue;
       if(ctx.isBlocked && ctx.isBlocked(p,ctx.facility)) continue;
-      let overTied=false;
-      if(ctx.isOverTied) overTied = ctx.isOverTied(p,ctx.facility);
+      if(ctx.hardBlockOverTied && ctx.isOverTied && ctx.isOverTied(p,ctx.facility)) continue;
       const assignedCount = ctx.assignedCount[p.id]||0;
-      const effWeight = p.fixedCount!=null
+      const baseWeight = p.fixedCount!=null
         ? (assignedCount < p.fixedCount ? 1 : 0)
         : (p.weight==null?1:p.weight);
-      if(effWeight<=0) continue;
-      const key = (assignedCount+0.5)/effWeight;
-      const penalty = overTied ? 1 : 0;
-      const finalKey = key + penalty*1000000;
+      if(baseWeight<=0) continue;
+      const vpf = ctx.facilityPersonVisits ? Math.min(ctx.facilityPersonVisits[ctx.facility.id+'|'+p.id]||0, 6) : 0;
+      const dTerm = distanceTerm(ctx.facility, ctx.dctx, p.distanceAffinity||0);
+      const effWeight = baseWeight * dTerm * (1/(1+gamma*vpf));
+      const finalKey = (assignedCount+0.5)/effWeight;
       if(finalKey<bestKey){
         bestKey=finalKey; best=p; bestIdx=idx;
       }
@@ -499,6 +512,7 @@ function sainteLagueAssign(pool, count, day, ctx){
         if(usedToday.has(p.id)) continue;
         if(ctx.isUnavailable && ctx.isUnavailable(p,day)) continue;
         if(ctx.isBlocked && ctx.isBlocked(p,ctx.facility)) continue;
+        if(ctx.hardBlockOverTied && ctx.isOverTied && ctx.isOverTied(p,ctx.facility)) continue;
         best = p; break;
       }
     }
@@ -514,7 +528,6 @@ function sainteLagueAssign(pool, count, day, ctx){
 const BASIC_CATEGORIES = new Set(['ادارة الفرع','الاولي','الثانية','الثالثة']);
 const CONTRACTED_CATEGORIES = new Set(['معمل','غسيل كلوي','اشعة','صيدلية','رسم عصب','مستشفي','حضانات']);
 const ADMIN_LOW_FREQ_NAMES = new Set(['ادارة الفرع','التوثيق والمعلومات','الشئون الطبية','الشئون القانونية','الملحق','الزراعة']);
-const DISTANT_AREAS = ['النوبارية','رشيد','بدر','وادي النطرون','ابو المطامير'];
 
 function computeWeight(name){
   if(ADMIN_LOW_FREQ_NAMES.has(name)) return 0.5;
@@ -536,7 +549,7 @@ function buildRegistry(seedRows){
     kind: classifyKind(r[0], r[1], r[2], beheiraLocations),
     weight: computeWeight(r[0]),
     lastVisit:null, visitCount:0, pinned:false, manualExcluded:false,
-    visitHistory:[], reviewFlag:null
+    visitHistory:[], reviewFlag:null, distanceKm:null
   }));
 }
 
@@ -591,47 +604,13 @@ function applyGenderBalance(rows){
   }
   return dropped;
 }
-function isDistantFacility(f){
-  return DISTANT_AREAS.some(a=>f.location && f.location.indexOf(a)>=0);
-}
-function applyDistantAreaLean(rows){
-  const targetRows = rows.filter(r=>!r.empty && isDistantFacility(r.facility));
-  const dropped=[];
-  if(targetRows.length===0) return {applied:0, dropped, none:true};
-  let applied=0, attempts=0;
-  for(const row of targetRows){
-    if(attempts>=200) break;
-    for(const pool of ['finTeam','clinTeam']){
-      const females = row[pool].filter(p=>p.gender==='f');
-      if(females.length===0) continue;
-      let fixed=false;
-      for(const otherRow of rows){
-        if(otherRow===row||otherRow.empty) continue;
-        attempts++;
-        const males = otherRow[pool].filter(p=>p.gender==='m');
-        outer:
-        for(const personA of females){
-          for(const personB of males){
-            if(row[pool].some(p=>p!==personA&&p.id===personB.id)) continue;
-            if(otherRow[pool].some(p=>p!==personB&&p.id===personA.id)) continue;
-            swapPersonBetweenRows(row,pool,personA,otherRow,pool,personB);
-            fixed=true; applied++;
-            break outer;
-          }
-        }
-        if(fixed||attempts>=200) break;
-      }
-      if(!fixed) dropped.push({date:row.date, facility:row.facility.name, reason:'distant-area-lean-no-partner'});
-    }
-  }
-  return {applied, dropped};
-}
 
 function generatePlan(opts){
   const {
     registry, finPool, clinPool, startDate, endDate, weekdays, holidays, exceptions,
-    mode, ratioP, countsM, countsR, applyGender, applyDistant,
-    finInitial, clinInitial, isOverTied, isUnavailable, isBlocked
+    mode, ratioP, countsM, countsR, applyGender,
+    finInitial, clinInitial, isOverTied, isUnavailable, isBlocked,
+    facilityPersonVisits, globalDistanceBias, familiarityGamma, hardBlockOverTied
   } = opts;
   const days = workingDays(startDate, endDate, weekdays, holidays, exceptions);
   const N = days.length;
@@ -639,8 +618,10 @@ function generatePlan(opts){
   const contractedFac = registry.filter(f=>f.kind==='contracted' && !f.manualExcluded);
   const budget = slotBudget(N, mode, {p:ratioP, M:countsM, R:countsR, basicPoolLen:basicFac.length, contractedPoolLen:contractedFac.length});
   const NEVER = computeNever(registry);
-  const rankedBasic = rankStream(basicFac, days[0]||startDate, NEVER);
-  const rankedContracted = rankStream(contractedFac, days[0]||startDate, NEVER);
+  const dctx = distanceContext(registry);
+  const bias = globalDistanceBias||0;
+  const rankedBasic = rankStream(basicFac, days[0]||startDate, NEVER, dctx, bias);
+  const rankedContracted = rankStream(contractedFac, days[0]||startDate, NEVER, dctx, bias);
   const pattern = interleave(budget.M+budget.R, budget.M);
   const withGaps = spreadUnusedDays(pattern, budget.unused);
   let bi=0, ci=0, dayIdx=0;
@@ -666,27 +647,26 @@ function generatePlan(opts){
   for(const row of rows){
     if(row.empty) continue;
     const finCount = row.kind==='basic'?2:1;
-    const ctx = {facility:row.facility, isUnavailable, isBlocked, isOverTied};
+    const ctx = {facility:row.facility, isUnavailable, isBlocked, isOverTied, dctx, facilityPersonVisits, familiarityGamma, hardBlockOverTied};
     row.finTeam = sainteLagueAssign(finPool, finCount, row.date, Object.assign({}, ctx, {assignedCount:finAssigned}));
     row.clinTeam = sainteLagueAssign(clinPool, 2, row.date, Object.assign({}, ctx, {assignedCount:clinAssigned}));
   }
-  let genderDropped=[], distantResult={applied:0,dropped:[]};
+  let genderDropped=[];
   if(applyGender!==false) genderDropped = applyGenderBalance(rows);
-  if(applyDistant!==false) distantResult = applyDistantAreaLean(rows);
   return {
-    rows, budget, N, days, genderDropped, distantResult,
+    rows, budget, N, days, genderDropped, dctx, globalDistanceBias: bias,
     planStart: days[0]||startDate, NEVER,
     leftoverBasic: rankedBasic.slice(budget.M), leftoverContracted: rankedContracted.slice(budget.R),
     pinnedOverflow: [...rankedBasic.slice(budget.M), ...rankedContracted.slice(budget.R)].filter(f=>f.pinned)
   };
 }
-function displayScore(f, planStart, NEVER){
+function displayScore(f, planStart, NEVER, dctx, bias){
   const overdue = f.pinned ? Infinity : (f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER);
-  return overdue===Infinity ? Infinity : overdue*(f.weight==null?1:f.weight);
+  return overdue===Infinity ? Infinity : overdue*(f.weight==null?1:f.weight)*distanceTerm(f, dctx, bias);
 }
 function computeNearMisses(plan, topN){
   topN = topN||10;
-  const scored = [...plan.leftoverBasic, ...plan.leftoverContracted].map(f=>({f, score: displayScore(f, plan.planStart, plan.NEVER)}));
+  const scored = [...plan.leftoverBasic, ...plan.leftoverContracted].map(f=>({f, score: displayScore(f, plan.planStart, plan.NEVER, plan.dctx, plan.globalDistanceBias)}));
   scored.sort((a,b)=>b.score-a.score);
   return scored.slice(0,topN).map(s=>s.f);
 }
@@ -852,7 +832,7 @@ const RETIRED_SEED = [
 ];
 
 function freshPerson(p){
-  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true}, p);
+  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0}, p);
 }
 
 function escapeXml(s){
@@ -1169,7 +1149,7 @@ function serializeRegistry(reg){
     id:f.id, name:f.name, category:f.category, location:f.location, kind:f.kind, weight:f.weight,
     lastVisit: f.lastVisit ? fmtISO(f.lastVisit) : null,
     visitCount: f.visitCount||0, pinned: !!f.pinned, manualExcluded: !!f.manualExcluded,
-    reviewFlag: f.reviewFlag||null,
+    reviewFlag: f.reviewFlag||null, distanceKm: f.distanceKm!=null?f.distanceKm:null,
     visitHistory: (f.visitHistory||[]).map(v=>({date: fmtISO(v.date), team: v.team}))
   }));
 }
@@ -1287,7 +1267,7 @@ function makeBlockedChecker(){
 }
 
 const REGISTRY_HEADER_ALIASES = {
-  'اسم الجهة':'name', 'المنطقة':'category', 'الموقع':'location', 'الوزن':'weight', 'الحالة':'status'
+  'اسم الجهة':'name', 'المنطقة':'category', 'الموقع':'location', 'الوزن':'weight', 'الحالة':'status', 'المسافة':'distance'
 };
 function mapRegistryHeaders(headerRow){
   const mapping = {};
@@ -1312,7 +1292,8 @@ function parseRegistryRows(rawRows, mapping){
     categoryRaw: (r[mapping.category]||'').toString(),
     locationRaw: (r[mapping.location]||'').toString(),
     weightRaw: r[mapping.weight],
-    statusRaw: (r[mapping.status]||'').toString()
+    statusRaw: (r[mapping.status]||'').toString(),
+    distanceRaw: mapping.distance!=null ? r[mapping.distance] : undefined
   })).filter(r=>r.nameRaw.trim()!=='');
 }
 function parseStatusValue(raw){
@@ -1326,6 +1307,11 @@ function statusToArabic(status){
   if(status==='pinned') return 'مثبّتة';
   return 'مُدرجة';
 }
+function parseDistanceRaw(raw){
+  if(raw==null || raw==='') return null;
+  const v = parseFloat(raw);
+  return isNaN(v) ? null : v;
+}
 function computeRegistryDiff(records, currentRegistry){
   const byName = new Map(currentRegistry.map(f=>[normFacility(f.name), f]));
   const seenNames = new Set();
@@ -1337,6 +1323,7 @@ function computeRegistryDiff(records, currentRegistry){
     const status = parseStatusValue(rec.statusRaw);
     const category = rec.categoryRaw.trim();
     const location = rec.locationRaw.trim();
+    const distanceKm = parseDistanceRaw(rec.distanceRaw);
     const key = normFacility(name);
     seenNames.add(key);
     const existing = byName.get(key);
@@ -1344,7 +1331,7 @@ function computeRegistryDiff(records, currentRegistry){
     const kind = categoryKnown ? (BASIC_CATEGORIES.has(category)?'basic':'contracted') : 'excluded';
     const categoryFlag = categoryKnown ? null : 'unknown-category';
     if(!existing){
-      added.push({name, category, location, weight, status, kind, categoryFlag});
+      added.push({name, category, location, weight, status, kind, categoryFlag, distanceKm});
     } else {
       const fields=[];
       if(existing.category!==category) fields.push({field:'category', from:existing.category, to:category});
@@ -1352,7 +1339,8 @@ function computeRegistryDiff(records, currentRegistry){
       if(existing.weight!==weight) fields.push({field:'weight', from:existing.weight, to:weight});
       const existingStatus = existing.manualExcluded ? 'excluded' : (existing.pinned ? 'pinned' : 'included');
       if(existingStatus!==status) fields.push({field:'status', from:existingStatus, to:status});
-      if(fields.length) changed.push({existing, name, category, location, weight, status, kind, categoryFlag, fields});
+      if((existing.distanceKm==null?null:existing.distanceKm)!==distanceKm) fields.push({field:'distanceKm', from:existing.distanceKm, to:distanceKm});
+      if(fields.length) changed.push({existing, name, category, location, weight, status, kind, categoryFlag, distanceKm, fields});
     }
   }
   const missing = currentRegistry.filter(f=>!seenNames.has(normFacility(f.name)));
@@ -1364,7 +1352,7 @@ function applyRegistryDiff(diff, registry, missingActions){
     registry.push({
       id:'reg_'+registry.length+'_'+Math.random().toString(36).slice(2,8),
       name:a.name, category:a.category, location:a.location||null,
-      kind:a.kind, weight:a.weight,
+      kind:a.kind, weight:a.weight, distanceKm: a.distanceKm==null?null:a.distanceKm,
       lastVisit:null, visitCount:0, pinned:a.status==='pinned', manualExcluded:a.status==='excluded',
       visitHistory:[], reviewFlag:a.categoryFlag
     });
@@ -1373,7 +1361,7 @@ function applyRegistryDiff(diff, registry, missingActions){
     const f = c.existing;
     f.category = c.category; f.location = c.location||null; f.weight = c.weight;
     f.pinned = c.status==='pinned'; f.manualExcluded = c.status==='excluded';
-    f.kind = c.kind; f.reviewFlag = c.categoryFlag;
+    f.kind = c.kind; f.reviewFlag = c.categoryFlag; f.distanceKm = c.distanceKm==null?null:c.distanceKm;
   }
   for(const f of diff.missing){
     if(missingActions[f.id]==='exclude') f.manualExcluded = true;
@@ -1598,6 +1586,87 @@ async function runSelfTests(){
     return `لبنى +${totals.finCounts['p_lobna']||0} vs غادة +${totals.finCounts['p_ghada']||0} this cycle`;
   });
 
+  check('distance no-op: identical runs with no distances entered produce identical plans', ()=>{
+    const args = ()=>({
+      registry: buildRegistry(REGISTRY_SEED),
+      finPool: FIN_ADMIN_SEED.map(freshPerson),
+      clinPool: CLINICAL_SEED.map(freshPerson),
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68
+    });
+    const a = generatePlan(args());
+    const b = generatePlan(args());
+    const snap = plan => plan.rows.map(r=>r.empty?null:{d:fmtISO(r.date), f:r.facility.id, fin:r.finTeam.map(p=>p.id), clin:r.clinTeam.map(p=>p.id)});
+    if(JSON.stringify(snap(a))!==JSON.stringify(snap(b))) throw new Error('plans diverged with no distances entered');
+    return `${a.rows.filter(r=>!r.empty).length} rows byte-identical`;
+  });
+
+  check('distanceTerm at bias 0 is neutral for every facility', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    registry.forEach((f,i)=>{ if(i<10) f.distanceKm = (i+1)*5; });
+    const dctx = distanceContext(registry);
+    if(!dctx) throw new Error('expected a distance context with >=3 known distances');
+    for(const f of registry){
+      if(distanceTerm(f, dctx, 0)!==1) throw new Error(`distanceTerm!=1 at bias 0 for ${f.name}`);
+    }
+    return 'ok';
+  });
+
+  check('distance bias +1 increases the mean distance of scheduled facilities', ()=>{
+    const buildReg = ()=>{
+      const r = buildRegistry(REGISTRY_SEED);
+      r.forEach((f,i)=>{ f.distanceKm = 1 + (i%20)*3; });
+      return r;
+    };
+    const args = bias=>({
+      registry: buildReg(),
+      finPool: FIN_ADMIN_SEED.map(freshPerson),
+      clinPool: CLINICAL_SEED.map(freshPerson),
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68, globalDistanceBias: bias
+    });
+    const meanDist = plan=>{
+      const rows = plan.rows.filter(r=>!r.empty && r.facility.distanceKm!=null);
+      return rows.reduce((s,r)=>s+r.facility.distanceKm,0)/rows.length;
+    };
+    const mNeutral = meanDist(generatePlan(args(0)));
+    const mFar = meanDist(generatePlan(args(1)));
+    if(!(mFar > mNeutral)) throw new Error(`mean distance did not increase: neutral=${mNeutral.toFixed(2)} far=${mFar.toFixed(2)}`);
+    return `neutral=${mNeutral.toFixed(2)} far=${mFar.toFixed(2)}`;
+  });
+
+  check('familiarity discount raises distinct visitors to a facility across two cycles', ()=>{
+    const args = ()=>({
+      registry: buildRegistry(REGISTRY_SEED),
+      finPool: FIN_ADMIN_SEED.map(freshPerson),
+      clinPool: CLINICAL_SEED.map(freshPerson),
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68
+    });
+    const cycle1 = generatePlan(args());
+    const trackedId = cycle1.rows.find(r=>!r.empty && r.kind==='basic').facility.id;
+    const fpv = {};
+    const finAfterCycle1 = {};
+    for(const r of cycle1.rows){
+      if(r.empty) continue;
+      for(const p of r.finTeam){ const k=r.facility.id+'|'+p.id; fpv[k]=(fpv[k]||0)+1; finAfterCycle1[p.id]=(finAfterCycle1[p.id]||0)+1; }
+    }
+    const cycle1Team = cycle1.rows.find(r=>!r.empty && r.facility.id===trackedId).finTeam.map(p=>p.id);
+    const cycle2 = withDiscount=>{
+      const a = args(); a.finInitial = finAfterCycle1;
+      if(withDiscount) a.facilityPersonVisits = fpv;
+      return generatePlan(a).rows.find(r=>!r.empty && r.facility.id===trackedId).finTeam.map(p=>p.id);
+    };
+    const teamNo = cycle2(false), teamYes = cycle2(true);
+    const distinctNo = new Set([...cycle1Team, ...teamNo]).size;
+    const distinctYes = new Set([...cycle1Team, ...teamYes]).size;
+    if(!(distinctYes > distinctNo)) throw new Error(`distinct visitors did not increase: without=${distinctNo} with=${distinctYes}`);
+    return `without discount=${distinctNo} distinct, with discount=${distinctYes} distinct`;
+  });
+
   check('registry export→import round-trips weights and status unchanged', ()=>{
     const registry = buildRegistry(REGISTRY_SEED);
     registry[0].weight = 0.42;
@@ -1644,6 +1713,29 @@ async function runSelfTests(){
     return 'ok';
   });
 
+  check('registry importer: optional المسافة column maps to distanceKm, absent column stays null', ()=>{
+    const registryA = buildRegistry(REGISTRY_SEED);
+    const headerWith = ['اسم الجهة','المنطقة','الموقع','الوزن','الحالة','المسافة'];
+    const rowsWith = [['مركز دمنهور للاشعة','اشعة','دمنهور','0.6','مُدرجة','12.5']];
+    const {mapping:mapWith} = mapRegistryHeaders(headerWith);
+    const recordsWith = parseRegistryRows(rowsWith, mapWith);
+    const diffWith = computeRegistryDiff(recordsWith, registryA);
+    applyRegistryDiff(diffWith, registryA, {});
+    const damWith = registryA.find(f=>f.name==='مركز دمنهور للاشعة');
+    if(damWith.distanceKm!==12.5) throw new Error('distanceKm not mapped from المسافة column: '+damWith.distanceKm);
+
+    const registryB = buildRegistry(REGISTRY_SEED);
+    const headerWithout = ['اسم الجهة','المنطقة','الموقع','الوزن','الحالة'];
+    const rowsWithout = [['مركز دمنهور للاشعة','اشعة','دمنهور','0.6','مُدرجة']];
+    const {mapping:mapWithout} = mapRegistryHeaders(headerWithout);
+    const recordsWithout = parseRegistryRows(rowsWithout, mapWithout);
+    const diffWithout = computeRegistryDiff(recordsWithout, registryB);
+    applyRegistryDiff(diffWithout, registryB, {});
+    const damWithout = registryB.find(f=>f.name==='مركز دمنهور للاشعة');
+    if(damWithout.distanceKm!==null) throw new Error('distanceKm should stay null when column absent: '+damWithout.distanceKm);
+    return 'ok';
+  });
+
   return results;
 }
 
@@ -1659,7 +1751,7 @@ const I18N = {
     uploadSoon:'قريبًا — استخدم «بدون ملف» الآن',
     ratioLabel:'نسبة الأساسي', basicCount:'أساسي', contractedCount:'متعاقد',
     finPoolLabel:'المالية والإدارية', clinPoolLabel:'الطبية',
-    nameLabel:'الاسم', editLabel:'تعديل',
+    nameLabel:'الاسم', editLabel:'تعديل', distanceAffinityLabel:'ميل المسافة',
     weightLabel:'الوزن', activeLabel:'نشط',
     fixedCountLabel:'عدد ثابت', unavailableLabel:'أيام غير متاحة',
     unavailablePlaceholder:'2026-09-10, 2026-09-17', blockedLabel:'جهات محظورة',
@@ -1679,7 +1771,6 @@ const I18N = {
     achievedMix:(m,r,n)=>`المزيج المحقق: ${m} أساسي / ${r} متعاقد من ${n} (${Math.round(m/n*100)}٪)`,
     genderDroppedNote:n=>`تعذّر ضبط توازن النوع في ${n} يوم — مُدرجة أدناه`,
     genderAchievedNote:(ok,total)=>`توازن النوع 3-1: تحقق في ${ok} من ${total} فريق رباعي`,
-    distantAppliedNote:(a,n)=>n?'لا توجد جهات في مناطق بعيدة هذه الدورة':`مَيل المناطق البعيدة: طُبّق على ${a} فريق`,
     thirdsTitle:'التوزيع على الأثلاث', thirdLabel:i=>`الثلث ${i}`,
     deviationTitle:'الانحراف عن الحصة المتوقعة', nearMissTitle:'يُرحَّل للدورة القادمة (أعلى ١٠ بالأولوية)',
     perVisit:'زيارة',
@@ -1702,7 +1793,8 @@ const I18N = {
     aliasTitle:'قواعد الأسماء البديلة', facilityAliasLabel:'أسماء الجهات (خام=قياسي، سطر لكل قاعدة)',
     personAliasLabel:'أسماء الأشخاص (خام=قياسي، سطر لكل قاعدة)', saveAliases:'حفظ القواعد',
     overTieTitle:'عتبة التكرار الزائد', minVisitsLabel:'أقل عدد زيارات', minRatioLabel:'أقل نسبة ٪',
-    passesTitle:'تمريرات الموازنة', genderPassLabel:'موازنة النوع 3-1', distantPassLabel:'مَيل المناطق البعيدة',
+    passesTitle:'تمريرات الموازنة', genderPassLabel:'موازنة النوع 3-1',
+    distanceBiasLabel:'قريب ← محايد → بعيد', familiarityGammaLabel:'معامل الإلفة (gamma)', hardBlockLabel:'حظر صارم عند تجاوز العتبة',
     settingsBtn:'الإعدادات', noAlternatives:'لا يوجد بديل مؤهل',
     visibilityHint:'اختر ما يظهر في النسخ والتصدير — لا يؤثر على العرض هنا',
     hideFacilitiesTitle:'إخفاء جهات', hidePeopleTitle:'إخفاء أشخاص',
@@ -1711,7 +1803,7 @@ const I18N = {
     lastVisitLabel:'آخر زيارة', neverVisited:'لم تُزَر بعد', daysAgo:n=>`منذ ${n} يوم`,
     visitCountLabel:'إجمالي الزيارات', statusIncluded:'مُدرجة', statusExcluded:'مستبعدة', statusPinned:'مثبّتة',
     bulkWeightLabel:'وزن للمحدد', applyWeight:'تطبيق', bulkExclude:'استبعاد المحدد', bulkPin:'تثبيت المحدد', bulkInclude:'إدراج المحدد',
-    expandLabel:'آخر ٥ زيارات', noVisitsYet:'لا توجد زيارات مسجلة',
+    expandLabel:'آخر ٥ زيارات', noVisitsYet:'لا توجد زيارات مسجلة', distanceKmLabel:'المسافة', kmUnit:'كم',
     registryImportTitle:'استيراد ملف السجل (منفصل عن استيراد الخطط)',
     dryRunSummary:(a,c,m,u)=>`${a} جهة جديدة · ${c} تغيّرت (بالحقل) · ${m} في السجل وغير موجودة في الملف · ${u} صف غير مقروء`,
     addedLabel:'جهات جديدة', changedLabel:'تغييرات', missingLabel:'غير موجودة في الملف',
@@ -1731,7 +1823,7 @@ const I18N = {
     uploadSoon:'Coming soon — use "without a file" for now',
     ratioLabel:'Basic ratio', basicCount:'Basic', contractedCount:'Contracted',
     finPoolLabel:'Financial/Admin', clinPoolLabel:'Clinical',
-    nameLabel:'Name', editLabel:'Edit',
+    nameLabel:'Name', editLabel:'Edit', distanceAffinityLabel:'Distance affinity',
     weightLabel:'Weight', activeLabel:'Active',
     fixedCountLabel:'Fixed count', unavailableLabel:'Unavailable days',
     unavailablePlaceholder:'2026-09-10, 2026-09-17', blockedLabel:'Blocked facilities',
@@ -1751,7 +1843,6 @@ const I18N = {
     achievedMix:(m,r,n)=>`Achieved mix: ${m} basic / ${r} contracted of ${n} (${Math.round(m/n*100)}%)`,
     genderDroppedNote:n=>`Gender balance could not be fixed on ${n} day(s) — listed below`,
     genderAchievedNote:(ok,total)=>`Gender 3-1 balance: achieved on ${ok} of ${total} four-person team(s)`,
-    distantAppliedNote:(a,n)=>n?'No distant-area facilities this cycle':`Distant-area lean: applied to ${a} team(s)`,
     thirdsTitle:'Distribution across thirds', thirdLabel:i=>`Third ${i}`,
     deviationTitle:'Deviation from expected share', nearMissTitle:'Rolling to next cycle (top 10 by priority)',
     perVisit:'visit(s)',
@@ -1774,7 +1865,8 @@ const I18N = {
     aliasTitle:'Alias rules', facilityAliasLabel:'Facility names (raw=canonical, one per line)',
     personAliasLabel:'Person names (raw=canonical, one per line)', saveAliases:'Save rules',
     overTieTitle:'Over-tie threshold', minVisitsLabel:'Min visits', minRatioLabel:'Min ratio %',
-    passesTitle:'Balance passes', genderPassLabel:'Gender 3-1 balance', distantPassLabel:'Distant-area lean',
+    passesTitle:'Balance passes', genderPassLabel:'Gender 3-1 balance',
+    distanceBiasLabel:'Near ← Neutral → Far', familiarityGammaLabel:'Familiarity gamma', hardBlockLabel:'Hard block past threshold',
     settingsBtn:'Settings', noAlternatives:'No eligible alternative',
     visibilityHint:'Choose what appears in copy and export — this does not change the display above',
     hideFacilitiesTitle:'Hide facilities', hidePeopleTitle:'Hide people',
@@ -1783,7 +1875,7 @@ const I18N = {
     lastVisitLabel:'Last visit', neverVisited:'Never visited', daysAgo:n=>`${n} days ago`,
     visitCountLabel:'Lifetime visits', statusIncluded:'Included', statusExcluded:'Excluded', statusPinned:'Pinned',
     bulkWeightLabel:'Weight for selected', applyWeight:'Apply', bulkExclude:'Exclude selected', bulkPin:'Pin selected', bulkInclude:'Include selected',
-    expandLabel:'Last 5 visits', noVisitsYet:'No recorded visits',
+    expandLabel:'Last 5 visits', noVisitsYet:'No recorded visits', distanceKmLabel:'Distance', kmUnit:'km',
     registryImportTitle:'Import registry file (separate from plan history import)',
     dryRunSummary:(a,c,m,u)=>`${a} new · ${c} changed (by field) · ${m} in registry but not in file · ${u} unreadable row(s)`,
     addedLabel:'New facilities', changedLabel:'Changes', missingLabel:'Not in file',
@@ -1840,7 +1932,8 @@ const state = {
   importedRecords: null, importResult: null,
   pendingRemap: null, importError: null,
   overTieMinVisits: 3, overTieMinRatio: 0.6,
-  applyGenderPass: true, applyDistantPass: true,
+  applyGenderPass: true,
+  globalDistanceBias: 0, familiarityGamma: 0.35, hardBlockOverTied: false,
   swapMenuOpenFor: null,
   hiddenFacilityIds: new Set(), hiddenPersonIds: new Set(),
   copyFeedback: null,
@@ -1864,7 +1957,9 @@ function loadSettings(){
     if(s.overTieMinVisits!=null) state.overTieMinVisits = s.overTieMinVisits;
     if(s.overTieMinRatio!=null) state.overTieMinRatio = s.overTieMinRatio;
     if(s.applyGenderPass!=null) state.applyGenderPass = s.applyGenderPass;
-    if(s.applyDistantPass!=null) state.applyDistantPass = s.applyDistantPass;
+    if(s.globalDistanceBias!=null) state.globalDistanceBias = s.globalDistanceBias;
+    if(s.familiarityGamma!=null) state.familiarityGamma = s.familiarityGamma;
+    if(s.hardBlockOverTied!=null) state.hardBlockOverTied = s.hardBlockOverTied;
   }catch(e){}
 }
 function saveSettings(){
@@ -1878,7 +1973,9 @@ function saveSettings(){
     overTieMinVisits: state.overTieMinVisits,
     overTieMinRatio: state.overTieMinRatio,
     applyGenderPass: state.applyGenderPass,
-    applyDistantPass: state.applyDistantPass
+    globalDistanceBias: state.globalDistanceBias,
+    familiarityGamma: state.familiarityGamma,
+    hardBlockOverTied: state.hardBlockOverTied
   }));
 }
 function loadAliasOverrides(){
@@ -1913,8 +2010,8 @@ function loadPeople(){
 }
 function savePeople(){
   const obj = {fin:{}, clin:{}};
-  for(const p of state.finPool) obj.fin[p.id] = {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities};
-  for(const p of state.clinPool) obj.clin[p.id] = {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities};
+  for(const p of state.finPool) obj.fin[p.id] = {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity};
+  for(const p of state.clinPool) obj.clin[p.id] = {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity};
   localStorage.setItem('alkhitta.people', JSON.stringify(obj));
   const customFin = state.finPool.filter(p=>p.id.indexOf('p_custom_')===0);
   const customClin = state.clinPool.filter(p=>p.id.indexOf('p_custom_')===0);
@@ -2223,6 +2320,7 @@ function renderFacilityRow(f){
 
   if(state.expandedFacilityId===f.id){
     const detail = el('div', {class:'facility-row-detail'});
+    if(f.distanceKm!=null) detail.appendChild(el('p', {class:'card-summary'}, `${t('distanceKmLabel')}: ${f.distanceKm} ${t('kmUnit')}`));
     const history = (f.visitHistory||[]).slice(0,5);
     if(!history.length) detail.appendChild(el('p', {class:'card-summary'}, t('noVisitsYet')));
     for(const v of history) detail.appendChild(el('p', null, `${fmtISO(v.date)} — ${v.team.join(' - ')}`));
@@ -2645,6 +2743,10 @@ function buildPersonRow(p, rerender){
     type:'number', min:'0', max:'1.5', step:'0.05', value:String(p.weight),
     onchange:e=>{ p.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); savePeople(); rerender(); }
   });
+  const affinityInput = el('input', {
+    type:'range', min:'-1', max:'1', step:'0.1', value:String(p.distanceAffinity||0),
+    onchange:e=>{ p.distanceAffinity = Math.max(-1, Math.min(1, +e.target.value||0)); savePeople(); rerender(); }
+  });
   const fixedInput = el('input', {
     type:'number', min:'0', placeholder:'—', value: p.fixedCount!=null?String(p.fixedCount):'',
     onchange:e=>{
@@ -2680,6 +2782,7 @@ function buildPersonRow(p, rerender){
   row.appendChild(el('td', null, genderSelect));
   row.appendChild(el('td', null, activeInput));
   row.appendChild(el('td', null, weightInput));
+  row.appendChild(el('td', null, affinityInput));
   row.appendChild(el('td', null, fixedInput));
   row.appendChild(el('td', null, unavailInput));
   row.appendChild(el('td', null, blockedInput));
@@ -2689,7 +2792,7 @@ function buildPeopleTable(pool, rerender){
   rerender = rerender || render;
   const table = el('table', {class:'people-table'});
   const headRow = el('tr');
-  for(const key of ['nameLabel','genderLabel','activeLabel','weightLabel','fixedCountLabel','unavailableLabel','blockedLabel']){
+  for(const key of ['nameLabel','genderLabel','activeLabel','weightLabel','distanceAffinityLabel','fixedCountLabel','unavailableLabel','blockedLabel']){
     headRow.appendChild(el('th', null, t(key)));
   }
   table.appendChild(el('thead', null, headRow));
@@ -2731,7 +2834,10 @@ function handleGenerate(){
     isUnavailable: makeUnavailableChecker(),
     isBlocked: makeBlockedChecker(),
     applyGender: state.applyGenderPass,
-    applyDistant: state.applyDistantPass
+    facilityPersonVisits: result ? result.facilityPersonVisits : null,
+    globalDistanceBias: state.globalDistanceBias,
+    familiarityGamma: state.familiarityGamma,
+    hardBlockOverTied: state.hardBlockOverTied
   });
   state.plan = plan;
   state.planApproved = false;
@@ -2878,12 +2984,6 @@ function renderReview(container){
     container.appendChild(el('p', {class:'card-summary'}, t('genderDroppedNote')(plan.genderDropped.length)));
     const list = el('ul', {class:'drop-list'});
     for(const d of plan.genderDropped) list.appendChild(el('li', null, `${fmtISO(d.date)} — ${d.facility}`));
-    container.appendChild(list);
-  }
-  container.appendChild(el('p', {class:'card-summary'}, t('distantAppliedNote')(plan.distantResult.applied, plan.distantResult.none)));
-  if(plan.distantResult.dropped && plan.distantResult.dropped.length){
-    const list = el('ul', {class:'drop-list'});
-    for(const d of plan.distantResult.dropped) list.appendChild(el('li', null, `${fmtISO(d.date)} — ${d.facility}`));
     container.appendChild(list);
   }
 
@@ -3057,14 +3157,21 @@ function renderSettingsView(){
     view.appendChild(el('label', null, [t('minRatioLabel')+' ', el('input', {type:'number', min:'0', max:'100', value:String(Math.round(state.overTieMinRatio*100)), onchange:e=>{
       state.overTieMinRatio = Math.max(0, Math.min(100, +e.target.value||60))/100; saveSettings();
     }})]));
+    const hardBlockToggle = el('input', {type:'checkbox', onchange:e=>{ state.hardBlockOverTied=e.target.checked; saveSettings(); }});
+    hardBlockToggle.checked = state.hardBlockOverTied;
+    view.appendChild(el('label', {class:'inline-check'}, [hardBlockToggle, ' '+t('hardBlockLabel')]));
 
     view.appendChild(el('h2', null, t('passesTitle')));
     const genderToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyGenderPass=e.target.checked; saveSettings(); }});
     genderToggle.checked = state.applyGenderPass;
-    const distantToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyDistantPass=e.target.checked; saveSettings(); }});
-    distantToggle.checked = state.applyDistantPass;
     view.appendChild(el('label', {class:'inline-check'}, [genderToggle, ' '+t('genderPassLabel')]));
-    view.appendChild(el('label', {class:'inline-check'}, [distantToggle, ' '+t('distantPassLabel')]));
+
+    view.appendChild(el('label', null, [t('distanceBiasLabel')+' ', el('input', {type:'range', min:'-1', max:'1', step:'0.1', value:String(state.globalDistanceBias), onchange:e=>{
+      state.globalDistanceBias = Math.max(-1, Math.min(1, +e.target.value||0)); saveSettings();
+    }})]));
+    view.appendChild(el('label', null, [t('familiarityGammaLabel')+' ', el('input', {type:'number', min:'0', max:'2', step:'0.05', value:String(state.familiarityGamma), onchange:e=>{
+      state.familiarityGamma = Math.max(0, +e.target.value==0?0:(+e.target.value||0.35)); saveSettings();
+    }})]));
     return;
   }
 
