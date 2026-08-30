@@ -1,0 +1,3080 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>الخطة</title>
+<link rel="icon" href="data:image/svg+xml,<svg viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg' aria-hidden='true'><rect x='3.5' y='5.5' width='25' height='23' rx='7.5' stroke='%236A4A6E' stroke-width='2'/><path d='M10 3.5v4M22 3.5v4' stroke='%236A4A6E' stroke-width='2' stroke-linecap='round'/><path d='M10.5 13.5H18a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h7.5' stroke='%236A4A6E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><circle cx='10.5' cy='13.5' r='1.8' fill='%236A4A6E'/><circle cx='21.5' cy='25.5' r='1.8' fill='%236A4A6E'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;display=swap" rel="stylesheet" onerror="this.remove()">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#EDE9E4; --surface:#FAF8F5; --ink:#241F26; --muted:#6E6672;
+  --accent:#6A4A6E; --accent-soft:#EDE2EE; --contracted:#8A6A2E; --line:#E2DCD6;
+  --on-accent:#FFFFFF;
+  --r-card:28px; --r-input:16px; --r-chip:999px;
+  --shadow:0 1px 2px rgb(36 31 38 / .05), 0 8px 24px -12px rgb(36 31 38 / .16);
+  --motion:190ms ease-out;
+}
+:root[data-theme="dark"]{
+  --bg:#151317; --surface:#1E1B21; --ink:#EAE3E8; --muted:#9A909A;
+  --accent:#C6A3CC; --accent-soft:#2C2431; --contracted:#D6B36A; --line:#2C2830;
+  --on-accent:#151317;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme]){
+    --bg:#151317; --surface:#1E1B21; --ink:#EAE3E8; --muted:#9A909A;
+    --accent:#C6A3CC; --accent-soft:#2C2431; --contracted:#D6B36A; --line:#2C2830;
+    --on-accent:#151317;
+  }
+}
+html{color-scheme:light dark}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans Arabic","Noto Sans Arabic",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  font-variant-numeric:tabular-nums; line-height:1.65;
+  transition:background var(--motion), color var(--motion);
+}
+h1,h2,h3{font-family:inherit}
+.topbar{
+  max-width:940px; margin-inline:auto; padding-inline:20px; padding-block-start:26px; padding-block-end:6px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.wordmark{display:flex; align-items:center; gap:10px; font-size:20px; font-weight:600}
+.wordmark svg{width:26px; height:26px; color:var(--accent)}
+.topbar-controls{display:flex; gap:8px}
+.icon-btn{
+  background:var(--surface); border:0; border-radius:var(--r-chip);
+  min-width:38px; height:38px; padding-inline:12px; display:inline-flex; align-items:center; justify-content:center;
+  cursor:pointer; color:var(--ink); font-family:inherit; font-size:13px;
+  transition:background var(--motion);
+}
+.icon-btn:hover{background:var(--accent-soft)}
+.icon-btn:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+.shell{
+  max-width:940px; margin-inline:auto; padding-inline:20px; padding-block:24px;
+  display:flex; flex-direction:column; gap:20px;
+}
+.card{
+  background:var(--surface); border-radius:var(--r-card); box-shadow:var(--shadow);
+  padding:26px 28px;
+}
+.card h2{margin-block:0 14px; font-size:14px; color:var(--muted); font-weight:700; letter-spacing:.03em}
+.card h3{margin-block:16px 8px; font-size:13px; color:var(--muted); font-weight:600}
+.card-summary{color:var(--muted); font-size:13px; margin-block:10px 0}
+.segmented{display:inline-flex; background:var(--bg); border-radius:var(--r-chip); padding:4px; gap:2px}
+.segmented button{
+  border:0; background:transparent; padding:8px 16px; border-radius:var(--r-chip); cursor:pointer;
+  color:var(--muted); font-size:14px; font-family:inherit; transition:background var(--motion), color var(--motion);
+}
+.segmented button[aria-pressed="true"]{background:var(--accent); color:var(--on-accent)}
+.custom-range{display:flex; gap:16px; margin-block-start:14px; flex-wrap:wrap}
+.custom-range label{font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-block-start:12px}
+.chip{
+  display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--r-chip);
+  background:var(--bg); border:0; cursor:pointer; font-size:13px; color:var(--ink);
+  font-family:inherit; transition:background var(--motion), color var(--motion);
+}
+.chip:hover{background:var(--accent-soft)}
+.chip.active{background:var(--accent); color:var(--on-accent)}
+.chip:disabled{opacity:.4; cursor:not-allowed}
+.person-chip.inactive{opacity:.45; text-decoration:line-through}
+.person-chip.hidden-for-export{opacity:.5}
+.person-editor{
+  margin-block-start:10px; padding:12px 16px; background:var(--bg); border-radius:var(--r-input);
+  display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--muted);
+}
+.person-editor input[type=number]{width:70px}
+.person-editor input[type=text]{width:100%}
+.editor-wide{flex-basis:100%}
+.inline-check{display:flex; align-items:center; gap:6px}
+.holiday-details{margin-block-start:14px; font-size:13px; color:var(--muted)}
+.holiday-details summary{cursor:pointer}
+.holiday-details textarea{width:100%; margin-block-start:8px; resize:vertical}
+input[type=text],input[type=number],input[type=date],select,textarea{
+  font-family:inherit; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-input);
+  padding:9px 13px; color:var(--ink); font-size:14px;
+}
+input[type=range]{width:100%; accent-color:var(--accent); margin-block-start:8px}
+.manual-pane label{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-block-end:4px}
+.stepper-row{display:flex; gap:20px; margin-block-start:14px; flex-wrap:wrap}
+.stepper-row label{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted)}
+.stepper-row input{width:80px}
+.dropzone{
+  margin-block-start:14px; border:1.5px dashed var(--line); border-radius:var(--r-input);
+  padding:32px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer;
+  transition:background var(--motion);
+}
+.dropzone.disabled{opacity:.6; cursor:default}
+.paste-wrap{margin-block-start:12px; display:flex; flex-direction:column; gap:8px}
+.paste-wrap textarea{width:100%; resize:vertical}
+.remap-form{margin-block-start:14px; display:flex; flex-direction:column; gap:10px}
+.remap-form label{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted)}
+.error-text{color:var(--contracted)}
+.resolve-list{display:flex; flex-direction:column; gap:8px; margin-block-start:8px}
+.resolve-row{display:flex; align-items:center; gap:10px; font-size:13px; flex-wrap:wrap}
+.thirds-table{display:flex; gap:14px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-block-start:6px}
+.thirds-cell{background:var(--bg); border-radius:var(--r-input); padding:8px 14px}
+.deviation-list{display:flex; flex-direction:column; gap:2px; margin-block-start:6px}
+.deviation-list p{margin:0; font-size:13px; color:var(--muted); display:flex; justify-content:space-between; max-width:320px}
+.export-actions{display:flex; gap:8px; flex-wrap:wrap; margin-block-start:16px; align-items:center}
+.export-actions button:disabled{opacity:.4; cursor:not-allowed}
+.copy-feedback{font-size:12px; color:var(--accent)}
+.visibility-panel{margin-block-start:14px; padding-block-start:14px; border-block-start:1px solid var(--line)}
+.visibility-panel .chip-row{margin-block-start:8px}
+.visibility-panel .chip.hidden-item{opacity:.4; text-decoration:line-through}
+.primary-btn{
+  align-self:center; background:var(--accent); color:var(--on-accent); border:0; border-radius:var(--r-chip);
+  padding:14px 40px; font-size:15px; font-weight:600; cursor:pointer; box-shadow:var(--shadow);
+  font-family:inherit; transition:transform var(--motion);
+}
+.primary-btn:hover{transform:translateY(-1px)}
+.primary-btn:active{transform:translateY(0)}
+.month-section h3{font-size:13px; color:var(--muted); margin-block:18px 6px; text-transform:uppercase; letter-spacing:.04em}
+.day-row{
+  display:flex; align-items:center; gap:12px; padding-block:9px; padding-inline-start:14px;
+  border-inline-start:3px solid var(--accent); margin-block-end:2px; flex-wrap:wrap;
+}
+.day-row.contracted{border-inline-start-color:var(--contracted)}
+.day-row.empty{border-inline-start-color:var(--line); color:var(--muted); font-size:13px}
+.day-row .date{width:88px; flex-shrink:0; color:var(--muted); font-size:13px}
+.day-row .facility{font-size:14px; min-width:140px}
+.facility-toggle{background:transparent; border:0; padding:0; font:inherit; color:inherit; cursor:pointer; text-align:start}
+.facility-toggle:hover{color:var(--accent)}
+.why-detail{flex-basis:100%; font-size:12px; color:var(--muted); padding-inline-start:14px; margin-block-start:2px}
+.print-header{display:none}
+.day-row .cat-chip{font-size:11px; padding:3px 10px; border-radius:var(--r-chip); background:var(--accent-soft); color:var(--accent)}
+.day-row.contracted .cat-chip{background:color-mix(in srgb, var(--contracted) 22%, transparent); color:var(--contracted)}
+.day-row .team-chips{position:relative; display:flex; gap:6px; flex-wrap:wrap; align-items:flex-start}
+.mini-chip{
+  font-size:11px; padding:3px 9px; border-radius:var(--r-chip); background:var(--bg); border:0; color:var(--muted);
+  font-family:inherit; cursor:pointer; transition:background var(--motion), color var(--motion);
+}
+.mini-chip:hover{background:var(--accent-soft); color:var(--ink)}
+.mini-chip.open{background:var(--accent); color:var(--on-accent)}
+.swap-menu{
+  display:flex; flex-direction:column; gap:4px; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-input); padding:8px; box-shadow:var(--shadow); width:100%; margin-block-start:4px;
+}
+.swap-menu button{text-align:start}
+.review-panel .gate{display:flex; gap:8px; align-items:baseline; padding-block:5px; font-size:13px}
+.review-panel .gate.pass{color:var(--ink)}
+.review-panel .gate.pass::before{content:"✓"; color:var(--accent); font-weight:700}
+.review-panel .gate.fail::before{content:"✗"; color:var(--contracted); font-weight:700}
+.review-panel .gate.pending::before{content:"…"; color:var(--muted)}
+.drop-list{margin:6px 0 0; padding-inline-start:20px; font-size:12px; color:var(--muted)}
+.totals-group{margin-block-end:14px}
+.totals-group p{margin:2px 0; font-size:13px; display:flex; justify-content:space-between; max-width:320px}
+footer{max-width:940px; margin-inline:auto; padding:20px; color:var(--muted); font-size:12px; text-align:center}
+#selftestView{max-width:940px; margin-inline:auto; padding:32px 20px}
+#selftestView h1{font-size:20px; margin-block-end:16px}
+#settingsView{max-width:940px; margin-inline:auto; padding:32px 20px; display:flex; flex-direction:column; gap:6px}
+#settingsView h1{font-size:20px; margin-block-end:10px}
+#settingsView h2{font-size:14px; color:var(--muted); margin-block:20px 8px; font-weight:700}
+#settingsView label{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); margin-block-end:6px}
+#settingsView textarea{width:100%; margin-block-start:6px}
+.review-flag{color:var(--contracted); font-size:11px; font-weight:600}
+#facilitiesView{max-width:940px; margin-inline:auto; padding:32px 20px; display:flex; flex-direction:column; gap:10px}
+#facilitiesView h1{font-size:20px; margin-block-end:6px}
+#facilitiesView h2{font-size:14px; color:var(--muted); margin-block:16px 8px; font-weight:700}
+#facilitiesView h3{font-size:13px; color:var(--muted); margin-block:10px 4px; font-weight:600}
+#facilitiesView>input[type=text]{width:100%}
+.facility-filter-row{display:flex; gap:10px; flex-wrap:wrap}
+.facility-list{max-height:520px; overflow-y:auto; display:flex; flex-direction:column; gap:2px}
+.facility-row{padding-block:10px; border-block-end:1px solid var(--line); font-size:13px}
+.facility-row-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.facility-row-top .sf-name{min-width:180px; font-weight:600}
+.facility-row-top .sf-cat{color:var(--muted)}
+.facility-row-top .sf-loc{color:var(--muted); font-size:12px}
+.facility-row-top .sf-kind{font-size:11px; padding:2px 8px; border-radius:var(--r-chip); background:var(--accent-soft); color:var(--accent)}
+.facility-row-mid{display:flex; gap:16px; color:var(--muted); font-size:12px; margin-block-start:4px}
+.facility-row-controls{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-block-start:8px}
+.facility-row-controls input[type=number]{width:64px}
+.weight-presets{display:flex; gap:4px}
+.weight-presets .chip{padding:4px 10px; font-size:12px}
+.facility-row-detail{margin-block-start:8px; padding:10px 14px; background:var(--bg); border-radius:var(--r-input); font-size:12px}
+.facility-row-detail p{margin:2px 0}
+.bulk-bar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; background:var(--accent-soft); border-radius:var(--r-input)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important; animation:none!important}}
+@media print{
+  .topbar, footer, #step1, #step2, #step3, .primary-btn, #review, #totals,
+  .export-actions, .visibility-panel{display:none !important}
+  body{background:#fff; color:#000}
+  .shell{padding:0; max-width:none}
+  #results{box-shadow:none; background:#fff; padding:0; border-radius:0}
+  .print-header{display:block; font-size:15px; font-weight:700; margin-block-end:14px}
+  .day-row{border-inline-start-color:#000 !important; break-inside:avoid}
+  .month-section{break-inside:avoid; margin-block-end:12px}
+  .cat-chip{background:transparent !important; color:#000 !important; border:1px solid #000}
+  .mini-chip{background:transparent !important; color:#000 !important; border:1px solid #000}
+}
+@media (max-width: 640px){
+  .day-row .date{width:64px}
+  .card{padding:20px}
+}
+
+</style>
+</head>
+<body>
+<header class="topbar">
+<div class="wordmark"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<rect x="3.5" y="5.5" width="25" height="23" rx="7.5" stroke="currentColor" stroke-width="2"/>
+<path d="M10 3.5v4M22 3.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+<path d="M10.5 13.5H18a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="10.5" cy="13.5" r="1.8" fill="currentColor"/>
+<circle cx="21.5" cy="25.5" r="1.8" fill="currentColor"/>
+</svg><span id="wordmarkText">الخطة</span></div>
+<div class="topbar-controls">
+<button type="button" class="icon-btn" id="facilitiesBtn" aria-label="facilities">🏥</button>
+<button type="button" class="icon-btn" id="settingsBtn" aria-label="settings">⚙</button>
+<button type="button" class="icon-btn" id="themeToggleBtn" aria-label="theme">◐</button>
+<button type="button" class="icon-btn" id="langToggleBtn" aria-label="language">EN</button>
+</div>
+</header>
+<main class="shell">
+<section class="card" id="step1"></section>
+<section class="card" id="step2"></section>
+<section class="card" id="step3"></section>
+<button type="button" class="primary-btn" id="generateBtn">توليد الخطة</button>
+<section class="card" id="results" hidden></section>
+<section class="card" id="review" hidden></section>
+<section class="card" id="totals" hidden></section>
+</main>
+<footer id="footerText"></footer>
+<div id="selftestView" hidden></div>
+<div id="settingsView" hidden></div>
+<div id="facilitiesView" hidden></div>
+<script>
+function norm(s){
+  return (s||'')
+    .replace(/\u0640/g,'')
+    .replace(/[\u064B-\u0652\u0670]/g,'')
+    .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي')
+    .replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+    .replace(/[\u0660-\u0669]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x0660+48))
+    .replace(/[\u06F0-\u06F9]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x06F0+48))
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
+
+const DEFAULT_FACILITY_ALIASES = {
+  'التانيه':'الثانية','التانية':'الثانية','الاولى':'الاولي','اشعه':'اشعة',
+  'مستشفى':'مستشفي','غسيل كلوى':'غسيل كلوي'
+};
+const DEFAULT_PERSON_ALIASES = {
+  'لبني':'لبنى','اسماء':'أسماء','اباظة':'أباظة','ابظة':'أباظة',
+  'شرنوبى':'شرنوبي','ميسره':'ميسرة'
+};
+let FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES);
+let PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES);
+
+function applyAlias(getTable){
+  return function(raw){
+    const n = norm(raw);
+    const table = getTable();
+    for(const k in table){
+      if(norm(k)===n) return norm(table[k]);
+    }
+    return n;
+  };
+}
+const normFacility = applyAlias(()=>FACILITY_ALIASES);
+const normPerson = applyAlias(()=>PERSON_ALIASES);
+
+const MONTHS_AR = {
+  'يناير':0,'فبراير':1,'مارس':2,'ابريل':3,'أبريل':3,'مايو':4,'يونيو':5,
+  'يوليو':6,'اغسطس':7,'أغسطس':7,'سبتمبر':8,'اكتوبر':9,'أكتوبر':9,'نوفمبر':10,'ديسمبر':11
+};
+const MONTHS_EN = {
+  jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11
+};
+const WEEKDAY_NAMES_STRIP = /^(sun|mon|tue|wed|thu|fri|sat)\w*\.?\s+/i;
+
+function toAsciiDigits(s){
+  return s.replace(/[\u0660-\u0669]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x0660+48))
+          .replace(/[\u06F0-\u06F9]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x06F0+48));
+}
+
+function parseDateFlexible(raw){
+  if(raw==null) return null;
+  let s = toAsciiDigits(String(raw)).trim();
+  if(!s) return null;
+  s = s.replace(WEEKDAY_NAMES_STRIP,'').trim();
+
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(m){
+    const y=+m[1], mo=+m[2]-1, d=+m[3];
+    return validYMD(y,mo,d);
+  }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m){
+    const d=+m[1], mo=+m[2]-1, y=+m[3];
+    return validYMD(y,mo,d);
+  }
+  m = s.match(/^(\d{1,2})\s+([A-Za-z\u0600-\u06FF]+)\.?\s+(\d{4})$/);
+  if(m){
+    const d=+m[1], y=+m[3];
+    const monKey = m[2].trim();
+    let mo = MONTHS_AR[monKey];
+    if(mo===undefined) mo = MONTHS_EN[monKey.slice(0,3).toLowerCase()];
+    if(mo===undefined) return null;
+    return validYMD(y,mo,d);
+  }
+  return null;
+}
+function validYMD(y,mo,d){
+  if(!(y>=1900&&y<=2200)) return null;
+  if(!(mo>=0&&mo<=11)) return null;
+  const dt = new Date(y,mo,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo||dt.getDate()!==d) return null;
+  return dt;
+}
+function fmtISO(dt){
+  const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), d=String(dt.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function daysBetween(a,b){
+  const ua = Date.UTC(a.getFullYear(),a.getMonth(),a.getDate());
+  const ub = Date.UTC(b.getFullYear(),b.getMonth(),b.getDate());
+  return Math.round((ub-ua)/86400000);
+}
+function addDays(dt,n){
+  return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()+n);
+}
+
+function workingDays(start,end,weekdays,holidaySet,exceptionSet){
+  const out=[];
+  let cur = new Date(start.getFullYear(),start.getMonth(),start.getDate());
+  const endTime = new Date(end.getFullYear(),end.getMonth(),end.getDate()).getTime();
+  while(cur.getTime()<=endTime){
+    const iso = fmtISO(cur);
+    const isWeekday = weekdays.has(cur.getDay());
+    const isHoliday = holidaySet.has(iso);
+    const isException = exceptionSet.has(iso);
+    if((isWeekday && !isHoliday) || isException){
+      out.push(new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()));
+    }
+    cur = addDays(cur,1);
+  }
+  return out;
+}
+
+function computeNever(facilities){
+  let maxGap = 0;
+  for(const f of facilities){
+    if(f._observedGap!=null) maxGap = Math.max(maxGap, f._observedGap);
+  }
+  return Math.max(720, maxGap+180);
+}
+
+function rankStream(facilities, planStart, NEVER){
+  const scored = facilities.map(f=>{
+    const overdue = f.pinned ? Infinity
+      : (f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER);
+    const weight = f.weight==null?1:f.weight;
+    const score = overdue===Infinity ? Infinity : overdue*weight;
+    return {f, overdue, score};
+  });
+  scored.sort((a,b)=>{
+    if(b.score!==a.score) return b.score-a.score;
+    const va = a.f.visitCount||0, vb = b.f.visitCount||0;
+    if(va!==vb) return va-vb;
+    return norm(a.f.name)<norm(b.f.name) ? -1 : (norm(a.f.name)>norm(b.f.name)?1:0);
+  });
+  return scored.map(s=>s.f);
+}
+
+function slotBudget(N, mode, opts){
+  let M,R;
+  if(mode==='ratio'){
+    const p = opts.p==null?0.68:opts.p;
+    M = Math.round(p*N);
+    R = N-M;
+  } else {
+    M = opts.M; R = opts.R;
+  }
+  const notes = [];
+  if(M+R>N){
+    notes.push('mode counts exceed N');
+  }
+  const basicPoolLen = opts.basicPoolLen, contractedPoolLen = opts.contractedPoolLen;
+  const desiredM = M, desiredR = R;
+  M = Math.min(M, basicPoolLen);
+  R = Math.min(R, contractedPoolLen);
+  const shortfallFromBasic = Math.max(0, desiredM-basicPoolLen);
+  const shortfallFromContracted = Math.max(0, desiredR-contractedPoolLen);
+  if(shortfallFromBasic>0){
+    const spareContracted = contractedPoolLen-R;
+    const absorb = Math.min(shortfallFromBasic, Math.max(0,spareContracted));
+    R += absorb;
+    notes.push(`basic pool short by ${shortfallFromBasic}, shifted to contracted`);
+  }
+  if(shortfallFromContracted>0){
+    const spareBasic = basicPoolLen-M;
+    const absorb = Math.min(shortfallFromContracted, Math.max(0,spareBasic));
+    M += absorb;
+    notes.push(`contracted pool short by ${shortfallFromContracted}, shifted to basic`);
+  }
+  const unused = N-(M+R);
+  return {M,R,unused,notes};
+}
+
+function interleave(N,M){
+  const R = N-M;
+  const majorIsBasic = M>=R;
+  const a = majorIsBasic ? M : R;
+  const out=[];
+  for(let i=0;i<N;i++){
+    const inMajor = (i*a)%N < a;
+    out.push(inMajor===majorIsBasic ? 'basic' : 'contracted');
+  }
+  return out;
+}
+
+function spreadUnusedDays(pattern, unused){
+  if(unused<=0) return pattern.slice();
+  const N = pattern.length;
+  const total = N+unused;
+  const out=[];
+  let pi=0, placed=0;
+  for(let i=0;i<total;i++){
+    const shouldBeGap = Math.floor((i*unused)/total) !== Math.floor(((i-1)*unused)/total) && placed<unused;
+    if(shouldBeGap){
+      out.push(null);
+      placed++;
+    } else if(pi<pattern.length){
+      out.push(pattern[pi++]);
+    } else {
+      out.push(null);
+    }
+  }
+  return out;
+}
+
+function sainteLagueAssign(pool, count, day, ctx){
+  const chosen=[];
+  const candidates = pool.filter(p=>p.active!==false);
+  const usedToday = new Set();
+  for(let slot=0; slot<count; slot++){
+    let best=null, bestKey=Infinity, bestIdx=-1;
+    for(let idx=0; idx<candidates.length; idx++){
+      const p = candidates[idx];
+      if(usedToday.has(p.id)) continue;
+      if(ctx.isUnavailable && ctx.isUnavailable(p,day)) continue;
+      if(ctx.isBlocked && ctx.isBlocked(p,ctx.facility)) continue;
+      let overTied=false;
+      if(ctx.isOverTied) overTied = ctx.isOverTied(p,ctx.facility);
+      const assignedCount = ctx.assignedCount[p.id]||0;
+      const effWeight = p.fixedCount!=null
+        ? (assignedCount < p.fixedCount ? 1 : 0)
+        : (p.weight==null?1:p.weight);
+      if(effWeight<=0) continue;
+      const key = (assignedCount+0.5)/effWeight;
+      const penalty = overTied ? 1 : 0;
+      const finalKey = key + penalty*1000000;
+      if(finalKey<bestKey){
+        bestKey=finalKey; best=p; bestIdx=idx;
+      }
+    }
+    if(!best){
+      for(let idx=0; idx<candidates.length; idx++){
+        const p = candidates[idx];
+        if(usedToday.has(p.id)) continue;
+        if(ctx.isUnavailable && ctx.isUnavailable(p,day)) continue;
+        if(ctx.isBlocked && ctx.isBlocked(p,ctx.facility)) continue;
+        best = p; break;
+      }
+    }
+    if(best){
+      chosen.push(best);
+      usedToday.add(best.id);
+      ctx.assignedCount[best.id] = (ctx.assignedCount[best.id]||0)+1;
+    }
+  }
+  return chosen;
+}
+
+const BASIC_CATEGORIES = new Set(['ادارة الفرع','الاولي','الثانية','الثالثة']);
+const CONTRACTED_CATEGORIES = new Set(['معمل','غسيل كلوي','اشعة','صيدلية','رسم عصب','مستشفي','حضانات']);
+const ADMIN_LOW_FREQ_NAMES = new Set(['ادارة الفرع','التوثيق والمعلومات','الشئون الطبية','الشئون القانونية','الملحق','الزراعة']);
+const DISTANT_AREAS = ['النوبارية','رشيد','بدر','وادي النطرون','ابو المطامير'];
+
+function computeWeight(name){
+  if(ADMIN_LOW_FREQ_NAMES.has(name)) return 0.5;
+  if(name.endsWith('مسائي')) return 0.35;
+  return 1;
+}
+function classifyKind(name, category, location, beheiraLocations){
+  if(/مدارس/.test(name)) return 'excluded';
+  if(category==='اخري') return 'excluded';
+  if(beheiraLocations && !beheiraLocations.has(location)) return 'excluded';
+  if(BASIC_CATEGORIES.has(category)) return 'basic';
+  if(CONTRACTED_CATEGORIES.has(category)) return 'contracted';
+  return 'excluded';
+}
+function buildRegistry(seedRows){
+  const beheiraLocations = new Set(seedRows.map(r=>r[2]));
+  return seedRows.map((r,i)=>({
+    id:'f_'+i, name:r[0], category:r[1], location:r[2],
+    kind: classifyKind(r[0], r[1], r[2], beheiraLocations),
+    weight: computeWeight(r[0]),
+    lastVisit:null, visitCount:0, pinned:false, manualExcluded:false,
+    visitHistory:[], reviewFlag:null
+  }));
+}
+
+function teamGenderCounts(row){
+  const team=[...row.finTeam,...row.clinTeam];
+  const m = team.filter(p=>p.gender==='m').length;
+  return {m, f:team.length-m};
+}
+function isBasicInvalid(row){
+  const {m,f} = teamGenderCounts(row);
+  return (m===2&&f===2)||(m===4&&f===0)||(m===0&&f===4);
+}
+function swapPersonBetweenRows(rowA, poolA, personA, rowB, poolB, personB){
+  const idxA = rowA[poolA].indexOf(personA);
+  const idxB = rowB[poolB].indexOf(personB);
+  rowA[poolA][idxA]=personB;
+  rowB[poolB][idxB]=personA;
+}
+function tryFixGenderPair(rowA, rowB){
+  for(const pool of ['finTeam','clinTeam']){
+    for(const personA of rowA[pool]){
+      for(const personB of rowB[pool]){
+        if(personA.gender===personB.gender) continue;
+        if(rowA[pool].some(p=>p!==personA&&p.id===personB.id)) continue;
+        if(rowB[pool].some(p=>p!==personB&&p.id===personA.id)) continue;
+        swapPersonBetweenRows(rowA,pool,personA,rowB,pool,personB);
+        if(!isBasicInvalid(rowA) && !isBasicInvalid(rowB)) return true;
+        swapPersonBetweenRows(rowA,pool,personB,rowB,pool,personA);
+      }
+    }
+  }
+  return false;
+}
+function applyGenderBalance(rows){
+  const basicRows = rows.filter(r=>!r.empty && r.kind==='basic');
+  const dropped=[];
+  let attempts=0;
+  let list = basicRows.filter(isBasicInvalid);
+  while(list.length>0 && attempts<200){
+    const rowA = list[0];
+    let fixedWith=null;
+    for(let j=1;j<list.length && attempts<200;j++){
+      attempts++;
+      if(tryFixGenderPair(rowA, list[j])){ fixedWith=list[j]; break; }
+    }
+    if(!fixedWith){
+      dropped.push({date:rowA.date, facility:rowA.facility.name, reason:'gender-balance-no-partner'});
+      list = list.filter(r=>r!==rowA);
+    } else {
+      list = basicRows.filter(isBasicInvalid);
+    }
+  }
+  return dropped;
+}
+function isDistantFacility(f){
+  return DISTANT_AREAS.some(a=>f.location && f.location.indexOf(a)>=0);
+}
+function applyDistantAreaLean(rows){
+  const targetRows = rows.filter(r=>!r.empty && isDistantFacility(r.facility));
+  const dropped=[];
+  if(targetRows.length===0) return {applied:0, dropped, none:true};
+  let applied=0, attempts=0;
+  for(const row of targetRows){
+    if(attempts>=200) break;
+    for(const pool of ['finTeam','clinTeam']){
+      const females = row[pool].filter(p=>p.gender==='f');
+      if(females.length===0) continue;
+      let fixed=false;
+      for(const otherRow of rows){
+        if(otherRow===row||otherRow.empty) continue;
+        attempts++;
+        const males = otherRow[pool].filter(p=>p.gender==='m');
+        outer:
+        for(const personA of females){
+          for(const personB of males){
+            if(row[pool].some(p=>p!==personA&&p.id===personB.id)) continue;
+            if(otherRow[pool].some(p=>p!==personB&&p.id===personA.id)) continue;
+            swapPersonBetweenRows(row,pool,personA,otherRow,pool,personB);
+            fixed=true; applied++;
+            break outer;
+          }
+        }
+        if(fixed||attempts>=200) break;
+      }
+      if(!fixed) dropped.push({date:row.date, facility:row.facility.name, reason:'distant-area-lean-no-partner'});
+    }
+  }
+  return {applied, dropped};
+}
+
+function generatePlan(opts){
+  const {
+    registry, finPool, clinPool, startDate, endDate, weekdays, holidays, exceptions,
+    mode, ratioP, countsM, countsR, applyGender, applyDistant,
+    finInitial, clinInitial, isOverTied, isUnavailable, isBlocked
+  } = opts;
+  const days = workingDays(startDate, endDate, weekdays, holidays, exceptions);
+  const N = days.length;
+  const basicFac = registry.filter(f=>f.kind==='basic' && !f.manualExcluded);
+  const contractedFac = registry.filter(f=>f.kind==='contracted' && !f.manualExcluded);
+  const budget = slotBudget(N, mode, {p:ratioP, M:countsM, R:countsR, basicPoolLen:basicFac.length, contractedPoolLen:contractedFac.length});
+  const NEVER = computeNever(registry);
+  const rankedBasic = rankStream(basicFac, days[0]||startDate, NEVER);
+  const rankedContracted = rankStream(contractedFac, days[0]||startDate, NEVER);
+  const pattern = interleave(N, budget.M);
+  const withGaps = spreadUnusedDays(pattern, budget.unused);
+  let bi=0, ci=0, dayIdx=0;
+  const rows=[];
+  for(const slot of withGaps){
+    if(slot===null){ rows.push({empty:true}); continue; }
+    const date = days[dayIdx++];
+    if(slot==='basic'){
+      const idx = bi++;
+      const f = rankedBasic[idx];
+      if(!f){ rows.push({empty:true}); continue; }
+      rows.push({date, kind:'basic', facility:f, rankInStream: idx+1});
+    } else {
+      const idx = ci++;
+      const f = rankedContracted[idx];
+      if(!f){ rows.push({empty:true}); continue; }
+      rows.push({date, kind:'contracted', facility:f, rankInStream: idx+1});
+    }
+  }
+  const finAssigned = Object.assign({}, finInitial||{});
+  const clinAssigned = Object.assign({}, clinInitial||{});
+  for(const row of rows){
+    if(row.empty) continue;
+    const finCount = row.kind==='basic'?2:1;
+    const ctx = {facility:row.facility, isUnavailable, isBlocked, isOverTied};
+    row.finTeam = sainteLagueAssign(finPool, finCount, row.date, Object.assign({}, ctx, {assignedCount:finAssigned}));
+    row.clinTeam = sainteLagueAssign(clinPool, 2, row.date, Object.assign({}, ctx, {assignedCount:clinAssigned}));
+  }
+  let genderDropped=[], distantResult={applied:0,dropped:[]};
+  if(applyGender!==false) genderDropped = applyGenderBalance(rows);
+  if(applyDistant!==false) distantResult = applyDistantAreaLean(rows);
+  return {
+    rows, budget, N, days, genderDropped, distantResult,
+    planStart: days[0]||startDate, NEVER,
+    leftoverBasic: rankedBasic.slice(budget.M), leftoverContracted: rankedContracted.slice(budget.R),
+    pinnedOverflow: [...rankedBasic.slice(budget.M), ...rankedContracted.slice(budget.R)].filter(f=>f.pinned)
+  };
+}
+function displayScore(f, planStart, NEVER){
+  const overdue = f.pinned ? Infinity : (f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER);
+  return overdue===Infinity ? Infinity : overdue*(f.weight==null?1:f.weight);
+}
+function computeNearMisses(plan, topN){
+  topN = topN||10;
+  const scored = [...plan.leftoverBasic, ...plan.leftoverContracted].map(f=>({f, score: displayScore(f, plan.planStart, plan.NEVER)}));
+  scored.sort((a,b)=>b.score-a.score);
+  return scored.slice(0,topN).map(s=>s.f);
+}
+function computeThirds(nonEmptyRows){
+  const n = nonEmptyRows.length;
+  if(n===0) return [{basic:0,contracted:0,total:0},{basic:0,contracted:0,total:0},{basic:0,contracted:0,total:0}];
+  const size = Math.ceil(n/3);
+  const thirds = [[],[],[]];
+  nonEmptyRows.forEach((r,i)=>{
+    const idx = Math.min(2, Math.floor(i/size));
+    thirds[idx].push(r);
+  });
+  return thirds.map(t=>({basic:t.filter(r=>r.kind==='basic').length, contracted:t.filter(r=>r.kind==='contracted').length, total:t.length}));
+}
+function computeDeviation(pool, totals, totalSlots){
+  const activeWeightSum = pool.filter(p=>p.active!==false && p.fixedCount==null).reduce((s,p)=>s+(p.weight==null?1:p.weight),0);
+  const fixedSum = pool.filter(p=>p.fixedCount!=null).reduce((s,p)=>s+p.fixedCount,0);
+  const remainingSlots = Math.max(0, totalSlots-fixedSum);
+  return pool.map(p=>{
+    const actual = totals[p.id]||0;
+    let expected;
+    if(p.fixedCount!=null) expected = p.fixedCount;
+    else if(p.active===false) expected = 0;
+    else expected = activeWeightSum>0 ? (p.weight/activeWeightSum)*remainingSlots : 0;
+    return {person:p, actual, expected, deviation: actual-expected};
+  });
+}
+
+function computeGates(plan, registry, retiredIds){
+  const {rows, budget} = plan;
+  const nonEmpty = rows.filter(r=>!r.empty);
+  const gates=[];
+  gates.push({key:'count', pass: nonEmpty.length===(budget.M+budget.R)});
+  const facIds = nonEmpty.map(r=>r.facility.id);
+  gates.push({key:'dup-facility', pass: new Set(facIds).size===facIds.length});
+  let dupPerson=false, wrongSize=false, excludedPresent=false, retiredAssigned=false;
+  for(const r of nonEmpty){
+    const team=[...r.finTeam,...r.clinTeam];
+    if(new Set(team.map(p=>p.id)).size!==team.length) dupPerson=true;
+    const expected = r.kind==='basic'?4:3;
+    if(team.length!==expected) wrongSize=true;
+    if(r.facility.kind==='excluded') excludedPresent=true;
+    if(r.facility.manualExcluded) excludedPresent=true;
+    if(retiredIds && team.some(p=>retiredIds.has(p.id))) retiredAssigned=true;
+  }
+  gates.push({key:'dup-person', pass:!dupPerson});
+  gates.push({key:'team-size', pass:!wrongSize});
+  gates.push({key:'no-excluded', pass:!excludedPresent});
+  gates.push({key:'no-retired', pass:!retiredAssigned});
+  let prefixOK=true, basicSoFar=0;
+  for(let k=0;k<nonEmpty.length;k++){
+    if(nonEmpty[k].kind==='basic') basicSoFar++;
+    const need = Math.floor((k+1)*budget.M/nonEmpty.length);
+    if(basicSoFar<need) prefixOK=false;
+  }
+  gates.push({key:'prefix', pass:prefixOK});
+  let maxRun=0, cur=0;
+  for(const r of nonEmpty){
+    if(r.kind==='contracted'){ cur++; maxRun=Math.max(maxRun,cur); } else cur=0;
+  }
+  gates.push({key:'run', pass: budget.M>=budget.R ? maxRun<=1 : true});
+  return gates;
+}
+
+function computeTotals(rows){
+  const finCounts={}, clinCounts={};
+  for(const r of rows){
+    if(r.empty) continue;
+    for(const p of r.finTeam) finCounts[p.id]=(finCounts[p.id]||0)+1;
+    for(const p of r.clinTeam) clinCounts[p.id]=(clinCounts[p.id]||0)+1;
+  }
+  return {finCounts, clinCounts};
+}
+
+const REGISTRY_SEED = [
+['ادارة الفرع','ادارة الفرع','دمنهور'],
+['التوثيق والمعلومات','ادارة الفرع','دمنهور'],
+['الشئون الطبية','ادارة الفرع','دمنهور'],
+['الشئون القانونية','ادارة الفرع','دمنهور'],
+['المركبات','ادارة الفرع','دمنهور'],
+['الملحق','ادارة الفرع','دمنهور'],
+['دار الشفا ابو حمص','اشعة','ابو حمص'],
+['مركز ابو حمص للاشعة','اشعة','ابو حمص'],
+['مركز اشعة فيرست','اشعة','المحمودية'],
+['المستقبل للاشعة','اشعة','دمنهور'],
+['بحيرة سكان','اشعة','دمنهور'],
+['مركز دمنهور للاشعة','اشعة','دمنهور'],
+['مركز محمد عمرو','اشعة','دمنهور'],
+['مصطفي الاجهوري','اشعة','دمنهور'],
+['دلتا سكان','اشعة','كفر الدوار'],
+['كفر الدوار سكان','اشعة','كفر الدوار'],
+['كفر الدوار للاشعة','اشعة','كفر الدوار'],
+['مصر سكان','اشعة','كفر الدوار'],
+['العليمي سكان','اشعة','كوم حمادة'],
+['تسلا كوم حمادة','اشعة','كوم حمادة'],
+['ابو المطامير','الاولي','ابو المطامير'],
+['ادكو طلاب','الاولي','ادكو'],
+['ادكو قوي عاملة','الاولي','ادكو'],
+['البيضا','الاولي','البيضا'],
+['النوبارية','الاولي','النوبارية'],
+['رشيد طلاب','الاولي','رشيد'],
+['رشيد قوي عاملة','الاولي','رشيد'],
+['ادارة المنطقة الاولي','الاولي','كفر الدوار'],
+['كفر الدوار طلاب','الاولي','كفر الدوار'],
+['كفر الدوار قوي عاملة','الاولي','كفر الدوار'],
+['كفر الدوار مسائي','الاولي','كفر الدوار'],
+['مستشفي كفر الدوار مسائي','الاولي','كفر الدوار'],
+['ابو حمص','الثانية','ابو حمص'],
+['الرحمانية','الثانية','الرحمانية'],
+['المحمودية','الثانية','المحمودية'],
+['المحمودية مسائي','الثانية','المحمودية'],
+['حوش عيسي طلاب','الثانية','حوش عيسي'],
+['حوش عيسي قوي عاملة','الثانية','حوش عيسي'],
+['ادارة المنطقة الثانية','الثانية','دمنهور'],
+['الاجهزة التعويضية صلاح الدين','الثانية','دمنهور'],
+['الزراعة','الثانية','دمنهور'],
+['الشرطة','الثانية','دمنهور'],
+['العلاج الطبيعي','الثانية','دمنهور'],
+['اللجنة الطبية','الثانية','دمنهور'],
+['المخازن الطبية','الثانية','دمنهور'],
+['المخازن الغير طبية','الثانية','دمنهور'],
+['دمنهور الشاملة','الثانية','دمنهور'],
+['دمنهور طلاب','الثانية','دمنهور'],
+['دمنهور مسائي','الثانية','دمنهور'],
+['الدلنجات','الثالثة','الدلنجات'],
+['الدلنجات مسائي','الثالثة','الدلنجات'],
+['ادارة المنطقة الثالثة','الثالثة','ايتاي'],
+['ايتاي البارود','الثالثة','ايتاي'],
+['ايتاي البارود طلاب','الثالثة','ايتاي'],
+['ايتاي مسائي','الثالثة','ايتاي'],
+['مستشفي ايتاي مسائي','الثالثة','ايتاي'],
+['بدر','الثالثة','بدر'],
+['علاج طبيعي','الثالثة','دمنهور'],
+['شبراخيت طلاب','الثالثة','شبراخيت'],
+['شبراخيت قوي عاملة','الثالثة','شبراخيت'],
+['قليشان','الثالثة','قليشان'],
+['كوم حمادة طلاب','الثالثة','كوم حمادة'],
+['كوم حمادة قوي عاملة','الثالثة','كوم حمادة'],
+['كوم حمادة مسائي','الثالثة','كوم حمادة'],
+['مستشفي كوم حمادة مسائي','الثالثة','كوم حمادة'],
+['وادي النطرون','الثالثة','وادي النطرون']
+];
+
+const FIN_ADMIN_SEED = [
+  {id:'p_abaza', name:'أباظة', gender:'m'},
+  {id:'p_amani', name:'أماني', gender:'f'},
+  {id:'p_shaltoot', name:'شلتوت', gender:'m'},
+  {id:'p_ghada', name:'غادة', gender:'f'},
+  {id:'p_lobna', name:'لبنى', gender:'f'}
+];
+const CLINICAL_SEED = [
+  {id:'p_hamoudein', name:'حمودين', gender:'m'},
+  {id:'p_sharnouby', name:'شرنوبي', gender:'m'},
+  {id:'p_maysara', name:'ميسرة', gender:'m'},
+  {id:'p_shawky', name:'شوقي', gender:'m'},
+  {id:'p_mariam', name:'مريم', gender:'f'},
+  {id:'p_asmaa', name:'أسماء', gender:'f'}
+];
+const RETIRED_SEED = [
+  {id:'p_adib', name:'اديب', gender:'m'},
+  {id:'p_hindawy', name:'هنداوي', gender:'m'},
+  {id:'p_sobhy', name:'صبحي', gender:'m'}
+];
+
+function freshPerson(p){
+  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true}, p);
+}
+
+function escapeXml(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+function buildCrcTable(){
+  const table = new Uint32Array(256);
+  for(let n=0;n<256;n++){
+    let c=n;
+    for(let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1);
+    table[n]=c>>>0;
+  }
+  return table;
+}
+const CRC_TABLE = buildCrcTable();
+function crc32(bytes){
+  let c = 0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function dosDateTime(d){
+  const time = ((d.getHours()&31)<<11) | ((d.getMinutes()&63)<<5) | ((Math.floor(d.getSeconds()/2))&31);
+  const date = (((d.getFullYear()-1980)&127)<<9) | (((d.getMonth()+1)&15)<<5) | (d.getDate()&31);
+  return {time, date};
+}
+function buildZip(files){
+  const encoder = new TextEncoder();
+  const localParts=[], centralParts=[];
+  let offset=0;
+  const {time,date} = dosDateTime(new Date());
+  for(const f of files){
+    const nameBytes = encoder.encode(f.name);
+    const dataBytes = typeof f.data==='string' ? encoder.encode(f.data) : f.data;
+    const crc = crc32(dataBytes);
+
+    const localHeader = new Uint8Array(30+nameBytes.length);
+    const dv = new DataView(localHeader.buffer);
+    dv.setUint32(0,0x04034b50,true); dv.setUint16(4,20,true); dv.setUint16(6,0,true);
+    dv.setUint16(8,0,true); dv.setUint16(10,time,true); dv.setUint16(12,date,true);
+    dv.setUint32(14,crc,true); dv.setUint32(18,dataBytes.length,true); dv.setUint32(22,dataBytes.length,true);
+    dv.setUint16(26,nameBytes.length,true); dv.setUint16(28,0,true);
+    localHeader.set(nameBytes,30);
+    localParts.push(localHeader, dataBytes);
+
+    const centralHeader = new Uint8Array(46+nameBytes.length);
+    const cdv = new DataView(centralHeader.buffer);
+    cdv.setUint32(0,0x02014b50,true); cdv.setUint16(4,20,true); cdv.setUint16(6,20,true);
+    cdv.setUint16(8,0,true); cdv.setUint16(10,0,true); cdv.setUint16(12,time,true); cdv.setUint16(14,date,true);
+    cdv.setUint32(16,crc,true); cdv.setUint32(20,dataBytes.length,true); cdv.setUint32(24,dataBytes.length,true);
+    cdv.setUint16(28,nameBytes.length,true); cdv.setUint16(30,0,true); cdv.setUint16(32,0,true);
+    cdv.setUint16(34,0,true); cdv.setUint16(36,0,true); cdv.setUint32(38,0,true); cdv.setUint32(42,offset,true);
+    centralHeader.set(nameBytes,46);
+    centralParts.push(centralHeader);
+
+    offset += localHeader.length + dataBytes.length;
+  }
+  const centralStart = offset;
+  let centralSize=0;
+  for(const c of centralParts) centralSize += c.length;
+  const eocd = new Uint8Array(22);
+  const edv = new DataView(eocd.buffer);
+  edv.setUint32(0,0x06054b50,true); edv.setUint16(4,0,true); edv.setUint16(6,0,true);
+  edv.setUint16(8,files.length,true); edv.setUint16(10,files.length,true);
+  edv.setUint32(12,centralSize,true); edv.setUint32(16,centralStart,true); edv.setUint16(20,0,true);
+
+  const allParts=[...localParts,...centralParts,eocd];
+  let total=0;
+  for(const p of allParts) total+=p.length;
+  const out = new Uint8Array(total);
+  let pos=0;
+  for(const p of allParts){ out.set(p,pos); pos+=p.length; }
+  return out;
+}
+
+const OOXML_HEADERS = ['جهة المرور','المنطقة','الخطة','المرور','التاريخ','القائم بالمرور'];
+function colLetter(i){
+  let s='';
+  i=i+1;
+  while(i>0){ const r=(i-1)%26; s=String.fromCharCode(65+r)+s; i=Math.floor((i-1)/26); }
+  return s;
+}
+function buildXlsxBytes(headerRow, dataRows, colWidths){
+  const allRows = [headerRow, ...dataRows];
+  const colsXml = (colWidths||[]).map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+  const rowsXml = allRows.map((row,ri)=>{
+    const cells = row.map((val,ci)=>{
+      const ref = colLetter(ci)+(ri+1);
+      if(typeof val==='number') return `<c r="${ref}"><v>${val}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(val)}</t></is></c>`;
+    }).join('');
+    return `<row r="${ri+1}">${cells}</row>`;
+  }).join('');
+
+  const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView rightToLeft="1" workbookViewId="0"/></sheetViews>
+${colsXml?('<cols>'+colsXml+'</cols>'):''}
+<sheetData>${rowsXml}</sheetData>
+</worksheet>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`;
+
+  const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`;
+
+  return buildZip([
+    {name:'[Content_Types].xml', data:contentTypes},
+    {name:'_rels/.rels', data:rootRels},
+    {name:'xl/workbook.xml', data:workbook},
+    {name:'xl/_rels/workbook.xml.rels', data:workbookRels},
+    {name:'xl/worksheets/sheet1.xml', data:sheet1}
+  ]);
+}
+
+function colToIndex(ref){
+  const m = ref.match(/^([A-Z]+)/);
+  if(!m) return 0;
+  let col=0;
+  for(const ch of m[1]) col = col*26 + (ch.charCodeAt(0)-64);
+  return col-1;
+}
+
+async function readZipEntries(arrayBuffer){
+  const bytes = new Uint8Array(arrayBuffer);
+  const dv = new DataView(arrayBuffer);
+  let eocdOffset=-1;
+  for(let i=bytes.length-22; i>=Math.max(0,bytes.length-22-65557); i--){
+    if(dv.getUint32(i,true)===0x06054b50){ eocdOffset=i; break; }
+  }
+  if(eocdOffset<0) throw new Error('not a valid zip: EOCD not found');
+  const entryCount = dv.getUint16(eocdOffset+10,true);
+  const centralOffset = dv.getUint32(eocdOffset+16,true);
+
+  const entries = new Map();
+  let ptr = centralOffset;
+  for(let i=0;i<entryCount;i++){
+    if(dv.getUint32(ptr,true)!==0x02014b50) throw new Error('bad central directory entry');
+    const method = dv.getUint16(ptr+10,true);
+    const compSize = dv.getUint32(ptr+20,true);
+    const nameLen = dv.getUint16(ptr+28,true);
+    const extraLen = dv.getUint16(ptr+30,true);
+    const commentLen = dv.getUint16(ptr+32,true);
+    const localOffset = dv.getUint32(ptr+42,true);
+    const name = new TextDecoder('utf-8').decode(bytes.subarray(ptr+46, ptr+46+nameLen));
+
+    const lNameLen = dv.getUint16(localOffset+26,true);
+    const lExtraLen = dv.getUint16(localOffset+28,true);
+    const dataStart = localOffset+30+lNameLen+lExtraLen;
+    const compressed = bytes.subarray(dataStart, dataStart+compSize);
+
+    if(method===0){
+      entries.set(name, compressed.slice());
+    } else if(method===8){
+      if(typeof DecompressionStream==='undefined'){
+        entries.set(name, null);
+      } else {
+        const ds = new DecompressionStream('deflate-raw');
+        const source = new ReadableStream({
+          start(controller){ controller.enqueue(compressed); controller.close(); }
+        });
+        const buf = await new Response(source.pipeThrough(ds)).arrayBuffer();
+        entries.set(name, new Uint8Array(buf));
+      }
+    } else {
+      entries.set(name, null);
+    }
+    ptr += 46+nameLen+extraLen+commentLen;
+  }
+  return entries;
+}
+
+function parseSharedStrings(xmlText){
+  if(!xmlText) return [];
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const items = [...doc.getElementsByTagName('si')];
+  return items.map(si=>{
+    const tNodes = [...si.getElementsByTagName('t')];
+    return tNodes.map(t=>t.textContent).join('');
+  });
+}
+function parseSheetRows(xmlText, sharedStrings){
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const rowEls = [...doc.getElementsByTagName('row')];
+  return rowEls.map(rowEl=>{
+    const cells = [...rowEl.getElementsByTagName('c')];
+    const row = [];
+    for(const c of cells){
+      const ref = c.getAttribute('r')||'';
+      const idx = colToIndex(ref);
+      const type = c.getAttribute('t');
+      let value = '';
+      if(type==='inlineStr'){
+        const isEl = c.getElementsByTagName('is')[0];
+        value = isEl ? [...isEl.getElementsByTagName('t')].map(t=>t.textContent).join('') : '';
+      } else {
+        const vEl = c.getElementsByTagName('v')[0];
+        const raw = vEl ? vEl.textContent : '';
+        if(type==='s') value = sharedStrings[+raw] || '';
+        else value = raw;
+      }
+      while(row.length<idx) row.push('');
+      row[idx] = value;
+    }
+    return row;
+  });
+}
+async function parseXlsxArrayBuffer(arrayBuffer){
+  const entries = await readZipEntries(arrayBuffer);
+  const decoder = new TextDecoder('utf-8');
+  const sheetBytes = entries.get('xl/worksheets/sheet1.xml');
+  if(sheetBytes===undefined) throw new Error('xl/worksheets/sheet1.xml not found');
+  if(sheetBytes===null) throw new Error('unsupported compression in this browser');
+  const sharedBytes = entries.get('xl/sharedStrings.xml');
+  const sharedStrings = sharedBytes ? parseSharedStrings(decoder.decode(sharedBytes)) : [];
+  return parseSheetRows(decoder.decode(sheetBytes), sharedStrings);
+}
+
+function stripBOM(text){
+  return text.charCodeAt(0)===0xFEFF ? text.slice(1) : text;
+}
+function parseCSV(text){
+  text = stripBOM(text);
+  const rows=[]; let row=[], field='', inQuotes=false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
+      else field+=c;
+    } else {
+      if(c==='"') inQuotes=true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c==='\r'){ }
+      else field+=c;
+    }
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>!(r.length===1&&r[0]===''));
+}
+function parseTSV(text){
+  text = stripBOM(text);
+  return text.replace(/\r/g,'').split('\n').filter(l=>l.length).map(l=>l.split('\t'));
+}
+function toCSV(rows){
+  const esc = v=>{
+    const s = String(v==null?'':v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  return '\uFEFF'+rows.map(r=>r.map(esc).join(',')).join('\r\n');
+}
+function toTSVLine(row){ return row.join('\t'); }
+
+const HEADER_ALIASES = {
+  'جهة المرور':'facility', 'المنطقة':'category', 'الخطة':'cycle',
+  'المرور':'typeLabel', 'التاريخ':'date', 'القائم بالمرور':'team'
+};
+function mapHeaders(headerRow){
+  const mapping = {};
+  const usedCols = new Set();
+  headerRow.forEach((h,idx)=>{
+    const n = norm(h);
+    for(const key in HEADER_ALIASES){
+      if(norm(key)===n && !usedCols.has(HEADER_ALIASES[key])){
+        mapping[HEADER_ALIASES[key]] = idx;
+        usedCols.add(HEADER_ALIASES[key]);
+      }
+    }
+  });
+  const required = ['facility','category','cycle','typeLabel','date','team'];
+  const unmapped = required.filter(k=>!(k in mapping));
+  return {mapping, unmapped};
+}
+
+function parseHistoryRows(rawRows, mapping){
+  return rawRows.map((r,i)=>({
+    rowIndex:i,
+    facilityRaw: (r[mapping.facility]||'').toString(),
+    categoryRaw: (r[mapping.category]||'').toString(),
+    cycleRaw: r[mapping.cycle],
+    typeLabelRaw: (r[mapping.typeLabel]||'').toString(),
+    dateRaw: (r[mapping.date]||'').toString(),
+    teamRaw: (r[mapping.team]||'').toString()
+  })).filter(r=>r.facilityRaw.trim()!=='');
+}
+
+function cloneRegistry(reg){
+  return reg.map(f=>Object.assign({}, f, {
+    lastVisit: f.lastVisit ? new Date(f.lastVisit.getFullYear(), f.lastVisit.getMonth(), f.lastVisit.getDate()) : null,
+    visitHistory: (f.visitHistory||[]).map(v=>({date: new Date(v.date.getFullYear(), v.date.getMonth(), v.date.getDate()), team: v.team.slice()}))
+  }));
+}
+function serializeRegistry(reg){
+  return reg.map(f=>({
+    id:f.id, name:f.name, category:f.category, location:f.location, kind:f.kind, weight:f.weight,
+    lastVisit: f.lastVisit ? fmtISO(f.lastVisit) : null,
+    visitCount: f.visitCount||0, pinned: !!f.pinned, manualExcluded: !!f.manualExcluded,
+    reviewFlag: f.reviewFlag||null,
+    visitHistory: (f.visitHistory||[]).map(v=>({date: fmtISO(v.date), team: v.team}))
+  }));
+}
+function deserializeRegistry(saved){
+  return saved.map(f=>Object.assign({}, f, {
+    lastVisit: f.lastVisit ? parseDateFlexible(f.lastVisit) : null,
+    visitHistory: (f.visitHistory||[]).map(v=>({date: parseDateFlexible(v.date), team: v.team})).filter(v=>v.date)
+  }));
+}
+
+function ingestHistory(records, registry, finPool, clinPool, retiredPool, personAliasOverrides){
+  personAliasOverrides = personAliasOverrides || {};
+  const registryByName = new Map(registry.map(f=>[normFacility(f.name), f]));
+  const finByName = new Map(finPool.map(p=>[normPerson(p.name), p]));
+  const clinByName = new Map(clinPool.map(p=>[normPerson(p.name), p]));
+  const retiredByName = new Map(retiredPool.map(p=>[normPerson(p.name), p]));
+
+  const unresolvedFacilities = [];
+  const unresolvedPeople = new Map();
+  const unparseableRows = [];
+  const facilityPersonVisits = {};
+  const initialFin = {}, initialClin = {};
+  let maxCycle = -1;
+  let matchedRowCount = 0;
+
+  for(const rec of records){
+    const cycleNum = parseInt(String(rec.cycleRaw).trim(), 10);
+    if(!isNaN(cycleNum)) maxCycle = Math.max(maxCycle, cycleNum);
+
+    const date = parseDateFlexible(rec.dateRaw);
+    if(!date){ unparseableRows.push({rowIndex:rec.rowIndex, reason:'date', raw:rec.dateRaw}); continue; }
+
+    const fKey = normFacility(rec.facilityRaw);
+    let facility = registryByName.get(fKey);
+    if(!facility){
+      const cat = rec.categoryRaw.trim();
+      const isBasic = BASIC_CATEGORIES.has(cat), isContracted = CONTRACTED_CATEGORIES.has(cat);
+      facility = {
+        id:'hist_'+registry.length,
+        name: rec.facilityRaw.trim(), category: cat, location:null,
+        kind: isBasic ? 'basic' : (isContracted ? 'contracted' : 'excluded'),
+        weight: computeWeight(rec.facilityRaw.trim()),
+        lastVisit:null, visitCount:0, pinned:false, manualExcluded:false, visitHistory:[], reviewFlag:'unknown-location'
+      };
+      registry.push(facility);
+      registryByName.set(fKey, facility);
+      unresolvedFacilities.push(facility);
+    }
+    facility.visitCount = (facility.visitCount||0)+1;
+    if(!facility.lastVisit || date>facility.lastVisit) facility.lastVisit = date;
+    matchedRowCount++;
+
+    const names = rec.teamRaw.split('-').map(s=>s.trim()).filter(Boolean);
+    if(!facility.visitHistory) facility.visitHistory = [];
+    facility.visitHistory.push({date, team: names});
+    facility.visitHistory.sort((a,b)=>b.date-a.date);
+    if(facility.visitHistory.length>20) facility.visitHistory.length = 20;
+    for(const rawName of names){
+      const pKey = normPerson(rawName);
+      const override = personAliasOverrides[pKey];
+      let person=null, pool=null;
+      if(override){
+        if(override.pool==='fin') person = finPool.find(p=>p.id===override.id);
+        else if(override.pool==='clin') person = clinPool.find(p=>p.id===override.id);
+        else if(override.pool==='retired') pool='retired';
+        if(person) pool = override.pool;
+      }
+      if(!person && pool!=='retired'){
+        if(finByName.has(pKey)){ person=finByName.get(pKey); pool='fin'; }
+        else if(clinByName.has(pKey)){ person=clinByName.get(pKey); pool='clin'; }
+        else if(retiredByName.has(pKey)){ pool='retired'; }
+      }
+      if(person){
+        const bucket = pool==='fin' ? initialFin : initialClin;
+        bucket[person.id] = (bucket[person.id]||0)+1;
+        const key = facility.id+'|'+person.id;
+        facilityPersonVisits[key] = (facilityPersonVisits[key]||0)+1;
+      } else if(pool==='retired'){
+      } else {
+        const entry = unresolvedPeople.get(pKey) || {name: rawName.trim(), count:0};
+        entry.count++;
+        unresolvedPeople.set(pKey, entry);
+      }
+    }
+  }
+  return {
+    unresolvedFacilities, unresolvedPeople, unparseableRows, facilityPersonVisits,
+    initialFin, initialClin, maxCycle, matchedRowCount, totalRows: records.length
+  };
+}
+
+function makeOverTiedChecker(facilityPersonVisits, minVisits, minRatio){
+  minVisits = minVisits==null ? 3 : minVisits;
+  minRatio = minRatio==null ? 0.6 : minRatio;
+  return function(person, facility){
+    const key = facility.id+'|'+person.id;
+    const v = facilityPersonVisits[key]||0;
+    if(v<minVisits) return false;
+    const total = facility.visitCount||0;
+    if(total<=0) return false;
+    return (v/total) >= minRatio;
+  };
+}
+function makeUnavailableChecker(){
+  return function(person, date){
+    if(!person.unavailable || !person.unavailable.length) return false;
+    return person.unavailable.indexOf(fmtISO(date))>=0;
+  };
+}
+function makeBlockedChecker(){
+  return function(person, facility){
+    if(!person.blockedFacilities || !person.blockedFacilities.length) return false;
+    return person.blockedFacilities.indexOf(facility.id)>=0 || person.blockedFacilities.indexOf(facility.name)>=0;
+  };
+}
+
+const REGISTRY_HEADER_ALIASES = {
+  'اسم الجهة':'name', 'المنطقة':'category', 'الموقع':'location', 'الوزن':'weight', 'الحالة':'status'
+};
+function mapRegistryHeaders(headerRow){
+  const mapping = {};
+  const usedCols = new Set();
+  headerRow.forEach((h,idx)=>{
+    const n = norm(h);
+    for(const key in REGISTRY_HEADER_ALIASES){
+      if(norm(key)===n && !usedCols.has(REGISTRY_HEADER_ALIASES[key])){
+        mapping[REGISTRY_HEADER_ALIASES[key]] = idx;
+        usedCols.add(REGISTRY_HEADER_ALIASES[key]);
+      }
+    }
+  });
+  const required = ['name','category','location','weight','status'];
+  const unmapped = required.filter(k=>!(k in mapping));
+  return {mapping, unmapped};
+}
+function parseRegistryRows(rawRows, mapping){
+  return rawRows.map((r,i)=>({
+    rowIndex:i,
+    nameRaw: (r[mapping.name]||'').toString(),
+    categoryRaw: (r[mapping.category]||'').toString(),
+    locationRaw: (r[mapping.location]||'').toString(),
+    weightRaw: r[mapping.weight],
+    statusRaw: (r[mapping.status]||'').toString()
+  })).filter(r=>r.nameRaw.trim()!=='');
+}
+function parseStatusValue(raw){
+  const n = norm(raw);
+  if(n===norm('مستبعدة')) return 'excluded';
+  if(n===norm('مثبتة')) return 'pinned';
+  return 'included';
+}
+function statusToArabic(status){
+  if(status==='excluded') return 'مستبعدة';
+  if(status==='pinned') return 'مثبّتة';
+  return 'مُدرجة';
+}
+function computeRegistryDiff(records, currentRegistry){
+  const byName = new Map(currentRegistry.map(f=>[normFacility(f.name), f]));
+  const seenNames = new Set();
+  const added=[], changed=[], unparseable=[];
+  for(const rec of records){
+    const name = rec.nameRaw.trim();
+    const weight = parseFloat(rec.weightRaw);
+    if(isNaN(weight)){ unparseable.push({rowIndex:rec.rowIndex, reason:'weight', raw:rec.weightRaw}); continue; }
+    const status = parseStatusValue(rec.statusRaw);
+    const category = rec.categoryRaw.trim();
+    const location = rec.locationRaw.trim();
+    const key = normFacility(name);
+    seenNames.add(key);
+    const existing = byName.get(key);
+    const categoryKnown = BASIC_CATEGORIES.has(category) || CONTRACTED_CATEGORIES.has(category);
+    const kind = categoryKnown ? (BASIC_CATEGORIES.has(category)?'basic':'contracted') : 'excluded';
+    const categoryFlag = categoryKnown ? null : 'unknown-category';
+    if(!existing){
+      added.push({name, category, location, weight, status, kind, categoryFlag});
+    } else {
+      const fields=[];
+      if(existing.category!==category) fields.push({field:'category', from:existing.category, to:category});
+      if((existing.location||'')!==location) fields.push({field:'location', from:existing.location||'', to:location});
+      if(existing.weight!==weight) fields.push({field:'weight', from:existing.weight, to:weight});
+      const existingStatus = existing.manualExcluded ? 'excluded' : (existing.pinned ? 'pinned' : 'included');
+      if(existingStatus!==status) fields.push({field:'status', from:existingStatus, to:status});
+      if(fields.length) changed.push({existing, name, category, location, weight, status, kind, categoryFlag, fields});
+    }
+  }
+  const missing = currentRegistry.filter(f=>!seenNames.has(normFacility(f.name)));
+  return {added, changed, missing, unparseable, totalRows:records.length};
+}
+function applyRegistryDiff(diff, registry, missingActions){
+  missingActions = missingActions || {};
+  for(const a of diff.added){
+    registry.push({
+      id:'reg_'+registry.length+'_'+Math.random().toString(36).slice(2,8),
+      name:a.name, category:a.category, location:a.location||null,
+      kind:a.kind, weight:a.weight,
+      lastVisit:null, visitCount:0, pinned:a.status==='pinned', manualExcluded:a.status==='excluded',
+      visitHistory:[], reviewFlag:a.categoryFlag
+    });
+  }
+  for(const c of diff.changed){
+    const f = c.existing;
+    f.category = c.category; f.location = c.location||null; f.weight = c.weight;
+    f.pinned = c.status==='pinned'; f.manualExcluded = c.status==='excluded';
+    f.kind = c.kind; f.reviewFlag = c.categoryFlag;
+  }
+  for(const f of diff.missing){
+    if(missingActions[f.id]==='exclude') f.manualExcluded = true;
+  }
+}
+
+
+async function runSelfTests(){
+  const results=[];
+  function check(name, fn){
+    try{
+      const detail = fn();
+      results.push({name, status:'pass', detail: detail||''});
+    }catch(e){
+      results.push({name, status:'fail', detail: e.message});
+    }
+  }
+  async function checkAsync(name, fn){
+    try{
+      const detail = await fn();
+      results.push({name, status:'pass', detail: detail||''});
+    }catch(e){
+      results.push({name, status:'fail', detail: e.message});
+    }
+  }
+
+  check('interleave: exact M basic slots for N∈[1,80]×M∈[0,N]', ()=>{
+    let checked=0;
+    for(let N=1;N<=80;N++){
+      for(let M=0;M<=N;M++){
+        const pattern = interleave(N,M);
+        const c = pattern.filter(x=>x==='basic').length;
+        if(c!==M) throw new Error(`N=${N} M=${M} got ${c}`);
+        checked++;
+      }
+    }
+    return `${checked} combinations checked`;
+  });
+
+  check('interleave: no two consecutive minority slots', ()=>{
+    let checked=0;
+    for(let N=1;N<=80;N++){
+      for(let M=0;M<=N;M++){
+        const pattern = interleave(N,M);
+        const R=N-M, majorIsBasic=M>=R;
+        const minor = majorIsBasic?'contracted':'basic';
+        for(let i=0;i<pattern.length-1;i++){
+          if(pattern[i]===minor&&pattern[i+1]===minor) throw new Error(`N=${N} M=${M} at ${i}`);
+        }
+        checked++;
+      }
+    }
+    return `${checked} combinations checked`;
+  });
+
+  check('interleave: prefix gate holds for all N,M', ()=>{
+    let checked=0;
+    for(let N=1;N<=80;N++){
+      for(let M=0;M<=N;M++){
+        const pattern = interleave(N,M);
+        let basicSoFar=0;
+        for(let k=1;k<=N;k++){
+          if(pattern[k-1]==='basic') basicSoFar++;
+          const need = Math.floor(k*M/N);
+          if(basicSoFar<need) throw new Error(`N=${N} M=${M} k=${k}`);
+        }
+        checked++;
+      }
+    }
+    return `${checked} combinations checked`;
+  });
+
+  check('norm(): collapses known facility alias pairs', ()=>{
+    if(normFacility('التانية')!==normFacility('الثانية')) throw new Error('الثانية/التانية');
+    if(normFacility('اشعه')!==normFacility('اشعة')) throw new Error('اشعة/اشعه');
+    if(normFacility('مستشفى')!==normFacility('مستشفي')) throw new Error('مستشفي/مستشفى');
+    return 'ok';
+  });
+
+  check('norm(): collapses known person alias pairs', ()=>{
+    if(normPerson('لبني')!==normPerson('لبنى')) throw new Error('لبنى/لبني');
+    if(normPerson('اسماء')!==normPerson('أسماء')) throw new Error('أسماء/اسماء');
+    if(normPerson('اباظة')!==normPerson('أباظة')) throw new Error('أباظة/اباظة');
+    return 'ok';
+  });
+
+  check('date parser: round-trips all accepted formats', ()=>{
+    const cases = [' Wed 4 Sep 2024 ','4 Sep 2024','2024-09-04','4/9/2024','٤ سبتمبر ٢٠٢٤'];
+    for(const c of cases){
+      const dt = parseDateFlexible(c);
+      if(!dt||dt.getFullYear()!==2024||dt.getMonth()!==8||dt.getDate()!==4) throw new Error(`"${c}" -> ${dt}`);
+    }
+    if(parseDateFlexible('not a date')!==null) throw new Error('unparseable should be null');
+    return `${cases.length} formats + null case`;
+  });
+
+  check('working days: only selected weekdays returned', ()=>{
+    const wd = new Set([1,2,3,4]);
+    const days = workingDays(new Date(2026,0,1), new Date(2026,2,31), wd, new Set(), new Set());
+    if(!days.every(d=>wd.has(d.getDay()))) throw new Error('non-weekday leaked through');
+    return `${days.length} working days in range`;
+  });
+
+  check('Sainte-Laguë: equal weights spread ≤2 over 52 days', ()=>{
+    const pool = ['a','b','c','d','e','f'].map(id=>({id, weight:1, active:true}));
+    const assignedCount = {};
+    for(let day=0; day<52; day++) sainteLagueAssign(pool, 2, day, {assignedCount, facility:'f'+day});
+    const counts = pool.map(p=>assignedCount[p.id]||0);
+    const spread = Math.max(...counts)-Math.min(...counts);
+    if(spread>2) throw new Error(`spread=${spread} counts=${counts.join(',')}`);
+    return `spread=${spread}`;
+  });
+
+  check('Sainte-Laguë: weight 0.5 gives roughly half a share', ()=>{
+    const pool = [
+      {id:'f1',weight:1,active:true},{id:'f2',weight:1,active:true},
+      {id:'f3',weight:1,active:true},{id:'half',weight:0.5,active:true}
+    ];
+    const assignedCount={};
+    for(let day=0; day<80; day++) sainteLagueAssign(pool, 1, day, {assignedCount, facility:'g'+day});
+    const fullAvg = (assignedCount.f1+assignedCount.f2+assignedCount.f3)/3;
+    const ratio = (assignedCount.half||0)/fullAvg;
+    if(!(ratio>0.35&&ratio<0.65)) throw new Error(`ratio=${ratio}`);
+    return `ratio=${ratio.toFixed(2)}`;
+  });
+
+  await checkAsync('XLSX write→read round-trips Arabic text intact', async ()=>{
+    const header = OOXML_HEADERS;
+    const dataRows = [['مركز دمنهور للاشعة','اشعة',3,'خطة المرور','4 Sep 2024','صبحي - ميسرة - شرنوبي - لبني']];
+    const bytes = buildXlsxBytes(header, dataRows);
+    const rowsBack = await parseXlsxArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength));
+    if(rowsBack[0][0]!==header[0]) throw new Error('header mismatch: '+rowsBack[0][0]);
+    if(rowsBack[1][0]!==dataRows[0][0]) throw new Error('facility name mismatch: '+rowsBack[1][0]);
+    if(rowsBack[1][5]!==dataRows[0][5]) throw new Error('team names mismatch: '+rowsBack[1][5]);
+    return `${bytes.length} bytes written, read back intact`;
+  });
+
+  check('CSV export carries a UTF-8 BOM', ()=>{
+    const csv = toCSV([['a','ب'],['1','2']]);
+    if(csv.charCodeAt(0)!==0xFEFF) throw new Error('missing BOM');
+    return 'ok';
+  });
+
+  check('header mapping resolves the canonical six columns', ()=>{
+    const {mapping, unmapped} = mapHeaders(OOXML_HEADERS);
+    if(unmapped.length) throw new Error('unmapped: '+unmapped.join(','));
+    return 'ok';
+  });
+
+  check('generated plan: no excluded facility ever appears', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const plan = generatePlan({
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68
+    });
+    for(const r of plan.rows){
+      if(!r.empty && r.facility.kind==='excluded') throw new Error(`excluded facility on ${r.date}`);
+    }
+    return `${plan.rows.filter(r=>!r.empty).length} rows checked`;
+  });
+
+  check('generated plan: all blocking verification gates pass', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const retiredIds = new Set(RETIRED_SEED.map(p=>p.id));
+    const plan = generatePlan({
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68
+    });
+    const gates = computeGates(plan, registry, retiredIds);
+    const failed = gates.filter(g=>!g.pass);
+    if(failed.length) throw new Error(failed.map(g=>g.key).join(', '));
+    return `${gates.length} gates passed`;
+  });
+
+  check('ingestion: unresolved facility/person detected, known history matched', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const {mapping} = mapHeaders(OOXML_HEADERS);
+    const rows = parseHistoryRows([
+      ['مركز دمنهور للاشعة','اشعة',0,'خطة المرور','4 Sep 2024','صبحي - ميسرة - شرنوبي - لبني'],
+      ['جهة غير معروفة','معمل',1,'خطة المرور','5 Sep 2024','فلان الفلاني - غادة']
+    ], mapping);
+    const result = ingestHistory(rows, registry, finPool, clinPool, RETIRED_SEED, {});
+    if(result.unresolvedFacilities.length!==1) throw new Error('expected 1 unresolved facility, got '+result.unresolvedFacilities.length);
+    if(result.unresolvedPeople.size!==1) throw new Error('expected 1 unresolved person, got '+result.unresolvedPeople.size);
+    if(result.maxCycle!==1) throw new Error('maxCycle='+result.maxCycle);
+    const dam = registry.find(f=>f.name==='مركز دمنهور للاشعة');
+    if(dam.visitCount!==1) throw new Error('lastVisit/visitCount not updated on match');
+    return 'ok';
+  });
+
+  check('cross-cycle fairness: overused person gets fewer new assignments', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const {mapping} = mapHeaders(OOXML_HEADERS);
+    const histRows=[];
+    for(let i=0;i<20;i++) histRows.push(['مركز دمنهور للاشعة','اشعة',0,'خطة المرور',`${i+1} Jan 2025`,'لبني - صبحي - شرنوبي - شوقي']);
+    const records = parseHistoryRows(histRows, mapping);
+    const result = ingestHistory(records, registry, finPool, clinPool, RETIRED_SEED, {});
+    const plan = generatePlan({
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68,
+      finInitial: result.initialFin, clinInitial: result.initialClin,
+      isOverTied: makeOverTiedChecker(result.facilityPersonVisits)
+    });
+    const totals = computeTotals(plan.rows);
+    if(!((totals.finCounts['p_lobna']||0) < (totals.finCounts['p_ghada']||0))){
+      throw new Error(`لبنى=${totals.finCounts['p_lobna']} غادة=${totals.finCounts['p_ghada']}`);
+    }
+    return `لبنى +${totals.finCounts['p_lobna']||0} vs غادة +${totals.finCounts['p_ghada']||0} this cycle`;
+  });
+
+  check('registry export→import round-trips weights and status unchanged', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    registry[0].weight = 0.42;
+    registry[1].manualExcluded = true;
+    registry[2].pinned = true;
+    const serialized = serializeRegistry(registry);
+    const roundTripped = deserializeRegistry(JSON.parse(JSON.stringify(serialized)));
+    if(roundTripped[0].weight!==0.42) throw new Error('weight not preserved');
+    if(roundTripped[1].manualExcluded!==true) throw new Error('manualExcluded not preserved');
+    if(roundTripped[2].pinned!==true) throw new Error('pinned not preserved');
+    return 'ok';
+  });
+
+  check('manually excluded facility never appears in a generated plan', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    registry.filter(f=>f.kind==='basic').forEach((f,i)=>{ if(i%2===0) f.manualExcluded = true; });
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const plan = generatePlan({
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68
+    });
+    for(const r of plan.rows){
+      if(!r.empty && r.facility.manualExcluded) throw new Error(`excluded facility ${r.facility.name} appeared on ${r.date}`);
+    }
+    const retiredIds = new Set(RETIRED_SEED.map(p=>p.id));
+    const gates = computeGates(plan, registry, retiredIds);
+    if(!gates.find(g=>g.key==='no-excluded').pass) throw new Error('no-excluded gate failed to catch it');
+    return 'ok';
+  });
+
+  check('registry import diff applied twice is idempotent', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const header = ['اسم الجهة','المنطقة','الموقع','الوزن','الحالة'];
+    const rows = [['مركز دمنهور للاشعة','اشعة','دمنهور','0.6','مُدرجة'],['ابو حمص','الثانية','ابو حمص','1','مستبعدة']];
+    const {mapping} = mapRegistryHeaders(header);
+    const records = parseRegistryRows(rows, mapping);
+    const diff1 = computeRegistryDiff(records, registry);
+    applyRegistryDiff(diff1, registry, {});
+    const diff2 = computeRegistryDiff(records, registry);
+    if(diff2.added.length!==0 || diff2.changed.length!==0) throw new Error(`second diff not empty: added=${diff2.added.length} changed=${diff2.changed.length}`);
+    return 'ok';
+  });
+
+  return results;
+}
+
+
+const I18N = {
+  ar: {
+    appName:'الخطة', step1Title:'المدى', step2Title:'المصدر', step3Title:'الفريق',
+    rangeWeek:'أسبوع', rangeMonth:'شهر', rangeQuarter:'٣ شهور', rangeCustom:'مخصص',
+    from:'من', to:'إلى',
+    weekdays:['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'],
+    holidayToggle:'أيام عطلة إضافية', holidayPlaceholder:'2026-09-10, 2026-09-17',
+    sourceUpload:'رفع خطة سابقة', sourceManual:'بدون ملف',
+    uploadSoon:'قريبًا — استخدم «بدون ملف» الآن',
+    ratioLabel:'نسبة الأساسي', basicCount:'أساسي', contractedCount:'متعاقد',
+    finPoolLabel:'المالية والإدارية', clinPoolLabel:'الطبية',
+    weightLabel:'الوزن', activeLabel:'نشط',
+    fixedCountLabel:'عدد ثابت', unavailableLabel:'أيام غير متاحة',
+    unavailablePlaceholder:'2026-09-10, 2026-09-17', blockedLabel:'جهات محظورة',
+    blockedPlaceholder:'اسم الجهة، اسم آخر...',
+    generate:'توليد الخطة',
+    resultsTitle:'الخطة', reviewTitle:'المراجعة', totalsTitle:'الإجماليات',
+    emptyDay:'يوم بدون زيارة',
+    footer:'كل البيانات تبقى على جهازك. لا شيء يُرسل لأي خادم.',
+    selftestTitle:'اختبار ذاتي', backToApp:'العودة للتطبيق',
+    workingDaysSummary:(n,names)=>`${n} يوم عمل · ${names}`,
+    gateLabels:{
+      count:'عدد الصفوف يطابق ميزانية الفتحات', 'dup-facility':'لا تكرار لأي جهة',
+      'dup-person':'لا تكرار لشخص داخل فريق واحد', 'team-size':'حجم كل فريق مطابق لنوع الجهة',
+      'no-excluded':'لا توجد جهة مستبعدة', 'no-retired':'لا يوجد اسم متقاعد مُسند',
+      prefix:'بوابة التوزيع التراكمي', run:'أطول تتابع متعاقد ≤ يوم عند غلبة الأساسي'
+    },
+    achievedMix:(m,r,n)=>`المزيج المحقق: ${m} أساسي / ${r} متعاقد من ${n} (${Math.round(m/n*100)}٪)`,
+    genderDroppedNote:n=>`تعذّر ضبط توازن النوع في ${n} يوم — مُدرجة أدناه`,
+    genderAchievedNote:(ok,total)=>`توازن النوع 3-1: تحقق في ${ok} من ${total} فريق رباعي`,
+    distantAppliedNote:(a,n)=>n?'لا توجد جهات في مناطق بعيدة هذه الدورة':`مَيل المناطق البعيدة: طُبّق على ${a} فريق`,
+    thirdsTitle:'التوزيع على الأثلاث', thirdLabel:i=>`الثلث ${i}`,
+    deviationTitle:'الانحراف عن الحصة المتوقعة', nearMissTitle:'يُرحَّل للدورة القادمة (أعلى ١٠ بالأولوية)',
+    perVisit:'زيارة',
+    dropHere:'اسحب ملف XLSX أو CSV أو TSV هنا، أو اضغط للاختيار',
+    pasteLabel:'أو الصق البيانات هنا (CSV أو TSV)', pasteBtn:'معالجة اللصق',
+    digest:(v,f,c,u)=>`قرأنا ${v} زيارة · ${f} جهة · آخر خطة رقم ${c} · ${u} أسماء غير معروفة`,
+    remapTitle:'بعض الأعمدة غير معروفة — يرجى تحديدها',
+    remapApply:'تطبيق', unresolvedTitle:'أسماء غير معروفة',
+    resolveChoose:'اختر...', resolveMapExisting:'دمج مع موظف حالي',
+    resolveAddFin:'إضافة إلى المالية والإدارية', resolveAddClin:'إضافة إلى الطبية',
+    resolveRetire:'وضعه كمتقاعد', genderLabel:'النوع', genderM:'ذكر', genderF:'أنثى',
+    exportXlsx:'تصدير XLSX', exportCsv:'تصدير CSV', copyTsv:'نسخ TSV', exportBackup:'نسخة احتياطية JSON',
+    approvePlan:'اعتماد الخطة', approvedNote:'تم اعتماد الخطة وتحديث سجل آخر زيارة لكل جهة',
+    undoApprove:'تراجع عن الاعتماد',
+    unknownLocationFlag:'خارج البحيرة؟', tsvCopied:'تم النسخ',
+    importErrorPrefix:'تعذّرت القراءة: ',
+    settingsTitle:'الإعدادات', facilitiesTitle:'الجهات', pinnedLabel:'مثبّتة',
+    locationPlaceholder:'الموقع (مثال: دمنهور)', confirmLocation:'تأكيد الموقع',
+    aliasTitle:'قواعد الأسماء البديلة', facilityAliasLabel:'أسماء الجهات (خام=قياسي، سطر لكل قاعدة)',
+    personAliasLabel:'أسماء الأشخاص (خام=قياسي، سطر لكل قاعدة)', saveAliases:'حفظ القواعد',
+    overTieTitle:'عتبة التكرار الزائد', minVisitsLabel:'أقل عدد زيارات', minRatioLabel:'أقل نسبة ٪',
+    passesTitle:'تمريرات الموازنة', genderPassLabel:'موازنة النوع 3-1', distantPassLabel:'مَيل المناطق البعيدة',
+    settingsBtn:'الإعدادات', noAlternatives:'لا يوجد بديل مؤهل',
+    visibilityHint:'اختر ما يظهر في النسخ والتصدير — لا يؤثر على العرض هنا',
+    hideFacilitiesTitle:'إخفاء جهات', hidePeopleTitle:'إخفاء أشخاص',
+    searchPlaceholder:'بحث بالاسم...', allCategories:'كل الفئات', allLocations:'كل المواقع',
+    kindLabel_all:'الكل', kindLabel_basic:'أساسي', kindLabel_contracted:'متعاقد', kindLabel_excluded:'مستبعدة بالتصنيف',
+    lastVisitLabel:'آخر زيارة', neverVisited:'لم تُزَر بعد', daysAgo:n=>`منذ ${n} يوم`,
+    visitCountLabel:'إجمالي الزيارات', statusIncluded:'مُدرجة', statusExcluded:'مستبعدة', statusPinned:'مثبّتة',
+    bulkWeightLabel:'وزن للمحدد', applyWeight:'تطبيق', bulkExclude:'استبعاد المحدد', bulkPin:'تثبيت المحدد', bulkInclude:'إدراج المحدد',
+    expandLabel:'آخر ٥ زيارات', noVisitsYet:'لا توجد زيارات مسجلة',
+    registryImportTitle:'استيراد ملف السجل (منفصل عن استيراد الخطط)',
+    dryRunSummary:(a,c,m,u)=>`${a} جهة جديدة · ${c} تغيّرت (بالحقل) · ${m} في السجل وغير موجودة في الملف · ${u} صف غير مقروء`,
+    addedLabel:'جهات جديدة', changedLabel:'تغييرات', missingLabel:'غير موجودة في الملف',
+    missingKeep:'إبقاء', missingExclude:'تعليم كمستبعدة', applyImport:'تطبيق الاستيراد', cancelImport:'إلغاء',
+    undoImport:'تراجع عن آخر استيراد', unknownCategoryFlagLabel:'فئة غير معروفة',
+    weightPresetLabel:'وزن سريع', whyThisFacility:'لماذا هذه الجهة؟',
+    rankLabel:'ترتيب', inStreamBasic:'في مسار الأساسي', inStreamContracted:'في مسار المتعاقد',
+    pinnedOverflowWarning:n=>`${n} جهة مثبّتة لم تدخل هذه الدورة بسبب ضيق الميزانية`
+  },
+  en: {
+    appName:'al-Khitta', step1Title:'Range', step2Title:'Source', step3Title:'Team',
+    rangeWeek:'Week', rangeMonth:'Month', rangeQuarter:'3 months', rangeCustom:'Custom',
+    from:'From', to:'To',
+    weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    holidayToggle:'Extra holiday dates', holidayPlaceholder:'2026-09-10, 2026-09-17',
+    sourceUpload:'Upload previous plan', sourceManual:'Without a file',
+    uploadSoon:'Coming soon — use "without a file" for now',
+    ratioLabel:'Basic ratio', basicCount:'Basic', contractedCount:'Contracted',
+    finPoolLabel:'Financial/Admin', clinPoolLabel:'Clinical',
+    weightLabel:'Weight', activeLabel:'Active',
+    fixedCountLabel:'Fixed count', unavailableLabel:'Unavailable days',
+    unavailablePlaceholder:'2026-09-10, 2026-09-17', blockedLabel:'Blocked facilities',
+    blockedPlaceholder:'facility name, another name...',
+    generate:'Generate plan',
+    resultsTitle:'Plan', reviewTitle:'Review', totalsTitle:'Totals',
+    emptyDay:'No visit',
+    footer:'All data stays on your device. Nothing is sent to a server.',
+    selftestTitle:'Self-test', backToApp:'Back to app',
+    workingDaysSummary:(n,names)=>`${n} working days · ${names}`,
+    gateLabels:{
+      count:'Row count matches slot budget', 'dup-facility':'No duplicate facility',
+      'dup-person':'No duplicate person within a team', 'team-size':'Team size matches facility type',
+      'no-excluded':'No excluded facility present', 'no-retired':'No retired name assigned',
+      prefix:'Cumulative distribution gate', run:'Longest contracted run ≤1 when basic leads'
+    },
+    achievedMix:(m,r,n)=>`Achieved mix: ${m} basic / ${r} contracted of ${n} (${Math.round(m/n*100)}%)`,
+    genderDroppedNote:n=>`Gender balance could not be fixed on ${n} day(s) — listed below`,
+    genderAchievedNote:(ok,total)=>`Gender 3-1 balance: achieved on ${ok} of ${total} four-person team(s)`,
+    distantAppliedNote:(a,n)=>n?'No distant-area facilities this cycle':`Distant-area lean: applied to ${a} team(s)`,
+    thirdsTitle:'Distribution across thirds', thirdLabel:i=>`Third ${i}`,
+    deviationTitle:'Deviation from expected share', nearMissTitle:'Rolling to next cycle (top 10 by priority)',
+    perVisit:'visit(s)',
+    dropHere:'Drop an XLSX, CSV, or TSV file here, or click to choose',
+    pasteLabel:'Or paste data here (CSV or TSV)', pasteBtn:'Process pasted data',
+    digest:(v,f,c,u)=>`Read ${v} visits · ${f} facilities · last plan #${c} · ${u} unknown names`,
+    remapTitle:'Some columns were not recognized — please map them',
+    remapApply:'Apply', unresolvedTitle:'Unknown names',
+    resolveChoose:'Choose...', resolveMapExisting:'Merge with existing person',
+    resolveAddFin:'Add to Financial/Admin', resolveAddClin:'Add to Clinical',
+    resolveRetire:'Mark as retired', genderLabel:'Gender', genderM:'Male', genderF:'Female',
+    exportXlsx:'Export XLSX', exportCsv:'Export CSV', copyTsv:'Copy TSV', exportBackup:'JSON backup',
+    approvePlan:'Approve plan', approvedNote:'Plan approved — last-visit records updated',
+    undoApprove:'Undo approval',
+    unknownLocationFlag:'Outside Beheira?', tsvCopied:'Copied',
+    importErrorPrefix:'Could not read file: ',
+    settingsTitle:'Settings', facilitiesTitle:'Facilities', pinnedLabel:'Pinned',
+    locationPlaceholder:'Location (e.g. Damanhur)', confirmLocation:'Confirm location',
+    aliasTitle:'Alias rules', facilityAliasLabel:'Facility names (raw=canonical, one per line)',
+    personAliasLabel:'Person names (raw=canonical, one per line)', saveAliases:'Save rules',
+    overTieTitle:'Over-tie threshold', minVisitsLabel:'Min visits', minRatioLabel:'Min ratio %',
+    passesTitle:'Balance passes', genderPassLabel:'Gender 3-1 balance', distantPassLabel:'Distant-area lean',
+    settingsBtn:'Settings', noAlternatives:'No eligible alternative',
+    visibilityHint:'Choose what appears in copy and export — this does not change the display above',
+    hideFacilitiesTitle:'Hide facilities', hidePeopleTitle:'Hide people',
+    searchPlaceholder:'Search by name...', allCategories:'All categories', allLocations:'All locations',
+    kindLabel_all:'All', kindLabel_basic:'Basic', kindLabel_contracted:'Contracted', kindLabel_excluded:'Excluded by classification',
+    lastVisitLabel:'Last visit', neverVisited:'Never visited', daysAgo:n=>`${n} days ago`,
+    visitCountLabel:'Lifetime visits', statusIncluded:'Included', statusExcluded:'Excluded', statusPinned:'Pinned',
+    bulkWeightLabel:'Weight for selected', applyWeight:'Apply', bulkExclude:'Exclude selected', bulkPin:'Pin selected', bulkInclude:'Include selected',
+    expandLabel:'Last 5 visits', noVisitsYet:'No recorded visits',
+    registryImportTitle:'Import registry file (separate from plan history import)',
+    dryRunSummary:(a,c,m,u)=>`${a} new · ${c} changed (by field) · ${m} in registry but not in file · ${u} unreadable row(s)`,
+    addedLabel:'New facilities', changedLabel:'Changes', missingLabel:'Not in file',
+    missingKeep:'Keep', missingExclude:'Mark excluded', applyImport:'Apply import', cancelImport:'Cancel',
+    undoImport:'Undo last import', unknownCategoryFlagLabel:'Unknown category',
+    weightPresetLabel:'Quick weight', whyThisFacility:'Why this facility?',
+    rankLabel:'Rank', inStreamBasic:'in the basic stream', inStreamContracted:'in the contracted stream',
+    pinnedOverflowWarning:n=>`${n} pinned facilit${n===1?'y':'ies'} did not make this cycle — budget too tight`
+  }
+};
+function t(key){
+  const dict = I18N[state.lang];
+  return typeof dict[key]==='function' ? dict[key] : dict[key];
+}
+
+function el(tag, attrs, children){
+  const e = document.createElement(tag);
+  if(attrs) for(const k in attrs){
+    if(k==='class') e.className = attrs[k];
+    else if(k.indexOf('on')===0 && typeof attrs[k]==='function') e.addEventListener(k.slice(2), attrs[k]);
+    else if(k==='html') e.innerHTML = attrs[k];
+    else e.setAttribute(k, attrs[k]);
+  }
+  if(children!=null) for(const c of [].concat(children)){
+    if(c==null) continue;
+    e.appendChild(typeof c==='string'||typeof c==='number' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+
+const state = {
+  lang: localStorage.getItem('alkhitta.lang') || 'ar',
+  theme: localStorage.getItem('alkhitta.theme') || 'system',
+  range: 'month',
+  customStart: null, customEnd: null,
+  weekdays: new Set([1,2,3,4]),
+  holidays: new Set(),
+  sourceTab: 'manual',
+  mode: 'ratio',
+  ratioP: 0.68,
+  countsM: null, countsR: null,
+  selectedPersonId: null,
+  registry: null, finPool: null, clinPool: null,
+  plan: null, planApproved: false,
+  personAliasOverrides: {},
+  baseRegistryBeforeImport: null,
+  importedRecords: null, importResult: null,
+  pendingRemap: null, importError: null,
+  overTieMinVisits: 3, overTieMinRatio: 0.6,
+  applyGenderPass: true, applyDistantPass: true,
+  swapMenuOpenFor: null,
+  hiddenFacilityIds: new Set(), hiddenPersonIds: new Set(),
+  copyFeedback: null,
+  facilitySearch: '', facilityKindFilter: 'all', facilityCategoryFilter: '', facilityLocationFilter: '',
+  facilitySelected: new Set(), expandedFacilityId: null,
+  pendingRegistryImport: null, registryImportError: null, missingFacilityActions: {},
+  expandedRowIndex: null
+};
+
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem('alkhitta.settings');
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.range) state.range = s.range;
+    if(Array.isArray(s.weekdays)) state.weekdays = new Set(s.weekdays);
+    if(Array.isArray(s.holidays)) state.holidays = new Set(s.holidays);
+    if(s.ratioP!=null) state.ratioP = s.ratioP;
+    if(s.customStart) state.customStart = s.customStart;
+    if(s.customEnd) state.customEnd = s.customEnd;
+    if(s.overTieMinVisits!=null) state.overTieMinVisits = s.overTieMinVisits;
+    if(s.overTieMinRatio!=null) state.overTieMinRatio = s.overTieMinRatio;
+    if(s.applyGenderPass!=null) state.applyGenderPass = s.applyGenderPass;
+    if(s.applyDistantPass!=null) state.applyDistantPass = s.applyDistantPass;
+  }catch(e){}
+}
+function saveSettings(){
+  localStorage.setItem('alkhitta.settings', JSON.stringify({
+    range: state.range,
+    weekdays: [...state.weekdays],
+    holidays: [...state.holidays],
+    ratioP: state.ratioP,
+    customStart: state.customStart,
+    customEnd: state.customEnd,
+    overTieMinVisits: state.overTieMinVisits,
+    overTieMinRatio: state.overTieMinRatio,
+    applyGenderPass: state.applyGenderPass,
+    applyDistantPass: state.applyDistantPass
+  }));
+}
+function loadAliasOverrides(){
+  try{
+    const raw = localStorage.getItem('alkhitta.aliasOverrides');
+    if(raw){
+      const saved = JSON.parse(raw);
+      FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES, saved.facility||{});
+      PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES, saved.person||{});
+      return;
+    }
+  }catch(e){}
+  FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES);
+  PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES);
+}
+function saveAliasOverrides(){
+  const facilityExtra = {}, personExtra = {};
+  for(const k in FACILITY_ALIASES) if(!(k in DEFAULT_FACILITY_ALIASES)) facilityExtra[k]=FACILITY_ALIASES[k];
+  for(const k in PERSON_ALIASES) if(!(k in DEFAULT_PERSON_ALIASES)) personExtra[k]=PERSON_ALIASES[k];
+  localStorage.setItem('alkhitta.aliasOverrides', JSON.stringify({facility:facilityExtra, person:personExtra}));
+}
+function loadPeople(){
+  let overrides = {fin:{}, clin:{}};
+  try{
+    const raw = localStorage.getItem('alkhitta.people');
+    if(raw) overrides = JSON.parse(raw);
+  }catch(e){}
+  const custom = loadCustomPeople();
+  const fin = FIN_ADMIN_SEED.concat(custom.fin||[]).map(p=>Object.assign(freshPerson(p), overrides.fin&&overrides.fin[p.id]||{}));
+  const clin = CLINICAL_SEED.concat(custom.clin||[]).map(p=>Object.assign(freshPerson(p), overrides.clin&&overrides.clin[p.id]||{}));
+  return {fin, clin};
+}
+function savePeople(){
+  const obj = {fin:{}, clin:{}};
+  for(const p of state.finPool) obj.fin[p.id] = {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities};
+  for(const p of state.clinPool) obj.clin[p.id] = {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities};
+  localStorage.setItem('alkhitta.people', JSON.stringify(obj));
+  const customFin = state.finPool.filter(p=>p.id.indexOf('p_custom_')===0);
+  const customClin = state.clinPool.filter(p=>p.id.indexOf('p_custom_')===0);
+  localStorage.setItem('alkhitta.customPeople', JSON.stringify({fin:customFin, clin:customClin}));
+}
+function loadCustomPeople(){
+  try{
+    const raw = localStorage.getItem('alkhitta.customPeople');
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {fin:[], clin:[]};
+}
+function loadRegistry(){
+  const seedFresh = buildRegistry(REGISTRY_SEED);
+  try{
+    const raw = localStorage.getItem('alkhitta.registry');
+    if(raw){
+      const saved = JSON.parse(raw);
+      if(Array.isArray(saved) && saved.length){
+        const merged = deserializeRegistry(saved);
+        const existingNames = new Set(merged.map(f=>normFacility(f.name)));
+        for(const f of seedFresh) if(!existingNames.has(normFacility(f.name))) merged.push(f);
+        return merged;
+      }
+    }
+  }catch(e){}
+  return seedFresh;
+}
+function saveRegistry(){
+  localStorage.setItem('alkhitta.registry', JSON.stringify(serializeRegistry(state.registry)));
+}
+function loadPersonAliases(){
+  try{
+    const raw = localStorage.getItem('alkhitta.personAliases');
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {};
+}
+function savePersonAliases(){
+  localStorage.setItem('alkhitta.personAliases', JSON.stringify(state.personAliasOverrides));
+}
+
+
+function rowsFromParsedFile(name, text, buf){
+  const lower = name.toLowerCase();
+  if(lower.endsWith('.csv')) return {rows: parseCSV(text), kind:'csv'};
+  if(lower.endsWith('.tsv') || lower.endsWith('.txt')) return {rows: parseTSV(text), kind:'tsv'};
+  return null;
+}
+async function handleFileUpload(file){
+  state.importError = null;
+  state.pendingRemap = null;
+  try{
+    const name = file.name || '';
+    let rows;
+    if(/\.xlsx$/i.test(name)){
+      const buf = await file.arrayBuffer();
+      rows = await parseXlsxArrayBuffer(buf);
+    } else if(/\.csv$/i.test(name)){
+      rows = parseCSV(await file.text());
+    } else {
+      rows = parseTSV(await file.text());
+    }
+    proceedWithRows(rows);
+  }catch(e){
+    state.importError = t('importErrorPrefix')+e.message;
+    render();
+  }
+}
+function handlePasteImport(text){
+  state.importError = null;
+  state.pendingRemap = null;
+  try{
+    const rows = text.indexOf('\t')>=0 ? parseTSV(text) : parseCSV(text);
+    proceedWithRows(rows);
+  }catch(e){
+    state.importError = t('importErrorPrefix')+e.message;
+    render();
+  }
+}
+function proceedWithRows(rows){
+  if(!rows || !rows.length){ state.importError='—'; render(); return; }
+  const headerRow = rows[0];
+  const {mapping, unmapped} = mapHeaders(headerRow);
+  if(unmapped.length){
+    state.pendingRemap = {headerRow, rows, unmapped, mapping};
+    render();
+    return;
+  }
+  finalizeImport(headerRow, rows.slice(1), mapping);
+}
+function applyRemap(chosenMapping){
+  const pending = state.pendingRemap;
+  state.pendingRemap = null;
+  finalizeImport(pending.headerRow, pending.rows.slice(1), chosenMapping);
+}
+function finalizeImport(headerRow, dataRows, mapping){
+  state.baseRegistryBeforeImport = cloneRegistry(state.registry);
+  state.importedRecords = parseHistoryRows(dataRows, mapping);
+  state.planApproved = false;
+  runIngestion();
+}
+function runIngestion(){
+  const working = cloneRegistry(state.baseRegistryBeforeImport);
+  const result = ingestHistory(state.importedRecords, working, state.finPool, state.clinPool, RETIRED_SEED, state.personAliasOverrides);
+  state.registry = working;
+  state.importResult = result;
+  saveRegistry();
+  render();
+}
+function resolvePerson(pKey, rawName, action, gender){
+  if(action==='retire'){
+    state.personAliasOverrides[pKey] = {pool:'retired'};
+  } else if(action==='add-fin' || action==='add-clin'){
+    const pool = action==='add-fin' ? state.finPool : state.clinPool;
+    const id = 'p_custom_'+pKey.replace(/[^a-z0-9\u0600-\u06FF]+/gi,'_');
+    if(!pool.find(p=>p.id===id)) pool.push(freshPerson({id, name: rawName, gender: gender||'m'}));
+    state.personAliasOverrides[pKey] = {pool: action==='add-fin'?'fin':'clin', id};
+  } else if(action.indexOf('map:')===0){
+    const id = action.slice(4);
+    const pool = state.finPool.find(p=>p.id===id) ? 'fin' : 'clin';
+    state.personAliasOverrides[pKey] = {pool, id};
+  } else {
+    return;
+  }
+  savePersonAliases();
+  savePeople();
+  runIngestion();
+}
+
+function planToRows(plan, cycleNumber){
+  const out=[];
+  for(const row of plan.rows){
+    if(row.empty) continue;
+    if(state.hiddenFacilityIds && state.hiddenFacilityIds.has(row.facility.id)) continue;
+    const team = [...row.finTeam, ...row.clinTeam]
+      .filter(p=>!(state.hiddenPersonIds && state.hiddenPersonIds.has(p.id)))
+      .map(p=>p.name).join(' - ');
+    out.push([row.facility.name, row.facility.category, cycleNumber, 'خطة المرور', formatDateForExport(row.date), team]);
+  }
+  return out;
+}
+function formatDateForExport(date){
+  const wdShort = WEEKDAY_SHORT_EN[date.getDay()];
+  const mon = MONTH_NAMES_EN[date.getMonth()].slice(0,3);
+  return `${wdShort} ${date.getDate()} ${mon} ${date.getFullYear()}`;
+}
+function currentCycleNumber(){
+  return (state.importResult ? state.importResult.maxCycle : -1) + 1;
+}
+function downloadBlob(data, filename, mime){
+  const blob = new Blob([data], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+function exportXlsx(){
+  const dataRows = planToRows(state.plan, currentCycleNumber());
+  const bytes = buildXlsxBytes(OOXML_HEADERS, dataRows, [28,14,8,14,16,34]);
+  downloadBlob(bytes, 'alkhitta-plan.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+function exportCsv(){
+  const dataRows = planToRows(state.plan, currentCycleNumber());
+  downloadBlob(toCSV([OOXML_HEADERS, ...dataRows]), 'alkhitta-plan.csv', 'text/csv;charset=utf-8');
+}
+function copyTsv(){
+  const dataRows = planToRows(state.plan, currentCycleNumber());
+  const text = [OOXML_HEADERS, ...dataRows].map(r=>r.join('\t')).join('\n');
+  copyTextToClipboard(text).then(()=>{
+    state.copyFeedback = t('tsvCopied');
+    renderResults();
+    setTimeout(()=>{ state.copyFeedback = null; renderResults(); }, 2000);
+  });
+}
+function copyTextToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).catch(()=>fallbackCopy(text));
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text){
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+}
+function exportBackup(){
+  const payload = {
+    registry: serializeRegistry(state.registry),
+    people: {fin: state.finPool, clin: state.clinPool},
+    personAliasOverrides: state.personAliasOverrides,
+    settings: {range:state.range, weekdays:[...state.weekdays], holidays:[...state.holidays], ratioP:state.ratioP}
+  };
+  downloadBlob(JSON.stringify(payload,null,2), 'alkhitta-backup.json', 'application/json');
+}
+function approvePlan(){
+  if(!state.plan || state.planApproved) return;
+  state.preApproveSnapshot = serializeRegistry(state.registry);
+  localStorage.setItem('alkhitta.registrySnapshot', JSON.stringify(state.preApproveSnapshot));
+  for(const row of state.plan.rows){
+    if(row.empty) continue;
+    row.facility.lastVisit = row.date;
+    row.facility.visitCount = (row.facility.visitCount||0)+1;
+    if(!row.facility.visitHistory) row.facility.visitHistory = [];
+    row.facility.visitHistory.push({date: row.date, team: [...row.finTeam, ...row.clinTeam].map(p=>p.name)});
+    row.facility.visitHistory.sort((a,b)=>b.date-a.date);
+    if(row.facility.visitHistory.length>20) row.facility.visitHistory.length = 20;
+  }
+  state.planApproved = true;
+  saveRegistry();
+  renderResults();
+}
+function undoApprove(){
+  const raw = localStorage.getItem('alkhitta.registrySnapshot');
+  if(!raw) return;
+  state.registry = deserializeRegistry(JSON.parse(raw));
+  state.planApproved = false;
+  saveRegistry();
+  renderResults();
+}
+
+
+function facilityStatus(f){
+  if(f.manualExcluded) return 'excluded';
+  if(f.pinned) return 'pinned';
+  return 'included';
+}
+function setFacilityStatus(f, status){
+  f.manualExcluded = status==='excluded';
+  f.pinned = status==='pinned';
+}
+function daysSinceLabel(lastVisit){
+  if(!lastVisit) return t('neverVisited');
+  return t('daysAgo')(daysBetween(lastVisit, new Date()));
+}
+function filteredFacilities(){
+  const q = norm(state.facilitySearch);
+  return state.registry.filter(f=>{
+    if(q && norm(f.name).indexOf(q)<0) return false;
+    if(state.facilityKindFilter!=='all' && f.kind!==state.facilityKindFilter) return false;
+    if(state.facilityCategoryFilter && f.category!==state.facilityCategoryFilter) return false;
+    if(state.facilityLocationFilter && f.location!==state.facilityLocationFilter) return false;
+    return true;
+  });
+}
+
+function renderFacilityRow(f){
+  const row = el('div', {class:'facility-row'});
+  const topLine = el('div', {class:'facility-row-top'});
+  const cb = el('input', {type:'checkbox', onchange:e=>{
+    if(e.target.checked) state.facilitySelected.add(f.id); else state.facilitySelected.delete(f.id);
+    renderFacilitiesView();
+  }});
+  cb.checked = state.facilitySelected.has(f.id);
+  topLine.appendChild(cb);
+  topLine.appendChild(el('span', {class:'sf-name'}, f.name));
+  topLine.appendChild(el('span', {class:'sf-cat'}, f.category));
+  topLine.appendChild(el('span', {class:'sf-kind'}, f.kind));
+  topLine.appendChild(el('span', {class:'sf-loc'}, f.location||'—'));
+  if(f.reviewFlag==='unknown-location') topLine.appendChild(el('span', {class:'review-flag'}, t('unknownLocationFlag')));
+  if(f.reviewFlag==='unknown-category') topLine.appendChild(el('span', {class:'review-flag'}, t('unknownCategoryFlagLabel')));
+  row.appendChild(topLine);
+
+  const midLine = el('div', {class:'facility-row-mid'});
+  midLine.appendChild(el('span', null, `${t('lastVisitLabel')}: ${daysSinceLabel(f.lastVisit)}`));
+  midLine.appendChild(el('span', null, `${t('visitCountLabel')}: ${f.visitCount||0}`));
+  row.appendChild(midLine);
+
+  const controlLine = el('div', {class:'facility-row-controls'});
+  const weightInput = el('input', {type:'number', min:'0', max:'1.5', step:'0.05', value:String(f.weight), onchange:e=>{
+    f.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); saveRegistry();
+  }});
+  controlLine.appendChild(el('label', null, [t('weightLabel')+' ', weightInput]));
+  const presetWrap = el('span', {class:'weight-presets'});
+  for(const preset of [1, 0.5, 0.35]){
+    presetWrap.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+      f.weight = preset; saveRegistry(); renderFacilitiesView();
+    }}, String(preset)));
+  }
+  controlLine.appendChild(presetWrap);
+
+  const statusWrap = el('span', {class:'segmented'});
+  const curStatus = facilityStatus(f);
+  const statusLabels = {included:t('statusIncluded'), excluded:t('statusExcluded'), pinned:t('statusPinned')};
+  for(const s of ['included','excluded','pinned']){
+    statusWrap.appendChild(el('button', {
+      type:'button', 'aria-pressed': curStatus===s?'true':'false',
+      onclick:()=>{ setFacilityStatus(f, s); saveRegistry(); renderFacilitiesView(); }
+    }, statusLabels[s]));
+  }
+  controlLine.appendChild(statusWrap);
+
+  const expandBtn = el('button', {type:'button', class:'chip', onclick:()=>{
+    state.expandedFacilityId = state.expandedFacilityId===f.id ? null : f.id;
+    renderFacilitiesView();
+  }}, t('expandLabel'));
+  controlLine.appendChild(expandBtn);
+  row.appendChild(controlLine);
+
+  if(state.expandedFacilityId===f.id){
+    const detail = el('div', {class:'facility-row-detail'});
+    const history = (f.visitHistory||[]).slice(0,5);
+    if(!history.length) detail.appendChild(el('p', {class:'card-summary'}, t('noVisitsYet')));
+    for(const v of history) detail.appendChild(el('p', null, `${fmtISO(v.date)} — ${v.team.join(' - ')}`));
+    row.appendChild(detail);
+  }
+  return row;
+}
+
+function renderBulkBar(){
+  const bar = el('div', {class:'bulk-bar'});
+  const weightInput = el('input', {type:'number', min:'0', max:'1.5', step:'0.05', placeholder:'1'});
+  bar.appendChild(el('label', null, [t('bulkWeightLabel')+' ', weightInput]));
+  bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+    const w = Math.max(0, Math.min(1.5, +weightInput.value||0));
+    for(const f of state.registry) if(state.facilitySelected.has(f.id)) f.weight = w;
+    saveRegistry(); renderFacilitiesView();
+  }}, t('applyWeight')));
+  bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+    for(const f of state.registry) if(state.facilitySelected.has(f.id)) setFacilityStatus(f,'excluded');
+    saveRegistry(); renderFacilitiesView();
+  }}, t('bulkExclude')));
+  bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+    for(const f of state.registry) if(state.facilitySelected.has(f.id)) setFacilityStatus(f,'pinned');
+    saveRegistry(); renderFacilitiesView();
+  }}, t('bulkPin')));
+  bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+    for(const f of state.registry) if(state.facilitySelected.has(f.id)) setFacilityStatus(f,'included');
+    saveRegistry(); renderFacilitiesView();
+  }}, t('bulkInclude')));
+  return bar;
+}
+
+async function handleRegistryFile(file){
+  state.registryImportError = null;
+  try{
+    const name = file.name || '';
+    let rows;
+    if(/\.xlsx$/i.test(name)) rows = await parseXlsxArrayBuffer(await file.arrayBuffer());
+    else if(/\.csv$/i.test(name)) rows = parseCSV(await file.text());
+    else rows = parseTSV(await file.text());
+    if(!rows.length){ state.registryImportError='—'; renderFacilitiesView(); return; }
+    const {mapping, unmapped} = mapRegistryHeaders(rows[0]);
+    if(unmapped.length){ state.registryImportError = t('remapTitle')+': '+unmapped.join(', '); renderFacilitiesView(); return; }
+    const records = parseRegistryRows(rows.slice(1), mapping);
+    const diff = computeRegistryDiff(records, state.registry);
+    state.pendingRegistryImport = diff;
+    state.missingFacilityActions = {};
+    renderFacilitiesView();
+  }catch(e){
+    state.registryImportError = t('importErrorPrefix')+e.message;
+    renderFacilitiesView();
+  }
+}
+function renderRegistryImportSection(view){
+  view.appendChild(el('h2', null, t('registryImportTitle')));
+  if(state.pendingRegistryImport){
+    const diff = state.pendingRegistryImport;
+    view.appendChild(el('p', {class:'card-summary'}, t('dryRunSummary')(diff.added.length, diff.changed.length, diff.missing.length, diff.unparseable.length)));
+    if(diff.added.length){
+      view.appendChild(el('h3', null, t('addedLabel')));
+      const list = el('ul', {class:'drop-list'});
+      for(const a of diff.added) list.appendChild(el('li', null, `${a.name} (${a.category}, ${statusToArabic(a.status)})`));
+      view.appendChild(list);
+    }
+    if(diff.changed.length){
+      view.appendChild(el('h3', null, t('changedLabel')));
+      const list = el('ul', {class:'drop-list'});
+      for(const c of diff.changed){
+        const fieldsText = c.fields.map(fl=>`${fl.field}: ${fl.from}→${fl.to}`).join(', ');
+        list.appendChild(el('li', null, `${c.name} — ${fieldsText}`));
+      }
+      view.appendChild(list);
+    }
+    if(diff.missing.length){
+      view.appendChild(el('h3', null, t('missingLabel')));
+      const list = el('div', {class:'resolve-list'});
+      for(const f of diff.missing){
+        const row = el('div', {class:'resolve-row'});
+        row.appendChild(el('span', null, f.name));
+        const sel = el('select', {onchange:e=>{ state.missingFacilityActions[f.id]=e.target.value; }});
+        sel.appendChild(el('option', {value:'keep'}, t('missingKeep')));
+        sel.appendChild(el('option', {value:'exclude'}, t('missingExclude')));
+        sel.value = state.missingFacilityActions[f.id]||'keep';
+        row.appendChild(sel);
+        list.appendChild(row);
+      }
+      view.appendChild(list);
+    }
+    const actions = el('div', {class:'export-actions'});
+    actions.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+      localStorage.setItem('alkhitta.registryImportSnapshot', JSON.stringify(serializeRegistry(state.registry)));
+      applyRegistryDiff(state.pendingRegistryImport, state.registry, state.missingFacilityActions);
+      state.pendingRegistryImport = null;
+      saveRegistry();
+      renderFacilitiesView();
+    }}, t('applyImport')));
+    actions.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+      state.pendingRegistryImport = null; renderFacilitiesView();
+    }}, t('cancelImport')));
+    view.appendChild(actions);
+    return;
+  }
+
+  const dz = el('div', {class:'dropzone'});
+  const fileInput = el('input', {type:'file', accept:'.xlsx,.csv,.tsv,.txt', style:'display:none',
+    onchange:e=>{ if(e.target.files[0]) handleRegistryFile(e.target.files[0]); }});
+  dz.appendChild(fileInput);
+  dz.appendChild(el('p', null, t('dropHere')));
+  dz.addEventListener('click', ()=>fileInput.click());
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.style.background='var(--accent-soft)'; });
+  dz.addEventListener('dragleave', ()=>{ dz.style.background=''; });
+  dz.addEventListener('drop', e=>{
+    e.preventDefault(); dz.style.background='';
+    if(e.dataTransfer.files[0]) handleRegistryFile(e.dataTransfer.files[0]);
+  });
+  view.appendChild(dz);
+  if(state.registryImportError) view.appendChild(el('p', {class:'card-summary error-text'}, state.registryImportError));
+  if(localStorage.getItem('alkhitta.registryImportSnapshot')){
+    view.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+      const raw = localStorage.getItem('alkhitta.registryImportSnapshot');
+      if(!raw) return;
+      state.registry = deserializeRegistry(JSON.parse(raw));
+      saveRegistry();
+      renderFacilitiesView();
+    }}, t('undoImport')));
+  }
+}
+
+function renderFacilitiesView(){
+  const prevScroll = document.querySelector('.facility-list') ? document.querySelector('.facility-list').scrollTop : 0;
+  document.querySelector('.shell').hidden = true;
+  document.querySelector('.topbar').hidden = true;
+  document.getElementById('selftestView').hidden = true;
+  document.getElementById('settingsView').hidden = true;
+  const view = document.getElementById('facilitiesView');
+  view.hidden = false;
+  clear(view);
+  view.appendChild(el('h1', null, t('facilitiesTitle')));
+
+  view.appendChild(el('input', {
+    type:'text', placeholder:t('searchPlaceholder'), value:state.facilitySearch,
+    onchange:e=>{ state.facilitySearch=e.target.value; renderFacilitiesView(); }
+  }));
+
+  const kindRow = el('div', {class:'chip-row'});
+  for(const k of ['all','basic','contracted','excluded']){
+    kindRow.appendChild(el('button', {
+      type:'button', class:'chip'+(state.facilityKindFilter===k?' active':''),
+      onclick:()=>{ state.facilityKindFilter=k; renderFacilitiesView(); }
+    }, t('kindLabel_'+k)));
+  }
+  view.appendChild(kindRow);
+
+  const categories = [...new Set(state.registry.map(f=>f.category))].filter(Boolean).sort();
+  const locations = [...new Set(state.registry.map(f=>f.location))].filter(Boolean).sort();
+  const filterRow = el('div', {class:'facility-filter-row'});
+  const catSelect = el('select', {onchange:e=>{ state.facilityCategoryFilter=e.target.value; renderFacilitiesView(); }});
+  catSelect.appendChild(el('option', {value:''}, t('allCategories')));
+  for(const c of categories) catSelect.appendChild(el('option', {value:c}, c));
+  catSelect.value = state.facilityCategoryFilter;
+  const locSelect = el('select', {onchange:e=>{ state.facilityLocationFilter=e.target.value; renderFacilitiesView(); }});
+  locSelect.appendChild(el('option', {value:''}, t('allLocations')));
+  for(const l of locations) locSelect.appendChild(el('option', {value:l}, l));
+  locSelect.value = state.facilityLocationFilter;
+  filterRow.appendChild(catSelect);
+  filterRow.appendChild(locSelect);
+  view.appendChild(filterRow);
+
+  const visible = filteredFacilities();
+  if(state.facilitySelected.size) view.appendChild(renderBulkBar());
+  const list = el('div', {class:'facility-list'});
+  for(const f of visible) list.appendChild(renderFacilityRow(f));
+  view.appendChild(list);
+  list.scrollTop = prevScroll;
+
+  renderRegistryImportSection(view);
+
+  view.appendChild(el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp')));
+}
+
+
+const MONTH_NAMES_AR = ['يناير','فبراير','مارس','ابريل','مايو','يونيو','يوليو','اغسطس','سبتمبر','اكتوبر','نوفمبر','ديسمبر'];
+const MONTH_NAMES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const WEEKDAY_SHORT_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function resolveDateRange(){
+  const today = new Date();
+  const start0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if(state.range==='custom'){
+    if(!state.customStart||!state.customEnd) return null;
+    const s = parseDateFlexible(state.customStart);
+    const e = parseDateFlexible(state.customEnd);
+    if(!s||!e) return null;
+    return {start:s, end:e};
+  }
+  const spanDays = state.range==='week' ? 6 : (state.range==='month' ? 29 : 89);
+  return {start:start0, end:addDays(start0, spanDays)};
+}
+function computeWorkingDaysList(){
+  const range = resolveDateRange();
+  if(!range) return [];
+  return workingDays(range.start, range.end, state.weekdays, state.holidays, new Set());
+}
+function monthLabel(date){
+  const names = state.lang==='ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN;
+  return names[date.getMonth()]+' '+date.getFullYear();
+}
+function formatDateShort(date){
+  const wd = state.lang==='ar' ? I18N.ar.weekdays[date.getDay()] : WEEKDAY_SHORT_EN[date.getDay()];
+  return `${wd} ${date.getDate()}`;
+}
+
+function renderStep1(){
+  const card = document.getElementById('step1');
+  clear(card);
+  card.appendChild(el('h2', null, t('step1Title')));
+  const seg = el('div', {class:'segmented', role:'group'});
+  const options = [['week','rangeWeek'],['month','rangeMonth'],['quarter','rangeQuarter'],['custom','rangeCustom']];
+  for(const pair of options){
+    seg.appendChild(el('button', {
+      type:'button', 'aria-pressed': state.range===pair[0] ? 'true':'false',
+      onclick:()=>{ state.range=pair[0]; saveSettings(); render(); }
+    }, t(pair[1])));
+  }
+  card.appendChild(seg);
+
+  if(state.range==='custom'){
+    const wrap = el('div', {class:'custom-range'});
+    wrap.appendChild(el('label', null, [t('from')+' ', el('input',{type:'date', value:state.customStart||'', onchange:e=>{state.customStart=e.target.value; saveSettings(); render();}})]));
+    wrap.appendChild(el('label', null, [t('to')+' ', el('input',{type:'date', value:state.customEnd||'', onchange:e=>{state.customEnd=e.target.value; saveSettings(); render();}})]));
+    card.appendChild(wrap);
+  }
+
+  const weekdayRow = el('div', {class:'chip-row weekday-row'});
+  t('weekdays').forEach((name,idx)=>{
+    const active = state.weekdays.has(idx);
+    weekdayRow.appendChild(el('button', {
+      type:'button', class:'chip'+(active?' active':''),
+      onclick:()=>{
+        if(state.weekdays.has(idx)) state.weekdays.delete(idx); else state.weekdays.add(idx);
+        saveSettings(); render();
+      }
+    }, name));
+  });
+  card.appendChild(weekdayRow);
+
+  const days = computeWorkingDaysList();
+  const activeNames = t('weekdays').filter((_,idx)=>state.weekdays.has(idx)).join('،');
+  card.appendChild(el('p', {class:'card-summary'}, t('workingDaysSummary')(days.length, activeNames)));
+
+  const details = el('details', {class:'holiday-details'});
+  details.appendChild(el('summary', null, t('holidayToggle')));
+  const holidayInput = el('textarea', {
+    rows:'2', placeholder:t('holidayPlaceholder'),
+    onchange:e=>{
+      const parts = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
+      const set = new Set();
+      for(const p of parts){ const d=parseDateFlexible(p); if(d) set.add(fmtISO(d)); }
+      state.holidays = set;
+      saveSettings(); render();
+    }
+  });
+  holidayInput.value = [...state.holidays].join(', ');
+  details.appendChild(holidayInput);
+  card.appendChild(details);
+}
+
+function renderStep2(){
+  const card = document.getElementById('step2');
+  clear(card);
+  card.appendChild(el('h2', null, t('step2Title')));
+  const seg = el('div', {class:'segmented', role:'group'});
+  seg.appendChild(el('button', {type:'button', 'aria-pressed': state.sourceTab==='upload'?'true':'false', onclick:()=>{state.sourceTab='upload'; render();}}, t('sourceUpload')));
+  seg.appendChild(el('button', {type:'button', 'aria-pressed': state.sourceTab==='manual'?'true':'false', onclick:()=>{state.sourceTab='manual'; render();}}, t('sourceManual')));
+  card.appendChild(seg);
+
+  if(state.sourceTab==='upload'){
+    renderUploadPane(card);
+    return;
+  }
+
+  const N = computeWorkingDaysList().length;
+  const pane = el('div', {class:'manual-pane'});
+  const ratioLive = el('span', {id:'ratioLive'}, Math.round(state.ratioP*100)+'%');
+  const slider = el('input', {
+    type:'range', min:'0', max:'100', value:String(Math.round(state.ratioP*100)),
+    oninput:e=>{ document.getElementById('ratioLive').textContent = e.target.value+'%'; },
+    onchange:e=>{ state.mode='ratio'; state.ratioP = +e.target.value/100; saveSettings(); render(); }
+  });
+  pane.appendChild(el('label', null, [t('ratioLabel')+' ', ratioLive]));
+  pane.appendChild(slider);
+
+  const budget = slotBudget(N, state.mode, {
+    p: state.ratioP, M: state.countsM, R: state.countsR,
+    basicPoolLen: state.registry.filter(f=>f.kind==='basic').length,
+    contractedPoolLen: state.registry.filter(f=>f.kind==='contracted').length
+  });
+
+  const stepRow = el('div', {class:'stepper-row'});
+  stepRow.appendChild(el('label', null, [t('basicCount')+' ', el('input', {type:'number', min:'0', value:String(budget.M), onchange:e=>{
+    const m = Math.max(0, Math.round(+e.target.value||0));
+    state.mode='counts'; state.countsM=m; state.countsR=Math.max(0, N-m);
+    saveSettings(); render();
+  }})]));
+  stepRow.appendChild(el('label', null, [t('contractedCount')+' ', el('input', {type:'number', min:'0', value:String(budget.R), onchange:e=>{
+    const r = Math.max(0, Math.round(+e.target.value||0));
+    state.mode='counts'; state.countsR=r; state.countsM=Math.max(0, N-r);
+    saveSettings(); render();
+  }})]));
+  pane.appendChild(stepRow);
+
+  const notesText = budget.notes.length ? (' · '+budget.notes.join(' · ')) : '';
+  const unusedText = budget.unused ? ` · ${budget.unused}` : '';
+  pane.appendChild(el('p', {class:'card-summary'}, `N=${N} · M=${budget.M} · R=${budget.R}${unusedText}${notesText}`));
+  card.appendChild(pane);
+}
+
+function renderUploadPane(card){
+  if(state.pendingRemap){
+    card.appendChild(el('p', {class:'card-summary'}, t('remapTitle')));
+    const form = el('div', {class:'remap-form'});
+    const selects = {};
+    for(const key of state.pendingRemap.unmapped){
+      const sel = el('select', null);
+      sel.appendChild(el('option', {value:''}, t('resolveChoose')));
+      state.pendingRemap.headerRow.forEach((h,idx)=>{
+        sel.appendChild(el('option', {value:String(idx)}, h||('#'+idx)));
+      });
+      selects[key]=sel;
+      form.appendChild(el('label', null, [key+' ', sel]));
+    }
+    const applyBtn = el('button', {type:'button', class:'chip', onclick:()=>{
+      const mapping = Object.assign({}, state.pendingRemap.mapping);
+      for(const key in selects){
+        const v = selects[key].value;
+        if(v!=='') mapping[key] = +v;
+      }
+      applyRemap(mapping);
+    }}, t('remapApply'));
+    form.appendChild(applyBtn);
+    card.appendChild(form);
+    return;
+  }
+
+  const dz = el('div', {class:'dropzone'});
+  const fileInput = el('input', {type:'file', accept:'.xlsx,.csv,.tsv,.txt', style:'display:none',
+    onchange:e=>{ if(e.target.files[0]) handleFileUpload(e.target.files[0]); }});
+  dz.appendChild(fileInput);
+  dz.appendChild(el('p', null, t('dropHere')));
+  dz.addEventListener('click', ()=>fileInput.click());
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.style.background='var(--accent-soft)'; });
+  dz.addEventListener('dragleave', ()=>{ dz.style.background=''; });
+  dz.addEventListener('drop', e=>{
+    e.preventDefault(); dz.style.background='';
+    if(e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]);
+  });
+  card.appendChild(dz);
+
+  if(state.importError) card.appendChild(el('p', {class:'card-summary error-text'}, state.importError));
+
+  const pasteWrap = el('div', {class:'paste-wrap'});
+  const pasteArea = el('textarea', {rows:'3', placeholder:t('pasteLabel')});
+  pasteWrap.appendChild(pasteArea);
+  pasteWrap.appendChild(el('button', {type:'button', class:'chip', onclick:()=>handlePasteImport(pasteArea.value)}, t('pasteBtn')));
+  card.appendChild(pasteWrap);
+
+  if(state.importResult){
+    const r = state.importResult;
+    card.appendChild(el('p', {class:'card-summary'}, t('digest')(r.matchedRowCount, new Set(state.importedRecords.map(x=>normFacility(x.facilityRaw))).size, r.maxCycle, r.unresolvedPeople.size)));
+
+    if(r.unresolvedFacilities.length){
+      const list = el('ul', {class:'drop-list'});
+      for(const f of r.unresolvedFacilities) list.appendChild(el('li', null, `${f.name} — ${t('unknownLocationFlag')}`));
+      card.appendChild(list);
+    }
+    if(r.unresolvedPeople.size){
+      card.appendChild(el('h3', null, t('unresolvedTitle')));
+      const resWrap = el('div', {class:'resolve-list'});
+      for(const [pKey, entry] of r.unresolvedPeople){
+        const row = el('div', {class:'resolve-row'});
+        row.appendChild(el('span', null, `${entry.name} ×${entry.count}`));
+        const genderSel = el('select', null, [
+          el('option', {value:'m'}, t('genderM')),
+          el('option', {value:'f'}, t('genderF'))
+        ]);
+        const actionSel = el('select', {onchange:e=>{
+          const action = e.target.value;
+          if(!action) return;
+          resolvePerson(pKey, entry.name, action, genderSel.value);
+        }});
+        actionSel.appendChild(el('option', {value:''}, t('resolveChoose')));
+        const addGroup = el('optgroup', {label:t('resolveMapExisting')});
+        for(const p of state.finPool) addGroup.appendChild(el('option', {value:'map:'+p.id}, p.name));
+        for(const p of state.clinPool) addGroup.appendChild(el('option', {value:'map:'+p.id}, p.name));
+        actionSel.appendChild(addGroup);
+        actionSel.appendChild(el('option', {value:'add-fin'}, t('resolveAddFin')));
+        actionSel.appendChild(el('option', {value:'add-clin'}, t('resolveAddClin')));
+        actionSel.appendChild(el('option', {value:'retire'}, t('resolveRetire')));
+        row.appendChild(genderSel);
+        row.appendChild(actionSel);
+        resWrap.appendChild(row);
+      }
+      card.appendChild(resWrap);
+    }
+  }
+}
+
+function buildPersonEditor(p){
+  const wrap = el('div', {class:'person-editor'});
+  const weightInput = el('input', {
+    type:'number', min:'0', max:'1.5', step:'0.05', value:String(p.weight),
+    onchange:e=>{ p.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); savePeople(); render(); }
+  });
+  const activeInput = el('input', {
+    type:'checkbox', onchange:e=>{ p.active = e.target.checked; savePeople(); render(); }
+  });
+  activeInput.checked = p.active!==false;
+  const fixedInput = el('input', {
+    type:'number', min:'0', placeholder:'—', value: p.fixedCount!=null?String(p.fixedCount):'',
+    onchange:e=>{
+      const v = e.target.value.trim();
+      p.fixedCount = v==='' ? null : Math.max(0, Math.round(+v));
+      savePeople(); render();
+    }
+  });
+  const unavailInput = el('input', {
+    type:'text', placeholder:t('unavailablePlaceholder'), value:(p.unavailable||[]).join(', '),
+    onchange:e=>{
+      const parts = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
+      const isoList=[];
+      for(const part of parts){ const d=parseDateFlexible(part); if(d) isoList.push(fmtISO(d)); }
+      p.unavailable = isoList; savePeople(); render();
+    }
+  });
+  const blockedInput = el('input', {
+    type:'text', placeholder:t('blockedPlaceholder'),
+    value:(p.blockedFacilities||[]).map(id=>{ const f=state.registry.find(x=>x.id===id); return f?f.name:id; }).join(', '),
+    onchange:e=>{
+      const parts = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
+      const ids=[];
+      for(const part of parts){
+        const match = state.registry.find(f=>normFacility(f.name)===normFacility(part));
+        if(match) ids.push(match.id);
+      }
+      p.blockedFacilities = ids; savePeople(); render();
+    }
+  });
+  wrap.appendChild(el('label', null, [t('weightLabel')+' ', weightInput]));
+  wrap.appendChild(el('label', {class:'inline-check'}, [activeInput, ' '+t('activeLabel')]));
+  wrap.appendChild(el('label', null, [t('fixedCountLabel')+' ', fixedInput]));
+  wrap.appendChild(el('label', {class:'editor-wide'}, [t('unavailableLabel')+' ', unavailInput]));
+  wrap.appendChild(el('label', {class:'editor-wide'}, [t('blockedLabel')+' ', blockedInput]));
+  return wrap;
+}
+function buildChipRow(pool){
+  const wrap = el('div');
+  const row = el('div', {class:'chip-row'});
+  wrap.appendChild(row);
+  for(const p of pool){
+    const chip = el('button', {
+      type:'button', class:'chip person-chip'+(p.active===false?' inactive':''),
+      onclick:()=>{ state.selectedPersonId = state.selectedPersonId===p.id?null:p.id; render(); }
+    }, p.name);
+    row.appendChild(chip);
+  }
+  const selected = pool.find(p=>p.id===state.selectedPersonId);
+  if(selected) wrap.appendChild(buildPersonEditor(selected));
+  return wrap;
+}
+function renderStep3(){
+  const card = document.getElementById('step3');
+  clear(card);
+  card.appendChild(el('h2', null, t('step3Title')));
+  card.appendChild(el('h3', null, t('finPoolLabel')));
+  card.appendChild(buildChipRow(state.finPool));
+  card.appendChild(el('h3', null, t('clinPoolLabel')));
+  card.appendChild(buildChipRow(state.clinPool));
+}
+
+function handleGenerate(){
+  const range = resolveDateRange();
+  if(!range) return;
+  const result = state.importResult;
+  const plan = generatePlan({
+    registry: state.registry, finPool: state.finPool, clinPool: state.clinPool,
+    startDate: range.start, endDate: range.end,
+    weekdays: state.weekdays, holidays: state.holidays, exceptions: new Set(),
+    mode: state.mode, ratioP: state.ratioP, countsM: state.countsM, countsR: state.countsR,
+    finInitial: result ? result.initialFin : null,
+    clinInitial: result ? result.initialClin : null,
+    isOverTied: result ? makeOverTiedChecker(result.facilityPersonVisits, state.overTieMinVisits, state.overTieMinRatio) : null,
+    isUnavailable: makeUnavailableChecker(),
+    isBlocked: makeBlockedChecker(),
+    applyGender: state.applyGenderPass,
+    applyDistant: state.applyDistantPass
+  });
+  state.plan = plan;
+  state.planApproved = false;
+  state.hiddenFacilityIds = new Set();
+  state.hiddenPersonIds = new Set();
+  state.copyFeedback = null;
+  localStorage.setItem('alkhitta.lastPlan', JSON.stringify({generatedAt: fmtISO(new Date()), N: plan.N, M: plan.budget.M, R: plan.budget.R}));
+  renderResults();
+}
+
+function computeEligibleAlternatives(row, pool){
+  const poolList = pool==='finTeam' ? state.finPool : state.clinPool;
+  const currentIds = new Set(row[pool].map(p=>p.id));
+  return poolList.filter(p=>{
+    if(currentIds.has(p.id)) return false;
+    if(p.active===false) return false;
+    if((p.unavailable||[]).indexOf(fmtISO(row.date))>=0) return false;
+    if((p.blockedFacilities||[]).indexOf(row.facility.id)>=0 || (p.blockedFacilities||[]).indexOf(row.facility.name)>=0) return false;
+    return true;
+  });
+}
+function renderResultRows(container, plan){
+  const rows = plan.rows;
+  let currentMonthKey=null, monthWrap=null;
+  function ensureWrap(){
+    if(!monthWrap){ monthWrap = el('div', {class:'month-section'}); container.appendChild(monthWrap); }
+    return monthWrap;
+  }
+  rows.forEach((row, rowIndex)=>{
+    if(row.empty){
+      const dayRow = el('div', {class:'day-row empty'});
+      dayRow.appendChild(el('span', {class:'facility'}, t('emptyDay')));
+      ensureWrap().appendChild(dayRow);
+      return;
+    }
+    const monthKey = row.date.getFullYear()+'-'+row.date.getMonth();
+    if(monthKey!==currentMonthKey){
+      currentMonthKey = monthKey;
+      monthWrap = el('div', {class:'month-section'});
+      monthWrap.appendChild(el('h3', null, monthLabel(row.date)));
+      container.appendChild(monthWrap);
+    }
+    const dayRow = el('div', {class:'day-row '+row.kind});
+    dayRow.appendChild(el('span', {class:'date'}, formatDateShort(row.date)));
+    const whyOpen = state.expandedRowIndex===rowIndex;
+    dayRow.appendChild(el('button', {
+      type:'button', class:'facility facility-toggle',
+      onclick:()=>{ state.expandedRowIndex = whyOpen?null:rowIndex; renderResults(); }
+    }, row.facility.name));
+    dayRow.appendChild(el('span', {class:'cat-chip'}, row.facility.category));
+    const teamWrap = el('span', {class:'team-chips'});
+    for(const pool of ['finTeam','clinTeam']){
+      for(const p of row[pool]){
+        const open = state.swapMenuOpenFor && state.swapMenuOpenFor.rowIndex===rowIndex && state.swapMenuOpenFor.pool===pool && state.swapMenuOpenFor.personId===p.id;
+        teamWrap.appendChild(el('button', {
+          type:'button', class:'mini-chip'+(open?' open':''),
+          onclick:()=>{ state.swapMenuOpenFor = open ? null : {rowIndex, pool, personId:p.id}; renderResults(); }
+        }, p.name));
+        if(open){
+          const menu = el('div', {class:'swap-menu'});
+          const alts = computeEligibleAlternatives(row, pool);
+          if(!alts.length) menu.appendChild(el('p', {class:'card-summary'}, t('noAlternatives')));
+          for(const alt of alts){
+            menu.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+              const idx = row[pool].indexOf(p);
+              row[pool][idx] = alt;
+              state.swapMenuOpenFor = null;
+              renderResults();
+            }}, alt.name));
+          }
+          teamWrap.appendChild(menu);
+        }
+      }
+    }
+    dayRow.appendChild(teamWrap);
+    if(whyOpen){
+      const f = row.facility;
+      const daysText = f.lastVisit ? t('daysAgo')(daysBetween(f.lastVisit, plan.planStart)) : t('neverVisited');
+      const streamText = row.kind==='basic' ? t('inStreamBasic') : t('inStreamContracted');
+      dayRow.appendChild(el('div', {class:'why-detail'},
+        `${daysText} · ${t('weightLabel')} ${f.weight} · ${t('rankLabel')} ${row.rankInStream} ${streamText}`));
+    }
+    monthWrap.appendChild(dayRow);
+  });
+}
+function renderVisibilityPanel(){
+  const wrap = el('div', {class:'visibility-panel'});
+  wrap.appendChild(el('p', {class:'card-summary'}, t('visibilityHint')));
+  const nonEmpty = state.plan.rows.filter(r=>!r.empty);
+  const facilities = [];
+  const seenFac = new Set();
+  for(const r of nonEmpty) if(!seenFac.has(r.facility.id)){ seenFac.add(r.facility.id); facilities.push(r.facility); }
+  const people = [];
+  const seenPerson = new Set();
+  for(const r of nonEmpty) for(const p of [...r.finTeam, ...r.clinTeam]) if(!seenPerson.has(p.id)){ seenPerson.add(p.id); people.push(p); }
+
+  wrap.appendChild(el('h3', null, t('hideFacilitiesTitle')));
+  const facRow = el('div', {class:'chip-row'});
+  for(const f of facilities){
+    const hidden = state.hiddenFacilityIds.has(f.id);
+    facRow.appendChild(el('button', {
+      type:'button', class:'chip'+(hidden?' hidden-item':''),
+      onclick:()=>{ hidden ? state.hiddenFacilityIds.delete(f.id) : state.hiddenFacilityIds.add(f.id); renderResults(); }
+    }, f.name));
+  }
+  wrap.appendChild(facRow);
+
+  wrap.appendChild(el('h3', null, t('hidePeopleTitle')));
+  const personRow = el('div', {class:'chip-row'});
+  for(const p of people){
+    const hidden = state.hiddenPersonIds.has(p.id);
+    personRow.appendChild(el('button', {
+      type:'button', class:'chip'+(hidden?' hidden-item':''),
+      onclick:()=>{ hidden ? state.hiddenPersonIds.delete(p.id) : state.hiddenPersonIds.add(p.id); renderResults(); }
+    }, p.name));
+  }
+  wrap.appendChild(personRow);
+  return wrap;
+}
+function renderReview(container){
+  container.appendChild(el('h2', null, t('reviewTitle')));
+  const plan = state.plan;
+  const retiredIds = new Set(RETIRED_SEED.map(p=>p.id));
+  const gates = computeGates(plan, state.registry, retiredIds);
+  const gateList = el('div', {class:'review-panel'});
+  for(const g of gates) gateList.appendChild(el('div', {class:'gate '+(g.pass?'pass':'fail')}, t('gateLabels')[g.key]));
+  container.appendChild(gateList);
+
+  const nonEmpty = plan.rows.filter(r=>!r.empty);
+  container.appendChild(el('p', {class:'card-summary'}, t('achievedMix')(plan.budget.M, plan.budget.R, nonEmpty.length)));
+  if(plan.budget.notes.length) container.appendChild(el('p', {class:'card-summary'}, plan.budget.notes.join(' · ')));
+
+  if(plan.pinnedOverflow && plan.pinnedOverflow.length){
+    container.appendChild(el('p', {class:'card-summary error-text'}, t('pinnedOverflowWarning')(plan.pinnedOverflow.length)));
+    const list = el('ul', {class:'drop-list'});
+    for(const f of plan.pinnedOverflow) list.appendChild(el('li', null, f.name));
+    container.appendChild(list);
+  }
+
+  const basicRows = nonEmpty.filter(r=>r.kind==='basic');
+  const okCount = basicRows.length - plan.genderDropped.length;
+  container.appendChild(el('p', {class:'card-summary'}, t('genderAchievedNote')(okCount, basicRows.length)));
+  if(plan.genderDropped.length){
+    container.appendChild(el('p', {class:'card-summary'}, t('genderDroppedNote')(plan.genderDropped.length)));
+    const list = el('ul', {class:'drop-list'});
+    for(const d of plan.genderDropped) list.appendChild(el('li', null, `${fmtISO(d.date)} — ${d.facility}`));
+    container.appendChild(list);
+  }
+  container.appendChild(el('p', {class:'card-summary'}, t('distantAppliedNote')(plan.distantResult.applied, plan.distantResult.none)));
+  if(plan.distantResult.dropped && plan.distantResult.dropped.length){
+    const list = el('ul', {class:'drop-list'});
+    for(const d of plan.distantResult.dropped) list.appendChild(el('li', null, `${fmtISO(d.date)} — ${d.facility}`));
+    container.appendChild(list);
+  }
+
+  container.appendChild(el('h3', null, t('thirdsTitle')));
+  const thirds = computeThirds(nonEmpty);
+  const thirdsTable = el('div', {class:'thirds-table'});
+  thirds.forEach((th,i)=>{
+    thirdsTable.appendChild(el('div', {class:'thirds-cell'}, `${t('thirdLabel')(i+1)}: ${th.basic} ${t('basicCount')} / ${th.contracted} ${t('contractedCount')}`));
+  });
+  container.appendChild(thirdsTable);
+
+  const totals = computeTotals(plan.rows);
+  const finSlots = nonEmpty.reduce((s,r)=>s+(r.kind==='basic'?2:1),0);
+  const clinSlots = nonEmpty.length*2;
+  const finDev = computeDeviation(state.finPool, totals.finCounts, finSlots);
+  const clinDev = computeDeviation(state.clinPool, totals.clinCounts, clinSlots);
+  container.appendChild(el('h3', null, t('deviationTitle')));
+  const devWrap = el('div', {class:'deviation-list'});
+  for(const d of [...finDev, ...clinDev]){
+    const sign = d.deviation>0 ? '+' : '';
+    devWrap.appendChild(el('p', null, `${d.person.name} — ${d.actual} (${sign}${d.deviation.toFixed(1)})`));
+  }
+  container.appendChild(devWrap);
+
+  const nearMisses = computeNearMisses(plan, 10);
+  if(nearMisses.length){
+    container.appendChild(el('h3', null, t('nearMissTitle')));
+    const list = el('ul', {class:'drop-list'});
+    for(const f of nearMisses) list.appendChild(el('li', null, f.name));
+    container.appendChild(list);
+  }
+}
+function renderTotals(container){
+  container.appendChild(el('h2', null, t('totalsTitle')));
+  const totals = computeTotals(state.plan.rows);
+  const clinWrap = el('div', {class:'totals-group'});
+  clinWrap.appendChild(el('h3', null, t('clinPoolLabel')));
+  for(const p of state.clinPool) clinWrap.appendChild(el('p', null, `${p.name} — ${totals.clinCounts[p.id]||0} ${t('perVisit')}`));
+  const finWrap = el('div', {class:'totals-group'});
+  finWrap.appendChild(el('h3', null, t('finPoolLabel')));
+  for(const p of state.finPool) finWrap.appendChild(el('p', null, `${p.name} — ${totals.finCounts[p.id]||0} ${t('perVisit')}`));
+  container.appendChild(clinWrap);
+  container.appendChild(finWrap);
+}
+function renderResults(){
+  const section = document.getElementById('results');
+  const review = document.getElementById('review');
+  const totalsEl = document.getElementById('totals');
+  if(!state.plan){ section.hidden=true; review.hidden=true; totalsEl.hidden=true; return; }
+  section.hidden=false; review.hidden=false; totalsEl.hidden=false;
+  clear(section); clear(review); clear(totalsEl);
+  section.appendChild(el('h2', null, t('resultsTitle')));
+  const range = resolveDateRange();
+  const printHeaderText = range
+    ? `${t('appName')} — ${fmtISO(range.start)} → ${fmtISO(range.end)} — ${currentCycleNumber()}`
+    : t('appName');
+  section.appendChild(el('div', {class:'print-header'}, printHeaderText));
+  renderResultRows(section, state.plan);
+
+  const retiredIds = new Set(RETIRED_SEED.map(p=>p.id));
+  const gates = computeGates(state.plan, state.registry, retiredIds);
+  const blocked = gates.some(g=>!g.pass);
+  const actions = el('div', {class:'export-actions'});
+  const mk = (label, fn)=>{
+    const attrs = {type:'button', class:'chip', onclick:fn};
+    if(blocked) attrs.disabled='true';
+    return el('button', attrs, label);
+  };
+  actions.appendChild(mk(t('exportXlsx'), exportXlsx));
+  actions.appendChild(mk(t('exportCsv'), exportCsv));
+  actions.appendChild(mk(t('copyTsv'), copyTsv));
+  actions.appendChild(mk(t('exportBackup'), exportBackup));
+  const approveAttrs = {type:'button', class:'chip', onclick:approvePlan};
+  if(blocked || state.planApproved) approveAttrs.disabled='true';
+  actions.appendChild(el('button', approveAttrs, t('approvePlan')));
+  if(state.planApproved && localStorage.getItem('alkhitta.registrySnapshot')){
+    actions.appendChild(el('button', {type:'button', class:'chip', onclick:undoApprove}, t('undoApprove')));
+  }
+  if(state.copyFeedback) actions.appendChild(el('span', {class:'copy-feedback'}, state.copyFeedback));
+  section.appendChild(actions);
+  if(state.planApproved) section.appendChild(el('p', {class:'card-summary'}, t('approvedNote')));
+
+  section.appendChild(renderVisibilityPanel());
+
+  renderReview(review);
+  renderTotals(totalsEl);
+}
+
+function applyTheme(){
+  const root = document.documentElement;
+  if(state.theme==='system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', state.theme);
+}
+function cycleTheme(){
+  state.theme = state.theme==='system' ? 'light' : (state.theme==='light' ? 'dark' : 'system');
+  localStorage.setItem('alkhitta.theme', state.theme);
+  applyTheme();
+}
+function toggleLang(){
+  state.lang = state.lang==='ar' ? 'en' : 'ar';
+  localStorage.setItem('alkhitta.lang', state.lang);
+  render();
+}
+
+function render(){
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = state.lang==='ar' ? 'rtl' : 'ltr';
+  applyTheme();
+  document.getElementById('wordmarkText').textContent = t('appName');
+  document.getElementById('footerText').textContent = t('footer');
+  document.getElementById('generateBtn').textContent = t('generate');
+  renderStep1();
+  renderStep2();
+  renderStep3();
+  renderResults();
+}
+
+async function showSelfTestView(){
+  document.querySelector('.shell').hidden = true;
+  document.querySelector('.topbar').hidden = true;
+  document.getElementById('settingsView').hidden = true;
+  document.getElementById('facilitiesView').hidden = true;
+  const view = document.getElementById('selftestView');
+  view.hidden = false;
+  clear(view);
+  view.appendChild(el('h1', null, t('selftestTitle')));
+  view.appendChild(el('p', {class:'card-summary'}, '...'));
+  const results = await runSelfTests();
+  clear(view);
+  view.appendChild(el('h1', null, t('selftestTitle')));
+  const list = el('div', {class:'review-panel'});
+  for(const r of results){
+    const cls = r.status==='pass' ? 'pass' : (r.status==='fail' ? 'fail' : 'pending');
+    const row = el('div', {class:'gate '+cls});
+    row.appendChild(el('strong', null, r.name));
+    row.appendChild(el('span', null, ' — '+r.detail));
+    list.appendChild(row);
+  }
+  view.appendChild(list);
+  const passCount = results.filter(r=>r.status==='pass').length;
+  const failCount = results.filter(r=>r.status==='fail').length;
+  const pendingCount = results.filter(r=>r.status==='pending').length;
+  view.appendChild(el('p', {class:'card-summary'}, `${passCount} / ${results.length} passed · ${failCount} failed · ${pendingCount} pending`));
+  const backLink = el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp'));
+  view.appendChild(backLink);
+}
+
+function renderSettingsView(){
+  document.querySelector('.shell').hidden = true;
+  document.querySelector('.topbar').hidden = true;
+  document.getElementById('selftestView').hidden = true;
+  document.getElementById('facilitiesView').hidden = true;
+  const view = document.getElementById('settingsView');
+  view.hidden = false;
+  clear(view);
+  view.appendChild(el('h1', null, t('settingsTitle')));
+
+  view.appendChild(el('a', {href:'#facilities', class:'chip'}, t('facilitiesTitle')));
+
+  view.appendChild(el('h2', null, t('aliasTitle')));
+  const facAliasArea = el('textarea', {rows:'4'});
+  facAliasArea.value = Object.entries(FACILITY_ALIASES).map(e=>e[0]+'='+e[1]).join('\n');
+  const personAliasArea = el('textarea', {rows:'4'});
+  personAliasArea.value = Object.entries(PERSON_ALIASES).map(e=>e[0]+'='+e[1]).join('\n');
+  view.appendChild(el('label', null, [t('facilityAliasLabel'), facAliasArea]));
+  view.appendChild(el('label', null, [t('personAliasLabel'), personAliasArea]));
+  view.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+    const parseLines = txt=>{
+      const obj={};
+      txt.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{
+        const idx = l.indexOf('=');
+        if(idx>0) obj[l.slice(0,idx).trim()] = l.slice(idx+1).trim();
+      });
+      return obj;
+    };
+    FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES, parseLines(facAliasArea.value));
+    PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES, parseLines(personAliasArea.value));
+    saveAliasOverrides();
+  }}, t('saveAliases')));
+
+  view.appendChild(el('h2', null, t('overTieTitle')));
+  view.appendChild(el('label', null, [t('minVisitsLabel')+' ', el('input', {type:'number', min:'1', value:String(state.overTieMinVisits), onchange:e=>{
+    state.overTieMinVisits = Math.max(1, Math.round(+e.target.value||3)); saveSettings();
+  }})]));
+  view.appendChild(el('label', null, [t('minRatioLabel')+' ', el('input', {type:'number', min:'0', max:'100', value:String(Math.round(state.overTieMinRatio*100)), onchange:e=>{
+    state.overTieMinRatio = Math.max(0, Math.min(100, +e.target.value||60))/100; saveSettings();
+  }})]));
+
+  view.appendChild(el('h2', null, t('passesTitle')));
+  const genderToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyGenderPass=e.target.checked; saveSettings(); }});
+  genderToggle.checked = state.applyGenderPass;
+  const distantToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyDistantPass=e.target.checked; saveSettings(); }});
+  distantToggle.checked = state.applyDistantPass;
+  view.appendChild(el('label', {class:'inline-check'}, [genderToggle, ' '+t('genderPassLabel')]));
+  view.appendChild(el('label', {class:'inline-check'}, [distantToggle, ' '+t('distantPassLabel')]));
+
+  view.appendChild(el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp')));
+}
+
+function init(){
+  loadSettings();
+  loadAliasOverrides();
+  state.registry = loadRegistry();
+  state.personAliasOverrides = loadPersonAliases();
+  const people = loadPeople();
+  state.finPool = people.fin;
+  state.clinPool = people.clin;
+  document.getElementById('generateBtn').addEventListener('click', handleGenerate);
+  document.getElementById('themeToggleBtn').addEventListener('click', cycleTheme);
+  document.getElementById('langToggleBtn').addEventListener('click', toggleLang);
+  document.getElementById('settingsBtn').addEventListener('click', ()=>{ location.hash='#settings'; });
+  document.getElementById('facilitiesBtn').addEventListener('click', ()=>{ location.hash='#facilities'; });
+  function routeFromHash(){
+    if(location.hash==='#selftest'){ showSelfTestView(); }
+    else if(location.hash==='#settings'){ renderSettingsView(); }
+    else if(location.hash==='#facilities'){ renderFacilitiesView(); }
+    else {
+      document.getElementById('selftestView').hidden = true;
+      document.getElementById('settingsView').hidden = true;
+      document.getElementById('facilitiesView').hidden = true;
+      document.querySelector('.shell').hidden = false;
+      document.querySelector('.topbar').hidden = false;
+      render();
+    }
+  }
+  routeFromHash();
+  window.addEventListener('hashchange', routeFromHash);
+}
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
