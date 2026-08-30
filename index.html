@@ -85,14 +85,15 @@ h1,h2,h3{font-family:inherit}
 .chip:disabled{opacity:.4; cursor:not-allowed}
 .person-chip.inactive{opacity:.45; text-decoration:line-through}
 .person-chip.hidden-for-export{opacity:.5}
-.person-editor{
-  margin-block-start:10px; padding:12px 16px; background:var(--bg); border-radius:var(--r-input);
-  display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--muted);
-}
-.person-editor input[type=number]{width:70px}
-.person-editor input[type=text]{width:100%}
-.editor-wide{flex-basis:100%}
+.chip.readonly{cursor:default}
+.chip.readonly:hover{background:var(--bg)}
 .inline-check{display:flex; align-items:center; gap:6px}
+.people-table{width:100%; border-collapse:collapse; margin-block-start:12px; font-size:13px}
+.people-table th{text-align:start; font-weight:600; color:var(--muted); font-size:12px; padding:6px 8px; border-block-end:1px solid var(--line)}
+.people-table td{padding:6px 8px; border-block-end:1px solid var(--line); vertical-align:middle}
+.people-table tr.inactive td{opacity:.5}
+.people-table input[type=text]{width:100%; min-width:110px}
+.people-table input[type=number]{width:64px}
 .holiday-details{margin-block-start:14px; font-size:13px; color:var(--muted)}
 .holiday-details summary{cursor:pointer}
 .holiday-details textarea{width:100%; margin-block-start:8px; resize:vertical}
@@ -1658,6 +1659,7 @@ const I18N = {
     uploadSoon:'قريبًا — استخدم «بدون ملف» الآن',
     ratioLabel:'نسبة الأساسي', basicCount:'أساسي', contractedCount:'متعاقد',
     finPoolLabel:'المالية والإدارية', clinPoolLabel:'الطبية',
+    nameLabel:'الاسم', editLabel:'تعديل',
     weightLabel:'الوزن', activeLabel:'نشط',
     fixedCountLabel:'عدد ثابت', unavailableLabel:'أيام غير متاحة',
     unavailablePlaceholder:'2026-09-10, 2026-09-17', blockedLabel:'جهات محظورة',
@@ -1729,6 +1731,7 @@ const I18N = {
     uploadSoon:'Coming soon — use "without a file" for now',
     ratioLabel:'Basic ratio', basicCount:'Basic', contractedCount:'Contracted',
     finPoolLabel:'Financial/Admin', clinPoolLabel:'Clinical',
+    nameLabel:'Name', editLabel:'Edit',
     weightLabel:'Weight', activeLabel:'Active',
     fixedCountLabel:'Fixed count', unavailableLabel:'Unavailable days',
     unavailablePlaceholder:'2026-09-10, 2026-09-17', blockedLabel:'Blocked facilities',
@@ -1829,7 +1832,6 @@ const state = {
   mode: 'ratio',
   ratioP: 0.68,
   countsM: null, countsR: null,
-  selectedPersonId: null,
   settingsTab: 'people',
   registry: null, finPool: null, clinPool: null,
   plan: null, planApproved: false,
@@ -2626,17 +2628,23 @@ function renderUploadPane(card){
   }
 }
 
-function buildPersonEditor(p, rerender){
-  rerender = rerender || render;
-  const wrap = el('div', {class:'person-editor'});
-  const weightInput = el('input', {
-    type:'number', min:'0', max:'1.5', step:'0.05', value:String(p.weight),
-    onchange:e=>{ p.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); savePeople(); rerender(); }
+function buildPersonRow(p, rerender){
+  const nameInput = el('input', {
+    type:'text', value:p.name,
+    onchange:e=>{ p.name = e.target.value.trim()||p.name; savePeople(); rerender(); }
   });
+  const genderSelect = el('select', {onchange:e=>{ p.gender = e.target.value; savePeople(); rerender(); }});
+  genderSelect.appendChild(el('option', {value:'m'}, t('genderM')));
+  genderSelect.appendChild(el('option', {value:'f'}, t('genderF')));
+  genderSelect.value = p.gender||'m';
   const activeInput = el('input', {
     type:'checkbox', onchange:e=>{ p.active = e.target.checked; savePeople(); rerender(); }
   });
   activeInput.checked = p.active!==false;
+  const weightInput = el('input', {
+    type:'number', min:'0', max:'1.5', step:'0.05', value:String(p.weight),
+    onchange:e=>{ p.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); savePeople(); rerender(); }
+  });
   const fixedInput = el('input', {
     type:'number', min:'0', placeholder:'—', value: p.fixedCount!=null?String(p.fixedCount):'',
     onchange:e=>{
@@ -2667,37 +2675,45 @@ function buildPersonEditor(p, rerender){
       p.blockedFacilities = ids; savePeople(); rerender();
     }
   });
-  wrap.appendChild(el('label', null, [t('weightLabel')+' ', weightInput]));
-  wrap.appendChild(el('label', {class:'inline-check'}, [activeInput, ' '+t('activeLabel')]));
-  wrap.appendChild(el('label', null, [t('fixedCountLabel')+' ', fixedInput]));
-  wrap.appendChild(el('label', {class:'editor-wide'}, [t('unavailableLabel')+' ', unavailInput]));
-  wrap.appendChild(el('label', {class:'editor-wide'}, [t('blockedLabel')+' ', blockedInput]));
-  return wrap;
+  const row = el('tr', {class:'person-row'+(p.active===false?' inactive':'')});
+  row.appendChild(el('td', null, nameInput));
+  row.appendChild(el('td', null, genderSelect));
+  row.appendChild(el('td', null, activeInput));
+  row.appendChild(el('td', null, weightInput));
+  row.appendChild(el('td', null, fixedInput));
+  row.appendChild(el('td', null, unavailInput));
+  row.appendChild(el('td', null, blockedInput));
+  return row;
 }
-function buildChipRow(pool, rerender){
+function buildPeopleTable(pool, rerender){
   rerender = rerender || render;
-  const wrap = el('div');
-  const row = el('div', {class:'chip-row'});
-  wrap.appendChild(row);
-  for(const p of pool){
-    const chip = el('button', {
-      type:'button', class:'chip person-chip'+(p.active===false?' inactive':''),
-      onclick:()=>{ state.selectedPersonId = state.selectedPersonId===p.id?null:p.id; rerender(); }
-    }, p.name);
-    row.appendChild(chip);
+  const table = el('table', {class:'people-table'});
+  const headRow = el('tr');
+  for(const key of ['nameLabel','genderLabel','activeLabel','weightLabel','fixedCountLabel','unavailableLabel','blockedLabel']){
+    headRow.appendChild(el('th', null, t(key)));
   }
-  const selected = pool.find(p=>p.id===state.selectedPersonId);
-  if(selected) wrap.appendChild(buildPersonEditor(selected, rerender));
-  return wrap;
+  table.appendChild(el('thead', null, headRow));
+  const tbody = el('tbody');
+  for(const p of pool) tbody.appendChild(buildPersonRow(p, rerender));
+  table.appendChild(tbody);
+  return table;
+}
+function buildReadOnlyChipRow(pool){
+  const row = el('div', {class:'chip-row'});
+  for(const p of pool){
+    row.appendChild(el('span', {class:'chip person-chip readonly'+(p.active===false?' inactive':'')}, p.name));
+  }
+  return row;
 }
 function renderStep3(){
   const card = document.getElementById('step3');
   clear(card);
   card.appendChild(el('h2', null, t('step3Title')));
   card.appendChild(el('h3', null, t('finPoolLabel')));
-  card.appendChild(buildChipRow(state.finPool));
+  card.appendChild(buildReadOnlyChipRow(state.finPool));
   card.appendChild(el('h3', null, t('clinPoolLabel')));
-  card.appendChild(buildChipRow(state.clinPool));
+  card.appendChild(buildReadOnlyChipRow(state.clinPool));
+  card.appendChild(el('a', {href:'#settings', class:'chip'}, t('editLabel')));
 }
 
 function handleGenerate(){
@@ -3083,9 +3099,9 @@ function renderSettingsView(){
   }
 
   view.appendChild(el('h3', null, t('finPoolLabel')));
-  view.appendChild(buildChipRow(state.finPool, renderSettingsView));
+  view.appendChild(buildPeopleTable(state.finPool, renderSettingsView));
   view.appendChild(el('h3', null, t('clinPoolLabel')));
-  view.appendChild(buildChipRow(state.clinPool, renderSettingsView));
+  view.appendChild(buildPeopleTable(state.clinPool, renderSettingsView));
 }
 
 function init(){
