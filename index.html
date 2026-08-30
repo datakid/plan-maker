@@ -1796,8 +1796,11 @@ const I18N = {
     passesTitle:'تمريرات الموازنة', genderPassLabel:'موازنة النوع 3-1',
     distanceBiasLabel:'قريب ← محايد → بعيد', familiarityGammaLabel:'معامل الإلفة (gamma)', hardBlockLabel:'حظر صارم عند تجاوز العتبة',
     settingsBtn:'الإعدادات', noAlternatives:'لا يوجد بديل مؤهل',
+    exportVisibilityTitle:'ما يظهر في التصدير',
     visibilityHint:'اختر ما يظهر في النسخ والتصدير — لا يؤثر على العرض هنا',
     hideFacilitiesTitle:'إخفاء جهات', hidePeopleTitle:'إخفاء أشخاص',
+    hideAllLabel:'إخفاء الكل', showAllLabel:'إظهار الكل',
+    hideBasicLabel:'إخفاء الأساسي', hideContractedLabel:'إخفاء المتعاقد',
     searchPlaceholder:'بحث بالاسم...', allCategories:'كل الفئات', allLocations:'كل المواقع',
     kindLabel_all:'الكل', kindLabel_basic:'أساسي', kindLabel_contracted:'متعاقد', kindLabel_excluded:'مستبعدة بالتصنيف',
     lastVisitLabel:'آخر زيارة', neverVisited:'لم تُزَر بعد', daysAgo:n=>`منذ ${n} يوم`,
@@ -1868,8 +1871,11 @@ const I18N = {
     passesTitle:'Balance passes', genderPassLabel:'Gender 3-1 balance',
     distanceBiasLabel:'Near ← Neutral → Far', familiarityGammaLabel:'Familiarity gamma', hardBlockLabel:'Hard block past threshold',
     settingsBtn:'Settings', noAlternatives:'No eligible alternative',
+    exportVisibilityTitle:'What appears in export',
     visibilityHint:'Choose what appears in copy and export — this does not change the display above',
     hideFacilitiesTitle:'Hide facilities', hidePeopleTitle:'Hide people',
+    hideAllLabel:'Hide all', showAllLabel:'Show all',
+    hideBasicLabel:'Hide basic', hideContractedLabel:'Hide contracted',
     searchPlaceholder:'Search by name...', allCategories:'All categories', allLocations:'All locations',
     kindLabel_all:'All', kindLabel_basic:'Basic', kindLabel_contracted:'Contracted', kindLabel_excluded:'Excluded by classification',
     lastVisitLabel:'Last visit', neverVisited:'Never visited', daysAgo:n=>`${n} days ago`,
@@ -1936,6 +1942,7 @@ const state = {
   globalDistanceBias: 0, familiarityGamma: 0.35, hardBlockOverTied: false,
   swapMenuOpenFor: null,
   hiddenFacilityIds: new Set(), hiddenPersonIds: new Set(),
+  exportFacilitySearch: '', exportPersonSearch: '',
   copyFeedback: null,
   facilitySearch: '', facilityKindFilter: 'all', facilityCategoryFilter: '', facilityLocationFilter: '',
   facilitySelected: new Set(), expandedFacilityId: null,
@@ -2843,6 +2850,8 @@ function handleGenerate(){
   state.planApproved = false;
   state.hiddenFacilityIds = new Set();
   state.hiddenPersonIds = new Set();
+  state.exportFacilitySearch = '';
+  state.exportPersonSearch = '';
   state.copyFeedback = null;
   localStorage.setItem('alkhitta.lastPlan', JSON.stringify({generatedAt: fmtISO(new Date()), N: plan.N, M: plan.budget.M, R: plan.budget.R}));
   renderResults();
@@ -2923,8 +2932,41 @@ function renderResultRows(container, plan){
     monthWrap.appendChild(dayRow);
   });
 }
+function buildVisibilityGroup(items, hiddenSet, searchState, titleKey, extraButtons){
+  const box = el('div');
+  box.appendChild(el('h3', null, t(titleKey)));
+  const controls = el('div', {class:'chip-row'});
+  controls.appendChild(el('button', {
+    type:'button', class:'chip', onclick:()=>{ items.forEach(x=>hiddenSet.add(x.id)); renderResults(); }
+  }, t('hideAllLabel')));
+  controls.appendChild(el('button', {
+    type:'button', class:'chip', onclick:()=>{ items.forEach(x=>hiddenSet.delete(x.id)); renderResults(); }
+  }, t('showAllLabel')));
+  if(extraButtons) for(const b of extraButtons) controls.appendChild(b);
+  box.appendChild(controls);
+  let searchValue = state[searchState];
+  if(items.length>15){
+    box.appendChild(el('input', {
+      type:'text', placeholder:t('searchPlaceholder'), value:searchValue,
+      onchange:e=>{ state[searchState]=e.target.value; renderResults(); }
+    }));
+  }
+  const q = norm(searchValue||'');
+  const filtered = q ? items.filter(x=>norm(x.name).indexOf(q)>=0) : items;
+  const row = el('div', {class:'chip-row'});
+  for(const x of filtered){
+    const hidden = hiddenSet.has(x.id);
+    row.appendChild(el('button', {
+      type:'button', class:'chip'+(hidden?' hidden-item':''),
+      onclick:()=>{ hidden ? hiddenSet.delete(x.id) : hiddenSet.add(x.id); renderResults(); }
+    }, x.name));
+  }
+  box.appendChild(row);
+  return box;
+}
 function renderVisibilityPanel(){
   const wrap = el('div', {class:'visibility-panel'});
+  wrap.appendChild(el('h2', null, t('exportVisibilityTitle')));
   wrap.appendChild(el('p', {class:'card-summary'}, t('visibilityHint')));
   const nonEmpty = state.plan.rows.filter(r=>!r.empty);
   const facilities = [];
@@ -2934,27 +2976,17 @@ function renderVisibilityPanel(){
   const seenPerson = new Set();
   for(const r of nonEmpty) for(const p of [...r.finTeam, ...r.clinTeam]) if(!seenPerson.has(p.id)){ seenPerson.add(p.id); people.push(p); }
 
-  wrap.appendChild(el('h3', null, t('hideFacilitiesTitle')));
-  const facRow = el('div', {class:'chip-row'});
-  for(const f of facilities){
-    const hidden = state.hiddenFacilityIds.has(f.id);
-    facRow.appendChild(el('button', {
-      type:'button', class:'chip'+(hidden?' hidden-item':''),
-      onclick:()=>{ hidden ? state.hiddenFacilityIds.delete(f.id) : state.hiddenFacilityIds.add(f.id); renderResults(); }
-    }, f.name));
-  }
-  wrap.appendChild(facRow);
+  const basicFacs = facilities.filter(f=>f.kind==='basic');
+  const contractedFacs = facilities.filter(f=>f.kind==='contracted');
+  const hideBasicBtn = el('button', {
+    type:'button', class:'chip', onclick:()=>{ basicFacs.forEach(f=>state.hiddenFacilityIds.add(f.id)); renderResults(); }
+  }, t('hideBasicLabel'));
+  const hideContractedBtn = el('button', {
+    type:'button', class:'chip', onclick:()=>{ contractedFacs.forEach(f=>state.hiddenFacilityIds.add(f.id)); renderResults(); }
+  }, t('hideContractedLabel'));
 
-  wrap.appendChild(el('h3', null, t('hidePeopleTitle')));
-  const personRow = el('div', {class:'chip-row'});
-  for(const p of people){
-    const hidden = state.hiddenPersonIds.has(p.id);
-    personRow.appendChild(el('button', {
-      type:'button', class:'chip'+(hidden?' hidden-item':''),
-      onclick:()=>{ hidden ? state.hiddenPersonIds.delete(p.id) : state.hiddenPersonIds.add(p.id); renderResults(); }
-    }, p.name));
-  }
-  wrap.appendChild(personRow);
+  wrap.appendChild(buildVisibilityGroup(facilities, state.hiddenFacilityIds, 'exportFacilitySearch', 'hideFacilitiesTitle', [hideBasicBtn, hideContractedBtn]));
+  wrap.appendChild(buildVisibilityGroup(people, state.hiddenPersonIds, 'exportPersonSearch', 'hidePeopleTitle'));
   return wrap;
 }
 function renderReview(container){
