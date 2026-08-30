@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;display=swap" rel="stylesheet" onerror="this.remove()">
 <style>
 *,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none !important}
 :root{
   --bg:#EDE9E4; --surface:#FAF8F5; --ink:#241F26; --muted:#6E6672;
   --accent:#6A4A6E; --accent-soft:#EDE2EE; --contracted:#8A6A2E; --line:#E2DCD6;
@@ -178,6 +179,7 @@ footer{max-width:940px; margin-inline:auto; padding:20px; color:var(--muted); fo
 #settingsView label{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); margin-block-end:6px}
 #settingsView textarea{width:100%; margin-block-start:6px}
 .review-flag{color:var(--contracted); font-size:11px; font-weight:600}
+.subview-bar{position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:14px; background:var(--bg); padding-block:10px 4px}
 #facilitiesView{max-width:940px; margin-inline:auto; padding:32px 20px; display:flex; flex-direction:column; gap:10px}
 #facilitiesView h1{font-size:20px; margin-block-end:6px}
 #facilitiesView h2{font-size:14px; color:var(--muted); margin-block:16px 8px; font-weight:700}
@@ -362,10 +364,21 @@ function workingDays(start,end,weekdays,holidaySet,exceptionSet){
   return out;
 }
 
+function facilityMaxGap(f){
+  const hist = f.visitHistory;
+  if(!hist || hist.length<2) return null;
+  let maxGap = 0;
+  for(let i=0;i<hist.length-1;i++){
+    const gap = daysBetween(hist[i+1].date, hist[i].date);
+    if(gap>maxGap) maxGap = gap;
+  }
+  return maxGap;
+}
 function computeNever(facilities){
   let maxGap = 0;
   for(const f of facilities){
-    if(f._observedGap!=null) maxGap = Math.max(maxGap, f._observedGap);
+    const g = facilityMaxGap(f);
+    if(g!=null) maxGap = Math.max(maxGap, g);
   }
   return Math.max(720, maxGap+180);
 }
@@ -627,22 +640,23 @@ function generatePlan(opts){
   const NEVER = computeNever(registry);
   const rankedBasic = rankStream(basicFac, days[0]||startDate, NEVER);
   const rankedContracted = rankStream(contractedFac, days[0]||startDate, NEVER);
-  const pattern = interleave(N, budget.M);
+  const pattern = interleave(budget.M+budget.R, budget.M);
   const withGaps = spreadUnusedDays(pattern, budget.unused);
   let bi=0, ci=0, dayIdx=0;
   const rows=[];
   for(const slot of withGaps){
     if(slot===null){ rows.push({empty:true}); continue; }
-    const date = days[dayIdx++];
     if(slot==='basic'){
       const idx = bi++;
       const f = rankedBasic[idx];
       if(!f){ rows.push({empty:true}); continue; }
+      const date = days[dayIdx++];
       rows.push({date, kind:'basic', facility:f, rankInStream: idx+1});
     } else {
       const idx = ci++;
       const f = rankedContracted[idx];
       if(!f){ rows.push({empty:true}); continue; }
+      const date = days[dayIdx++];
       rows.push({date, kind:'contracted', facility:f, rankInStream: idx+1});
     }
   }
@@ -1681,6 +1695,7 @@ const I18N = {
     unknownLocationFlag:'خارج البحيرة؟', tsvCopied:'تم النسخ',
     importErrorPrefix:'تعذّرت القراءة: ',
     settingsTitle:'الإعدادات', facilitiesTitle:'الجهات', pinnedLabel:'مثبّتة',
+    settingsTabPeople:'الأشخاص', settingsTabFormula:'المعادلة', settingsTabAliases:'الأسماء البديلة', settingsTabData:'البيانات',
     locationPlaceholder:'الموقع (مثال: دمنهور)', confirmLocation:'تأكيد الموقع',
     aliasTitle:'قواعد الأسماء البديلة', facilityAliasLabel:'أسماء الجهات (خام=قياسي، سطر لكل قاعدة)',
     personAliasLabel:'أسماء الأشخاص (خام=قياسي، سطر لكل قاعدة)', saveAliases:'حفظ القواعد',
@@ -1751,6 +1766,7 @@ const I18N = {
     unknownLocationFlag:'Outside Beheira?', tsvCopied:'Copied',
     importErrorPrefix:'Could not read file: ',
     settingsTitle:'Settings', facilitiesTitle:'Facilities', pinnedLabel:'Pinned',
+    settingsTabPeople:'People', settingsTabFormula:'Formula', settingsTabAliases:'Aliases', settingsTabData:'Data',
     locationPlaceholder:'Location (e.g. Damanhur)', confirmLocation:'Confirm location',
     aliasTitle:'Alias rules', facilityAliasLabel:'Facility names (raw=canonical, one per line)',
     personAliasLabel:'Person names (raw=canonical, one per line)', saveAliases:'Save rules',
@@ -1795,6 +1811,12 @@ function el(tag, attrs, children){
   return e;
 }
 function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+function renderSubViewBar(view, titleKey){
+  const bar = el('div', {class:'subview-bar'});
+  bar.appendChild(el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp')));
+  bar.appendChild(el('h1', null, t(titleKey)));
+  view.appendChild(bar);
+}
 
 const state = {
   lang: localStorage.getItem('alkhitta.lang') || 'ar',
@@ -1808,6 +1830,7 @@ const state = {
   ratioP: 0.68,
   countsM: null, countsR: null,
   selectedPersonId: null,
+  settingsTab: 'people',
   registry: null, finPool: null, clinPool: null,
   plan: null, planApproved: false,
   personAliasOverrides: {},
@@ -2335,7 +2358,7 @@ function renderFacilitiesView(){
   const view = document.getElementById('facilitiesView');
   view.hidden = false;
   clear(view);
-  view.appendChild(el('h1', null, t('facilitiesTitle')));
+  renderSubViewBar(view, 'facilitiesTitle');
 
   view.appendChild(el('input', {
     type:'text', placeholder:t('searchPlaceholder'), value:state.facilitySearch,
@@ -2374,8 +2397,6 @@ function renderFacilitiesView(){
   list.scrollTop = prevScroll;
 
   renderRegistryImportSection(view);
-
-  view.appendChild(el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp')));
 }
 
 
@@ -2605,14 +2626,15 @@ function renderUploadPane(card){
   }
 }
 
-function buildPersonEditor(p){
+function buildPersonEditor(p, rerender){
+  rerender = rerender || render;
   const wrap = el('div', {class:'person-editor'});
   const weightInput = el('input', {
     type:'number', min:'0', max:'1.5', step:'0.05', value:String(p.weight),
-    onchange:e=>{ p.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); savePeople(); render(); }
+    onchange:e=>{ p.weight = Math.max(0, Math.min(1.5, +e.target.value||0)); savePeople(); rerender(); }
   });
   const activeInput = el('input', {
-    type:'checkbox', onchange:e=>{ p.active = e.target.checked; savePeople(); render(); }
+    type:'checkbox', onchange:e=>{ p.active = e.target.checked; savePeople(); rerender(); }
   });
   activeInput.checked = p.active!==false;
   const fixedInput = el('input', {
@@ -2620,7 +2642,7 @@ function buildPersonEditor(p){
     onchange:e=>{
       const v = e.target.value.trim();
       p.fixedCount = v==='' ? null : Math.max(0, Math.round(+v));
-      savePeople(); render();
+      savePeople(); rerender();
     }
   });
   const unavailInput = el('input', {
@@ -2629,7 +2651,7 @@ function buildPersonEditor(p){
       const parts = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
       const isoList=[];
       for(const part of parts){ const d=parseDateFlexible(part); if(d) isoList.push(fmtISO(d)); }
-      p.unavailable = isoList; savePeople(); render();
+      p.unavailable = isoList; savePeople(); rerender();
     }
   });
   const blockedInput = el('input', {
@@ -2642,7 +2664,7 @@ function buildPersonEditor(p){
         const match = state.registry.find(f=>normFacility(f.name)===normFacility(part));
         if(match) ids.push(match.id);
       }
-      p.blockedFacilities = ids; savePeople(); render();
+      p.blockedFacilities = ids; savePeople(); rerender();
     }
   });
   wrap.appendChild(el('label', null, [t('weightLabel')+' ', weightInput]));
@@ -2652,19 +2674,20 @@ function buildPersonEditor(p){
   wrap.appendChild(el('label', {class:'editor-wide'}, [t('blockedLabel')+' ', blockedInput]));
   return wrap;
 }
-function buildChipRow(pool){
+function buildChipRow(pool, rerender){
+  rerender = rerender || render;
   const wrap = el('div');
   const row = el('div', {class:'chip-row'});
   wrap.appendChild(row);
   for(const p of pool){
     const chip = el('button', {
       type:'button', class:'chip person-chip'+(p.active===false?' inactive':''),
-      onclick:()=>{ state.selectedPersonId = state.selectedPersonId===p.id?null:p.id; render(); }
+      onclick:()=>{ state.selectedPersonId = state.selectedPersonId===p.id?null:p.id; rerender(); }
     }, p.name);
     row.appendChild(chip);
   }
   const selected = pool.find(p=>p.id===state.selectedPersonId);
-  if(selected) wrap.appendChild(buildPersonEditor(selected));
+  if(selected) wrap.appendChild(buildPersonEditor(selected, rerender));
   return wrap;
 }
 function renderStep3(){
@@ -2970,11 +2993,11 @@ async function showSelfTestView(){
   const view = document.getElementById('selftestView');
   view.hidden = false;
   clear(view);
-  view.appendChild(el('h1', null, t('selftestTitle')));
+  renderSubViewBar(view, 'selftestTitle');
   view.appendChild(el('p', {class:'card-summary'}, '...'));
   const results = await runSelfTests();
   clear(view);
-  view.appendChild(el('h1', null, t('selftestTitle')));
+  renderSubViewBar(view, 'selftestTitle');
   const list = el('div', {class:'review-panel'});
   for(const r of results){
     const cls = r.status==='pass' ? 'pass' : (r.status==='fail' ? 'fail' : 'pending');
@@ -2988,8 +3011,6 @@ async function showSelfTestView(){
   const failCount = results.filter(r=>r.status==='fail').length;
   const pendingCount = results.filter(r=>r.status==='pending').length;
   view.appendChild(el('p', {class:'card-summary'}, `${passCount} / ${results.length} passed · ${failCount} failed · ${pendingCount} pending`));
-  const backLink = el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp'));
-  view.appendChild(backLink);
 }
 
 function renderSettingsView(){
@@ -3000,48 +3021,71 @@ function renderSettingsView(){
   const view = document.getElementById('settingsView');
   view.hidden = false;
   clear(view);
-  view.appendChild(el('h1', null, t('settingsTitle')));
+  renderSubViewBar(view, 'settingsTitle');
 
-  view.appendChild(el('a', {href:'#facilities', class:'chip'}, t('facilitiesTitle')));
+  const tabs = [['people','settingsTabPeople'],['formula','settingsTabFormula'],['aliases','settingsTabAliases'],['data','settingsTabData']];
+  const seg = el('div', {class:'segmented', role:'group'});
+  for(const pair of tabs){
+    seg.appendChild(el('button', {
+      type:'button', 'aria-pressed': state.settingsTab===pair[0] ? 'true':'false',
+      onclick:()=>{ state.settingsTab=pair[0]; renderSettingsView(); }
+    }, t(pair[1])));
+  }
+  view.appendChild(seg);
 
-  view.appendChild(el('h2', null, t('aliasTitle')));
-  const facAliasArea = el('textarea', {rows:'4'});
-  facAliasArea.value = Object.entries(FACILITY_ALIASES).map(e=>e[0]+'='+e[1]).join('\n');
-  const personAliasArea = el('textarea', {rows:'4'});
-  personAliasArea.value = Object.entries(PERSON_ALIASES).map(e=>e[0]+'='+e[1]).join('\n');
-  view.appendChild(el('label', null, [t('facilityAliasLabel'), facAliasArea]));
-  view.appendChild(el('label', null, [t('personAliasLabel'), personAliasArea]));
-  view.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
-    const parseLines = txt=>{
-      const obj={};
-      txt.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{
-        const idx = l.indexOf('=');
-        if(idx>0) obj[l.slice(0,idx).trim()] = l.slice(idx+1).trim();
-      });
-      return obj;
-    };
-    FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES, parseLines(facAliasArea.value));
-    PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES, parseLines(personAliasArea.value));
-    saveAliasOverrides();
-  }}, t('saveAliases')));
+  if(state.settingsTab==='formula'){
+    view.appendChild(el('h2', null, t('overTieTitle')));
+    view.appendChild(el('label', null, [t('minVisitsLabel')+' ', el('input', {type:'number', min:'1', value:String(state.overTieMinVisits), onchange:e=>{
+      state.overTieMinVisits = Math.max(1, Math.round(+e.target.value||3)); saveSettings();
+    }})]));
+    view.appendChild(el('label', null, [t('minRatioLabel')+' ', el('input', {type:'number', min:'0', max:'100', value:String(Math.round(state.overTieMinRatio*100)), onchange:e=>{
+      state.overTieMinRatio = Math.max(0, Math.min(100, +e.target.value||60))/100; saveSettings();
+    }})]));
 
-  view.appendChild(el('h2', null, t('overTieTitle')));
-  view.appendChild(el('label', null, [t('minVisitsLabel')+' ', el('input', {type:'number', min:'1', value:String(state.overTieMinVisits), onchange:e=>{
-    state.overTieMinVisits = Math.max(1, Math.round(+e.target.value||3)); saveSettings();
-  }})]));
-  view.appendChild(el('label', null, [t('minRatioLabel')+' ', el('input', {type:'number', min:'0', max:'100', value:String(Math.round(state.overTieMinRatio*100)), onchange:e=>{
-    state.overTieMinRatio = Math.max(0, Math.min(100, +e.target.value||60))/100; saveSettings();
-  }})]));
+    view.appendChild(el('h2', null, t('passesTitle')));
+    const genderToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyGenderPass=e.target.checked; saveSettings(); }});
+    genderToggle.checked = state.applyGenderPass;
+    const distantToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyDistantPass=e.target.checked; saveSettings(); }});
+    distantToggle.checked = state.applyDistantPass;
+    view.appendChild(el('label', {class:'inline-check'}, [genderToggle, ' '+t('genderPassLabel')]));
+    view.appendChild(el('label', {class:'inline-check'}, [distantToggle, ' '+t('distantPassLabel')]));
+    return;
+  }
 
-  view.appendChild(el('h2', null, t('passesTitle')));
-  const genderToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyGenderPass=e.target.checked; saveSettings(); }});
-  genderToggle.checked = state.applyGenderPass;
-  const distantToggle = el('input', {type:'checkbox', onchange:e=>{ state.applyDistantPass=e.target.checked; saveSettings(); }});
-  distantToggle.checked = state.applyDistantPass;
-  view.appendChild(el('label', {class:'inline-check'}, [genderToggle, ' '+t('genderPassLabel')]));
-  view.appendChild(el('label', {class:'inline-check'}, [distantToggle, ' '+t('distantPassLabel')]));
+  if(state.settingsTab==='aliases'){
+    view.appendChild(el('h2', null, t('aliasTitle')));
+    const facAliasArea = el('textarea', {rows:'4'});
+    facAliasArea.value = Object.entries(FACILITY_ALIASES).map(e=>e[0]+'='+e[1]).join('\n');
+    const personAliasArea = el('textarea', {rows:'4'});
+    personAliasArea.value = Object.entries(PERSON_ALIASES).map(e=>e[0]+'='+e[1]).join('\n');
+    view.appendChild(el('label', null, [t('facilityAliasLabel'), facAliasArea]));
+    view.appendChild(el('label', null, [t('personAliasLabel'), personAliasArea]));
+    view.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
+      const parseLines = txt=>{
+        const obj={};
+        txt.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{
+          const idx = l.indexOf('=');
+          if(idx>0) obj[l.slice(0,idx).trim()] = l.slice(idx+1).trim();
+        });
+        return obj;
+      };
+      FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES, parseLines(facAliasArea.value));
+      PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES, parseLines(personAliasArea.value));
+      saveAliasOverrides();
+    }}, t('saveAliases')));
+    return;
+  }
 
-  view.appendChild(el('a', {href:'#', class:'chip', onclick:e=>{e.preventDefault(); location.hash='';}}, t('backToApp')));
+  if(state.settingsTab==='data'){
+    view.appendChild(el('a', {href:'#facilities', class:'chip'}, t('facilitiesTitle')));
+    view.appendChild(el('a', {href:'#selftest', class:'chip'}, t('selftestTitle')));
+    return;
+  }
+
+  view.appendChild(el('h3', null, t('finPoolLabel')));
+  view.appendChild(buildChipRow(state.finPool, renderSettingsView));
+  view.appendChild(el('h3', null, t('clinPoolLabel')));
+  view.appendChild(buildChipRow(state.clinPool, renderSettingsView));
 }
 
 function init(){
