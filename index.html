@@ -1796,8 +1796,8 @@ async function runSelfTests(){
     }
     const cycle1Team = cycle1.rows.find(r=>!r.empty && r.facility.id===trackedId).finTeam.map(p=>p.id);
     const cycle2 = withDiscount=>{
-      const a = args(); a.finInitial = finAfterCycle1;
-      if(withDiscount) a.facilityPersonVisits = fpv;
+      const a = args();
+      if(withDiscount){ a.finInitial = finAfterCycle1; a.facilityPersonVisits = fpv; }
       return generatePlan(a).rows.find(r=>!r.empty && r.facility.id===trackedId).finTeam.map(p=>p.id);
     };
     const teamNo = cycle2(false), teamYes = cycle2(true);
