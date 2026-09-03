@@ -1492,6 +1492,7 @@ diffAdded:'جديد', diffChanged:'تغيّر', diffMissing:'غير موجود',
 diffKeep:'إبقاء', diffExclude:'استبعاد', applyImportBtn:'تطبيق الاستيراد',
 undoImport:'تراجع', importedToast:'تم الاستيراد',
 importErrorPrefix:'تعذّر قراءة الملف — الصيغة غير مدعومة. استخدم XLSX أو CSV.',
+restoreError:'تعذّرت الاستعادة — الملف تالف أو غير متوافق.',
 unresolvedTitle:'أسماء غير معروفة', resolveLinkExisting:'ربط بموجود',
 resolveAddNew:'إضافة جديد', resolveIgnore:'تجاهل',
 settingsAppearance:'المظهر', themeLabel:'المظهر', themeLight:'فاتح', themeDark:'داكن', themeAuto:'تلقائي',
@@ -1606,6 +1607,7 @@ diffAdded:'New', diffChanged:'Changed', diffMissing:'Not in file',
 diffKeep:'Keep', diffExclude:'Exclude', applyImportBtn:'Apply import',
 undoImport:'Undo', importedToast:'Imported',
 importErrorPrefix:'Could not read the file — format not supported. Use XLSX or CSV.',
+restoreError:'Could not restore — the file is corrupted or incompatible.',
 unresolvedTitle:'Unknown names', resolveLinkExisting:'Link to existing',
 resolveAddNew:'Add new', resolveIgnore:'Ignore',
 settingsAppearance:'Appearance', themeLabel:'Theme', themeLight:'Light', themeDark:'Dark', themeAuto:'Auto',
@@ -1694,153 +1696,248 @@ const state = {
   expandedRowIndex:null, retiredExpanded:false,
   setupRowOpen:{period:true, distribution:false, team:false},
   selfTestResults:null, selfTestRunning:false,
-  unresolvedNamesQueue: loadUnresolvedNames(),
+  unresolvedNamesQueue: [],
   facilityPersonVisits:{}, finInitialCounts:{}, clinInitialCounts:{}, lastCycleNumber:0
 };
-function loadHistoryStats(){
+const STORE_KEY = 'alkhitta.v3';
+let store = null;
+let persistTimer = null;
+function defaultStoreSettings(){
+  return {
+    range:'month', weekdays:[1,2,3,4], holidays:[], ratioP:0.68,
+    customStart:null, customEnd:null,
+    overTieMinVisits:3, overTieMinRatio:0.6, applyGenderPass:true,
+    globalDistanceBias:0, familiarityGamma:0.35, hardBlockOverTied:false,
+    mode:'ratio', countsM:null, countsR:null
+  };
+}
+function emptyStore(){
+  return {
+    version:3, settings: defaultStoreSettings(), facilities:[], people:[],
+    history:{facilityPersonVisits:{}, initialCounts:{fin:{}, clin:{}}, lastCycleNumber:0},
+    aliases:{people:{}, facilities:{}}, unresolvedNames:[]
+  };
+}
+function migrateLegacyStore(){
+  const s = emptyStore();
+  try{
+    const raw = localStorage.getItem('alkhitta.settings');
+    if(raw) Object.assign(s.settings, JSON.parse(raw));
+  }catch(e){}
   try{
     const raw = localStorage.getItem('alkhitta.historyStats');
     if(raw){
-      const s = JSON.parse(raw);
-      state.facilityPersonVisits = s.facilityPersonVisits||{};
-      state.finInitialCounts = s.finInitialCounts||{};
-      state.clinInitialCounts = s.clinInitialCounts||{};
-      state.lastCycleNumber = s.lastCycleNumber||0;
+      const old = JSON.parse(raw);
+      s.history = {
+        facilityPersonVisits: old.facilityPersonVisits||{},
+        initialCounts: {fin: old.finInitialCounts||{}, clin: old.clinInitialCounts||{}},
+        lastCycleNumber: old.lastCycleNumber||0
+      };
     }
   }catch(e){}
-}
-function saveHistoryStats(){
-  localStorage.setItem('alkhitta.historyStats', JSON.stringify({
-    facilityPersonVisits: state.facilityPersonVisits, finInitialCounts: state.finInitialCounts,
-    clinInitialCounts: state.clinInitialCounts, lastCycleNumber: state.lastCycleNumber
-  }));
-}
-function loadUnresolvedNames(){
   try{
     const raw = localStorage.getItem('alkhitta.unresolvedNames');
-    if(raw) return JSON.parse(raw);
+    if(raw) s.unresolvedNames = JSON.parse(raw)||[];
   }catch(e){}
-  return [];
-}
-function saveUnresolvedNames(){
-  localStorage.setItem('alkhitta.unresolvedNames', JSON.stringify(state.unresolvedNamesQueue));
-}
-function loadSettings(){
-  try{
-    const raw = localStorage.getItem('alkhitta.settings');
-    if(!raw) return;
-    const s = JSON.parse(raw);
-    if(s.range) state.range = s.range;
-    if(Array.isArray(s.weekdays)) state.weekdays = new Set(s.weekdays);
-    if(Array.isArray(s.holidays)) state.holidays = new Set(s.holidays);
-    if(s.ratioP!=null) state.ratioP = s.ratioP;
-    if(s.customStart) state.customStart = s.customStart;
-    if(s.customEnd) state.customEnd = s.customEnd;
-    if(s.overTieMinVisits!=null) state.overTieMinVisits = s.overTieMinVisits;
-    if(s.overTieMinRatio!=null) state.overTieMinRatio = s.overTieMinRatio;
-    if(s.applyGenderPass!=null) state.applyGenderPass = s.applyGenderPass;
-    if(s.globalDistanceBias!=null) state.globalDistanceBias = s.globalDistanceBias;
-    if(s.familiarityGamma!=null) state.familiarityGamma = s.familiarityGamma;
-    if(s.hardBlockOverTied!=null) state.hardBlockOverTied = s.hardBlockOverTied;
-  }catch(e){}
-}
-function saveSettings(){
-  localStorage.setItem('alkhitta.settings', JSON.stringify({
-    range: state.range, weekdays:[...state.weekdays], holidays:[...state.holidays],
-    ratioP: state.ratioP, customStart: state.customStart, customEnd: state.customEnd,
-    overTieMinVisits: state.overTieMinVisits, overTieMinRatio: state.overTieMinRatio,
-    applyGenderPass: state.applyGenderPass, globalDistanceBias: state.globalDistanceBias,
-    familiarityGamma: state.familiarityGamma, hardBlockOverTied: state.hardBlockOverTied
-  }));
-  markPlanStaleIfNeeded();
-}
-function loadPersonAliasesOverrides(){
   try{
     const raw = localStorage.getItem('alkhitta.personAliases');
-    if(raw) return JSON.parse(raw);
+    if(raw) s.aliases.people = JSON.parse(raw)||{};
   }catch(e){}
-  return {};
-}
-function savePersonAliases(){
-  localStorage.setItem('alkhitta.personAliases', JSON.stringify(state.personAliasOverrides));
-}
-function loadCustomPeople(){
   try{
-    const raw = localStorage.getItem('alkhitta.customPeople');
-    if(raw) return JSON.parse(raw);
-  }catch(e){}
-  return {fin:[], clin:[], retired:[]};
-}
-function loadPeople(){
-  let overrides = {fin:{}, clin:{}, retired:{}};
-  try{
-    const raw = localStorage.getItem('alkhitta.people');
-    if(raw) overrides = JSON.parse(raw);
-  }catch(e){}
-  const custom = loadCustomPeople();
-  function build(seed, customList, ov, poolName){
-    return seed.concat(customList||[]).map(p=>Object.assign(freshPerson(p), {pool:poolName}, ov&&ov[p.id]||{}));
-  }
-  const all = build(FIN_ADMIN_SEED, custom.fin, overrides.fin, 'fin')
-    .concat(build(CLINICAL_SEED, custom.clin, overrides.clin, 'clin'))
-    .concat(build(RETIRED_SEED, custom.retired, overrides.retired, 'retired'));
-  const seen = new Set();
-  const fin=[], clin=[], retired=[];
-  for(const p of all){
-    if(seen.has(p.id)) continue;
-    seen.add(p.id);
-    (p.pool==='clin'?clin:p.pool==='retired'?retired:fin).push(p);
-  }
-  return {fin, clin, retired};
-}
-function serializePersonOverride(p){
-  return {weight:p.weight, active:p.active, name:p.name, gender:p.gender, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity, pool:p.pool};
-}
-function savePeople(){
-  const obj = {fin:{}, clin:{}, retired:{}};
-  for(const p of state.finPool) obj.fin[p.id] = serializePersonOverride(p);
-  for(const p of state.clinPool) obj.clin[p.id] = serializePersonOverride(p);
-  for(const p of state.retiredPool) obj.retired[p.id] = serializePersonOverride(p);
-  localStorage.setItem('alkhitta.people', JSON.stringify(obj));
-  localStorage.setItem('alkhitta.customPeople', JSON.stringify({
-    fin: state.finPool.filter(p=>p.id.indexOf('p_custom_')===0),
-    clin: state.clinPool.filter(p=>p.id.indexOf('p_custom_')===0),
-    retired: state.retiredPool.filter(p=>p.id.indexOf('p_custom_')===0)
-  }));
-  markPlanStaleIfNeeded();
-}
-function loadRegistry(){
-  const seedFresh = buildRegistry(REGISTRY_SEED);
-  try{
+    const seedFresh = serializeRegistry(buildRegistry(REGISTRY_SEED));
     const raw = localStorage.getItem('alkhitta.registry');
     if(raw){
       const saved = JSON.parse(raw);
       if(Array.isArray(saved) && saved.length){
-        const merged = deserializeRegistry(saved);
+        const merged = saved.slice();
         const existingNames = new Set(merged.map(f=>normFacility(f.name)));
         for(const f of seedFresh) if(!existingNames.has(normFacility(f.name))) merged.push(f);
-        return merged;
-      }
+        s.facilities = merged;
+      } else s.facilities = seedFresh;
+    } else s.facilities = seedFresh;
+  }catch(e){ s.facilities = serializeRegistry(buildRegistry(REGISTRY_SEED)); }
+  try{
+    const overridesById = {};
+    const rawPeople = localStorage.getItem('alkhitta.people');
+    if(rawPeople){
+      const buckets = JSON.parse(rawPeople)||{};
+      for(const bucket of ['fin','clin','retired']) for(const id in (buckets[bucket]||{})) overridesById[id] = buckets[bucket][id];
+    }
+    let custom = {fin:[], clin:[], retired:[]};
+    const rawCustom = localStorage.getItem('alkhitta.customPeople');
+    if(rawCustom) Object.assign(custom, JSON.parse(rawCustom)||{});
+    function buildFlat(seed, poolName, customList){
+      return seed.concat(customList||[]).map(p=>Object.assign(freshPerson(p), {pool:poolName}, overridesById[p.id]||{}));
+    }
+    const all = buildFlat(FIN_ADMIN_SEED,'fin',custom.fin).concat(buildFlat(CLINICAL_SEED,'clin',custom.clin)).concat(buildFlat(RETIRED_SEED,'retired',custom.retired));
+    const seen = new Set(); const flat=[];
+    for(const p of all){ if(seen.has(p.id)) continue; seen.add(p.id); flat.push(p); }
+    s.people = flat;
+  }catch(e){
+    s.people = FIN_ADMIN_SEED.map(p=>Object.assign(freshPerson(p),{pool:'fin'}))
+      .concat(CLINICAL_SEED.map(p=>Object.assign(freshPerson(p),{pool:'clin'})))
+      .concat(RETIRED_SEED.map(p=>Object.assign(freshPerson(p),{pool:'retired'})));
+  }
+  return s;
+}
+function persistStoreNow(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){}
+}
+function persistStore(){
+  if(persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistStoreNow, 250);
+}
+function hydrateStore(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.version===3 && parsed.settings && Array.isArray(parsed.facilities) && Array.isArray(parsed.people)) return parsed;
     }
   }catch(e){}
+  const migrated = migrateLegacyStore();
+  store = migrated;
+  persistStoreNow();
+  return migrated;
+}
+function normalizeStoreV3(raw){
+  const s = emptyStore();
+  Object.assign(s.settings, raw.settings||{});
+  if(Array.isArray(raw.facilities)) s.facilities = raw.facilities;
+  if(Array.isArray(raw.people)) s.people = raw.people;
+  if(raw.history) s.history = Object.assign(emptyStore().history, raw.history, {
+    initialCounts: Object.assign({fin:{},clin:{}}, raw.history.initialCounts||{})
+  });
+  s.aliases = {people:(raw.aliases&&raw.aliases.people)||{}, facilities:(raw.aliases&&raw.aliases.facilities)||{}};
+  if(Array.isArray(raw.unresolvedNames)) s.unresolvedNames = raw.unresolvedNames;
+  return s;
+}
+function legacyV2BackupToStore(raw){
+  const s = emptyStore();
+  if(raw.settings) Object.assign(s.settings, raw.settings);
+  if(Array.isArray(raw.registry)) s.facilities = raw.registry;
+  if(raw.people){
+    s.people = (raw.people.fin||[]).map(p=>Object.assign({},p,{pool:'fin'}))
+      .concat((raw.people.clin||[]).map(p=>Object.assign({},p,{pool:'clin'})))
+      .concat((raw.people.retired||[]).map(p=>Object.assign({},p,{pool:'retired'})));
+  }
+  if(raw.historyStats){
+    s.history = {
+      facilityPersonVisits: raw.historyStats.facilityPersonVisits||{},
+      initialCounts: {fin: raw.historyStats.finInitialCounts||{}, clin: raw.historyStats.clinInitialCounts||{}},
+      lastCycleNumber: raw.historyStats.lastCycleNumber||0
+    };
+  }
+  return s;
+}
+function loadHistoryStats(){
+  state.facilityPersonVisits = store.history.facilityPersonVisits||{};
+  state.finInitialCounts = (store.history.initialCounts&&store.history.initialCounts.fin)||{};
+  state.clinInitialCounts = (store.history.initialCounts&&store.history.initialCounts.clin)||{};
+  state.lastCycleNumber = store.history.lastCycleNumber||0;
+}
+function saveHistoryStats(){
+  store.history = {
+    facilityPersonVisits: state.facilityPersonVisits,
+    initialCounts: {fin: state.finInitialCounts, clin: state.clinInitialCounts},
+    lastCycleNumber: state.lastCycleNumber
+  };
+  persistStore();
+}
+function loadUnresolvedNames(){
+  return (store.unresolvedNames||[]).slice();
+}
+function saveUnresolvedNames(){
+  store.unresolvedNames = state.unresolvedNamesQueue;
+  persistStore();
+}
+function loadSettings(){
+  const s = store.settings||{};
+  if(s.range) state.range = s.range;
+  if(Array.isArray(s.weekdays)) state.weekdays = new Set(s.weekdays);
+  if(Array.isArray(s.holidays)) state.holidays = new Set(s.holidays);
+  if(s.ratioP!=null) state.ratioP = s.ratioP;
+  if(s.customStart) state.customStart = s.customStart;
+  if(s.customEnd) state.customEnd = s.customEnd;
+  if(s.overTieMinVisits!=null) state.overTieMinVisits = s.overTieMinVisits;
+  if(s.overTieMinRatio!=null) state.overTieMinRatio = s.overTieMinRatio;
+  if(s.applyGenderPass!=null) state.applyGenderPass = s.applyGenderPass;
+  if(s.globalDistanceBias!=null) state.globalDistanceBias = s.globalDistanceBias;
+  if(s.familiarityGamma!=null) state.familiarityGamma = s.familiarityGamma;
+  if(s.hardBlockOverTied!=null) state.hardBlockOverTied = s.hardBlockOverTied;
+  if(s.mode) state.mode = s.mode;
+  if(s.countsM!=null) state.countsM = s.countsM;
+  if(s.countsR!=null) state.countsR = s.countsR;
+}
+function saveSettings(){
+  store.settings = {
+    range: state.range, weekdays:[...state.weekdays], holidays:[...state.holidays],
+    ratioP: state.ratioP, customStart: state.customStart, customEnd: state.customEnd,
+    overTieMinVisits: state.overTieMinVisits, overTieMinRatio: state.overTieMinRatio,
+    applyGenderPass: state.applyGenderPass, globalDistanceBias: state.globalDistanceBias,
+    familiarityGamma: state.familiarityGamma, hardBlockOverTied: state.hardBlockOverTied,
+    mode: state.mode, countsM: state.countsM, countsR: state.countsR
+  };
+  persistStore();
+  markPlanStaleIfNeeded();
+}
+function loadPersonAliasesOverrides(){
+  return Object.assign({}, (store.aliases&&store.aliases.people)||{});
+}
+function savePersonAliases(){
+  store.aliases = store.aliases||{people:{},facilities:{}};
+  store.aliases.people = state.personAliasOverrides;
+  persistStore();
+}
+function serializePersonOverride(p){
+  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity};
+}
+function loadPeople(){
+  let flat = Array.isArray(store.people) ? store.people : [];
+  if(!flat.length){
+    flat = FIN_ADMIN_SEED.map(p=>Object.assign(freshPerson(p),{pool:'fin'}))
+      .concat(CLINICAL_SEED.map(p=>Object.assign(freshPerson(p),{pool:'clin'})))
+      .concat(RETIRED_SEED.map(p=>Object.assign(freshPerson(p),{pool:'retired'})));
+  }
+  const fin=[], clin=[], retired=[];
+  for(const raw of flat){
+    const p = freshPerson(raw);
+    (p.pool==='clin'?clin:p.pool==='retired'?retired:fin).push(p);
+  }
+  return {fin, clin, retired};
+}
+function savePeople(){
+  store.people = [...state.finPool, ...state.clinPool, ...state.retiredPool].map(serializePersonOverride);
+  persistStore();
+  markPlanStaleIfNeeded();
+}
+function loadRegistry(){
+  const seedFresh = buildRegistry(REGISTRY_SEED);
+  const saved = store.facilities;
+  if(Array.isArray(saved) && saved.length){
+    const merged = deserializeRegistry(saved);
+    const existingNames = new Set(merged.map(f=>normFacility(f.name)));
+    for(const f of seedFresh) if(!existingNames.has(normFacility(f.name))) merged.push(f);
+    return merged;
+  }
   return seedFresh;
 }
 function saveRegistry(){
-  localStorage.setItem('alkhitta.registry', JSON.stringify(serializeRegistry(state.registry)));
+  store.facilities = serializeRegistry(state.registry);
+  persistStore();
   markPlanStaleIfNeeded();
 }
 function markPlanStaleIfNeeded(){
   if(state.plan) state.planStale = true;
 }
-function loadLocationOverrides(){
-  try{
-    const raw = localStorage.getItem('alkhitta.locationKm');
-    if(raw) return JSON.parse(raw);
-  }catch(e){}
-  return {};
-}
-function saveLocationOverrides(map){
-  localStorage.setItem('alkhitta.locationKm', JSON.stringify(map));
+function applyStoreToRuntime(){
+  loadSettings();
+  loadHistoryStats();
+  state.personAliasOverrides = loadPersonAliasesOverrides();
+  state.unresolvedNamesQueue = loadUnresolvedNames();
+  state.registry = loadRegistry();
+  const people = loadPeople();
+  state.finPool = people.fin; state.clinPool = people.clin; state.retiredPool = people.retired;
 }
 let activePopover = null;
 function Popover(anchor, buildContent, opts){
@@ -2780,14 +2877,8 @@ function buildPrintSurface(){
 }
 function doPrint(){ buildPrintSurface(); window.print(); }
 function doExportBackup(){
-  const backup = {
-    registry: serializeRegistry(state.registry),
-    people: {fin:state.finPool, clin:state.clinPool, retired:state.retiredPool},
-    settings: {range:state.range, weekdays:[...state.weekdays], holidays:[...state.holidays], ratioP:state.ratioP},
-    historyStats: {facilityPersonVisits:state.facilityPersonVisits, finInitialCounts:state.finInitialCounts, clinInitialCounts:state.clinInitialCounts, lastCycleNumber:state.lastCycleNumber},
-    version:2, exportedAt: fmtISO(new Date())
-  };
-  downloadBlob(new TextEncoder().encode(JSON.stringify(backup, null, 2)), 'alkhitta-backup.json', 'application/json');
+  const backup = Object.assign({}, store, {exportedAt: fmtISO(new Date())});
+  downloadBlob(new TextEncoder().encode(JSON.stringify(backup, null, 2)), 'alkhitta-settings.json', 'application/json');
 }
 function currentExportOpts(){
   return {mode: state.exportMode, columns: state.exportColumns, exceptions: state.exportExceptions};
@@ -3278,7 +3369,7 @@ function renderPeriodRowBody(){
 function renderDistributionRowBody(){
   const wrap = el('div', null); const seg = el('div', {class:'segmented'});
   [['ratio', t('percentToggle')], ['counts', '#']].forEach(([val,label])=>{
-    seg.appendChild(el('button', {type:'button', 'aria-pressed': state.mode===val?'true':'false', onclick:()=>{ state.mode=val; renderActiveTab(); }}, label));
+    seg.appendChild(el('button', {type:'button', 'aria-pressed': state.mode===val?'true':'false', onclick:()=>{ state.mode=val; saveSettings(); renderActiveTab(); }}, label));
   }); wrap.appendChild(seg);
   const budget = previewSlotBudget();
   if(state.mode==='ratio'){
@@ -3911,25 +4002,32 @@ function renderSettingsTab(root){
   const restoreInput = el('input', {type:'file', accept:'.json', style:'display:none', onchange:e=>{
     const f = e.target.files[0]; if(!f) return;
     f.text().then(text=>{
+      let incoming;
       try{
-        const backup = JSON.parse(text);
-        if(backup.registry) state.registry = deserializeRegistry(backup.registry);
-        if(backup.people){
-          state.finPool = (backup.people.fin||[]).map(p=>Object.assign(freshPerson(p),{pool:'fin'}));
-          state.clinPool = (backup.people.clin||[]).map(p=>Object.assign(freshPerson(p),{pool:'clin'}));
-          state.retiredPool = (backup.people.retired||[]).map(p=>Object.assign(freshPerson(p),{pool:'retired'}));
+        const raw = JSON.parse(text);
+        if(raw && raw.version===3 && raw.settings && Array.isArray(raw.facilities) && Array.isArray(raw.people)){
+          incoming = normalizeStoreV3(raw);
+        } else if(raw && raw.version===2){
+          incoming = legacyV2BackupToStore(raw);
+        } else {
+          throw new Error('unsupported backup version');
         }
-        if(backup.historyStats){
-          state.facilityPersonVisits = backup.historyStats.facilityPersonVisits||{};
-          state.finInitialCounts = backup.historyStats.finInitialCounts||{};
-          state.clinInitialCounts = backup.historyStats.clinInitialCounts||{};
-          state.lastCycleNumber = backup.historyStats.lastCycleNumber||0;
-        }
-        saveRegistry(); savePeople(); saveHistoryStats();
-        markPlanStaleIfNeeded();
+      }catch(err){
+        showToast(t('restoreError'));
+        return;
+      }
+      const snapshot = store;
+      store = incoming;
+      applyStoreToRuntime();
+      persistStore();
+      markPlanStaleIfNeeded();
+      renderActiveTab();
+      showToast(t('importedToast'), {label:t('undoImport'), onClick:()=>{
+        store = snapshot;
+        applyStoreToRuntime();
+        persistStore();
         renderActiveTab();
-        showToast(t('importedToast'));
-      }catch(err){}
+      }});
     });
   }});
   const restoreBtn = el('button', {type:'button', class:'btn'}, t('restoreAction2'));
@@ -4437,15 +4535,48 @@ async function runSelfTests(){
     }
     return 'ok';
   });
+  check('store: JSON round-trip preserves shape (B1)', ()=>{
+    const sample = {
+      version:3,
+      settings: Object.assign(defaultStoreSettings(), {mode:'counts', countsM:5, countsR:9, ratioP:0.4}),
+      facilities: [{id:'f_x', name:'ت', category:'الاولي', location:'دمنهور', kind:'basic', weight:1, lastVisit:null, visitCount:0, pinned:false, manualExcluded:false, reviewFlag:null, distanceKm:0, visitHistory:[]}],
+      people: [{id:'p_x', name:'ص', pool:'clin', gender:'f', active:true, weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], distanceAffinity:0}],
+      history:{facilityPersonVisits:{'f_x|p_x':2}, initialCounts:{fin:{p_y:1}, clin:{}}, lastCycleNumber:7},
+      aliases:{people:{alt:'p_x'}, facilities:{}},
+      unresolvedNames:[{key:'k', name:'ن', count:1}]
+    };
+    const roundTripped = normalizeStoreV3(JSON.parse(JSON.stringify(sample)));
+    if(roundTripped.settings.mode!=='counts' || roundTripped.settings.countsM!==5 || roundTripped.settings.countsR!==9)
+      throw new Error('settings.mode/countsM/countsR lost in round-trip');
+    if(roundTripped.people.length!==1 || roundTripped.people[0].pool!=='clin')
+      throw new Error('flat people array with pool field not preserved');
+    if(roundTripped.facilities.length!==1) throw new Error('facilities lost');
+    if(roundTripped.history.initialCounts.fin.p_y!==1) throw new Error('history.initialCounts lost');
+    if(roundTripped.history.lastCycleNumber!==7) throw new Error('lastCycleNumber lost');
+    if(roundTripped.aliases.people.alt!=='p_x') throw new Error('aliases.people lost');
+    if(roundTripped.unresolvedNames.length!==1) throw new Error('unresolvedNames lost');
+    return 'settings, facilities, flat people+pool, history, aliases, unresolvedNames all round-trip';
+  });
+  check('store: legacy v2 backup maps onto v3 shape (A3 fix)', ()=>{
+    const legacy = {
+      version:2,
+      registry: [{id:'f_y', name:'م', category:'مستشفي', location:'رشيد', kind:'contracted'}],
+      people: {fin:[{id:'p_a', name:'ا', gender:'m'}], clin:[], retired:[]},
+      settings: {range:'quarter', weekdays:[0,1,2], holidays:[], ratioP:0.3},
+      historyStats: {facilityPersonVisits:{}, finInitialCounts:{p_a:2}, clinInitialCounts:{}, lastCycleNumber:3}
+    };
+    const mapped = legacyV2BackupToStore(legacy);
+    if(mapped.facilities.length!==1) throw new Error('legacy registry not mapped to facilities');
+    if(mapped.people.length!==1 || mapped.people[0].pool!=='fin') throw new Error('legacy people not flattened with pool');
+    if(mapped.settings.range!=='quarter' || mapped.settings.ratioP!==0.3) throw new Error('legacy settings not folded in');
+    if(mapped.history.initialCounts.fin.p_a!==2) throw new Error('legacy historyStats not mapped');
+    return 'ok';
+  });
 return results;
 }
 (function init(){
-  loadSettings();
-  loadHistoryStats();
-  state.personAliasOverrides = loadPersonAliasesOverrides();
-  state.registry = loadRegistry();
-  const people = loadPeople();
-  state.finPool = people.fin; state.clinPool = people.clin; state.retiredPool = people.retired;
+  store = hydrateStore();
+  applyStoreToRuntime();
   initShell();
 })();
 </script>
