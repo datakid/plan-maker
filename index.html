@@ -478,6 +478,36 @@ function distanceTerm(f, dctx, bias){
   if(!dctx || km==null || !bias) return 1;
   return Math.min(2, Math.max(0.15, 1 + bias*(dctx.nrm(km) - dctx.mean)));
 }
+function travelKm(person, facility){
+  const fKm = facilityKm(facility);
+  if(fKm==null) return null;
+  if(state.originMode==='ignore') return fKm;
+  if(facility.locationId && person.originLocationId && facility.locationId===person.originLocationId) return 0;
+  const originLoc = person.originLocationId ? state.locations.find(l=>l.id===person.originLocationId) : null;
+  return fKm + (originLoc ? originLoc.km : 0);
+}
+function travelContext(pool, registry){
+  const known = [];
+  for(const p of pool){
+    for(const f of registry){
+      const km = travelKm(p, f);
+      if(km!=null) known.push(km);
+    }
+  }
+  known.sort((a,b)=>a-b);
+  if(known.length < 3) return null;
+  const p90 = known[Math.floor(known.length*0.9)] || known[known.length-1];
+  const nrm = km => Math.min(1, Math.max(0, km/(p90||1)));
+  const mean = known.reduce((s,k)=>s+nrm(k),0)/known.length;
+  return {nrm, mean};
+}
+const ORIGIN_FAVOR_STRENGTH = 0.5;
+function originTerm(person, facility, tctx, originMode){
+  if(originMode!=='favor' || !tctx) return 1;
+  const km = travelKm(person, facility);
+  if(km==null) return 1;
+  return Math.min(2, Math.max(0.15, 1 - ORIGIN_FAVOR_STRENGTH*(tctx.nrm(km) - tctx.mean)));
+}
 function rankStream(facilities, planStart, NEVER, dctx, bias){
   const scored = facilities.map(f=>{
     const overdue = f.pinned ? Infinity
@@ -578,7 +608,8 @@ function sainteLagueAssign(pool, count, day, ctx){
       if(baseWeight<=0) continue;
       const vpf = ctx.facilityPersonVisits ? Math.min(ctx.facilityPersonVisits[ctx.facility.id+'|'+p.id]||0, 6) : 0;
       const dTerm = distanceTerm(ctx.facility, ctx.dctx, p.distanceAffinity||0);
-      const effWeight = baseWeight * dTerm * (1/(1+gamma*vpf));
+      const oTerm = originTerm(p, ctx.facility, ctx.tctx, ctx.originMode);
+      const effWeight = baseWeight * dTerm * oTerm * (1/(1+gamma*vpf));
       const finalKey = (assignedCount+0.5)/effWeight;
       if(finalKey<bestKey){
         bestKey=finalKey; best=p; bestIdx=idx;
@@ -684,7 +715,7 @@ function generatePlan(opts){
     registry, finPool, clinPool, startDate, endDate, weekdays, holidays, exceptions,
     mode, ratioP, countsM, countsR, applyGender,
     finInitial, clinInitial, isOverTied, isUnavailable, isBlocked,
-    facilityPersonVisits, globalDistanceBias, familiarityGamma, hardBlockOverTied
+    facilityPersonVisits, globalDistanceBias, familiarityGamma, hardBlockOverTied, originMode
   } = opts;
   const days = workingDays(startDate, endDate, weekdays, holidays, exceptions);
   const N = days.length;
@@ -694,6 +725,7 @@ function generatePlan(opts){
   const NEVER = computeNever(registry);
   const dctx = distanceContext(registry);
   const bias = globalDistanceBias||0;
+  const tctx = originMode==='favor' ? travelContext([...finPool, ...clinPool], registry) : null;
   const rankedBasic = rankStream(basicFac, days[0]||startDate, NEVER, dctx, bias);
   const rankedContracted = rankStream(contractedFac, days[0]||startDate, NEVER, dctx, bias);
   const pattern = interleave(budget.M+budget.R, budget.M);
@@ -721,7 +753,7 @@ function generatePlan(opts){
   for(const row of rows){
     if(row.empty) continue;
     const finCount = row.kind==='basic'?2:1;
-    const ctx = {facility:row.facility, isUnavailable, isBlocked, isOverTied, dctx, facilityPersonVisits, familiarityGamma, hardBlockOverTied};
+    const ctx = {facility:row.facility, isUnavailable, isBlocked, isOverTied, dctx, facilityPersonVisits, familiarityGamma, hardBlockOverTied, tctx, originMode};
     row.finTeam = sainteLagueAssign(finPool, finCount, row.date, Object.assign({}, ctx, {assignedCount:finAssigned}));
     row.clinTeam = sainteLagueAssign(clinPool, 2, row.date, Object.assign({}, ctx, {assignedCount:clinAssigned}));
   }
@@ -999,8 +1031,10 @@ const RETIRED_SEED = [
   {id:'p_hindawy', name:'هنداوي', gender:'m'},
   {id:'p_sobhy', name:'صبحي', gender:'m'}
 ];
+const PERSON_ORIGIN_SEED = {p_shaltoot:'ايتاي', p_mariam:'كفر الدوار', p_asmaa:'النفرة'};
 function freshPerson(p){
-  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0}, p);
+  const originName = (p && PERSON_ORIGIN_SEED[p.id]) || 'دمنهور';
+  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0, originLocationId: locationIdFor(originName)}, p);
 }
 function escapeXml(s){
   return String(s==null?'':s)
@@ -1513,6 +1547,7 @@ minVisitsLabel:'أقل عدد زيارات', minRatioLabel:'أقل نسبة ٪',
 familiarityGammaLabel:'معامل الإلفة',
 familiarityGammaHint:'كلما زاد، تنوّع الأشخاص على نفس الجهة أكثر',
 distanceBiasLabel:'ميل المسافة العام', genderPassLabel:'موازنة النوع 3-1',
+originModeLabel:'نقطة الانطلاق', originIgnore:'لا تحتسب', originCount:'تحتسب', originFavor:'تفضّل',
 settingsData:'البيانات', backupAction:'نسخة احتياطية', restoreAction2:'استعادة',
 resetAction:'إعادة ضبط', confirmReset:'سيُعاد ضبط كل البيانات المحلية لهذا التطبيق.',
 selfTestAction:'الفحص الذاتي', selfTestRunning:'جارٍ التنفيذ...', selfTestPass:'نجح', selfTestFail:'فشل',
@@ -1628,6 +1663,7 @@ minVisitsLabel:'Min visits', minRatioLabel:'Min ratio %', hardBlockLabel:'Hard b
 familiarityGammaLabel:'Familiarity gamma',
 familiarityGammaHint:'Higher spreads more distinct people across a facility',
 distanceBiasLabel:'Overall distance bias', genderPassLabel:'Gender 3-1 balance',
+originModeLabel:'Origin point', originIgnore:'Ignore', originCount:'Count', originFavor:'Favor',
 settingsData:'Data', backupAction:'Backup', restoreAction2:'Restore',
 resetAction:'Reset', confirmReset:'All local data for this app will be reset.',
 selfTestAction:'Self-test', selfTestRunning:'Running...', selfTestPass:'Pass', selfTestFail:'Fail',
@@ -1688,7 +1724,7 @@ const state = {
   tab: (location.hash||'#plan').replace('#','') || 'plan',
   range: 'month', customStart:null, customEnd:null,
   weekdays: new Set([1,2,3,4]), holidays: new Set(),
-  mode:'ratio', ratioP:0.68, countsM:null, countsR:null, splitAsPercent:false,
+  mode:'ratio', ratioP:0.68, countsM:null, countsR:null, originMode:'count', splitAsPercent:false,
   registry:null, locations:null, finPool:null, clinPool:null, retiredPool:null,
   plan:null, planApproved:false, planStale:false,
   personAliasOverrides:{},
@@ -1716,7 +1752,7 @@ function defaultStoreSettings(){
     customStart:null, customEnd:null,
     overTieMinVisits:3, overTieMinRatio:0.6, applyGenderPass:true,
     globalDistanceBias:0, familiarityGamma:0.35, hardBlockOverTied:false,
-    mode:'ratio', countsM:null, countsR:null
+    mode:'ratio', countsM:null, countsR:null, originMode:'count'
   };
 }
 function emptyStore(){
@@ -1875,6 +1911,7 @@ function loadSettings(){
   if(s.familiarityGamma!=null) state.familiarityGamma = s.familiarityGamma;
   if(s.hardBlockOverTied!=null) state.hardBlockOverTied = s.hardBlockOverTied;
   if(s.mode) state.mode = s.mode;
+  if(s.originMode) state.originMode = s.originMode;
   if(s.countsM!=null) state.countsM = s.countsM;
   if(s.countsR!=null) state.countsR = s.countsR;
 }
@@ -1885,7 +1922,7 @@ function saveSettings(){
     overTieMinVisits: state.overTieMinVisits, overTieMinRatio: state.overTieMinRatio,
     applyGenderPass: state.applyGenderPass, globalDistanceBias: state.globalDistanceBias,
     familiarityGamma: state.familiarityGamma, hardBlockOverTied: state.hardBlockOverTied,
-    mode: state.mode, countsM: state.countsM, countsR: state.countsR
+    mode: state.mode, countsM: state.countsM, countsR: state.countsR, originMode: state.originMode
   };
   persistStore();
   markPlanStaleIfNeeded();
@@ -1899,7 +1936,7 @@ function savePersonAliases(){
   persistStore();
 }
 function serializePersonOverride(p){
-  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity};
+  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity, originLocationId:p.originLocationId};
 }
 function loadPeople(){
   let flat = Array.isArray(store.people) ? store.people : [];
@@ -3337,7 +3374,7 @@ function handleGenerate(){
     isOverTied: makeOverTiedChecker(state.facilityPersonVisits, state.overTieMinVisits, state.overTieMinRatio),
     isUnavailable: makeUnavailableChecker(), isBlocked: makeBlockedChecker(),
     facilityPersonVisits: state.facilityPersonVisits, globalDistanceBias: state.globalDistanceBias,
-    familiarityGamma: state.familiarityGamma, hardBlockOverTied: state.hardBlockOverTied
+    familiarityGamma: state.familiarityGamma, hardBlockOverTied: state.hardBlockOverTied, originMode: state.originMode
   }); const gates = computeGates(plan, state.registry, retiredIds);
   const totals = computeTotals(plan.rows); const nonEmpty = plan.rows.filter(r=>!r.empty);
   state.plan = plan;
@@ -4045,6 +4082,14 @@ function renderSettingsTab(root){
   biasField.appendChild(el('label', {class:'field-label'}, t('distanceBiasLabel')));
   biasField.appendChild(SliderField({min:-1, max:1, step:0.1, value:state.globalDistanceBias, zeroCentered:true, labels:[t('distanceNear'),t('distanceFar')], onChange:(v,committed)=>{ state.globalDistanceBias=v; if(committed) saveSettings(); }}));
   fairness.appendChild(biasField);
+  const originField = el('div', {class:'field'});
+  originField.appendChild(el('label', {class:'field-label'}, t('originModeLabel')));
+  const originSeg = el('div', {class:'segmented'});
+  [['ignore', t('originIgnore')], ['count', t('originCount')], ['favor', t('originFavor')]].forEach(([val,label])=>{
+    originSeg.appendChild(el('button', {type:'button', 'aria-pressed': (state.originMode||'count')===val?'true':'false', onclick:()=>{ state.originMode=val; saveSettings(); renderActiveTab(); }}, label));
+  });
+  originField.appendChild(originSeg);
+  fairness.appendChild(originField);
   fairness.appendChild(settingsRow(t('genderPassLabel'), null, settingsSwitch(state.applyGenderPass, ()=>{ state.applyGenderPass=!state.applyGenderPass; saveSettings(); renderActiveTab(); })));
   card.appendChild(fairness);
   const dataSection = el('div', {class:'settings-section'});
@@ -4352,6 +4397,23 @@ async function runSelfTests(){
     if(JSON.stringify(snap(a))!==JSON.stringify(snap(b))) throw new Error('plans diverged with no distances entered');
     return `${a.rows.filter(r=>!r.empty).length} rows byte-identical`;
   });
+  check('origin no-op: ignore/count modes produce byte-identical plans to the pre-B3 baseline (B3)', ()=>{
+    const args = originMode=>({
+      registry: buildRegistry(REGISTRY_SEED),
+      finPool: FIN_ADMIN_SEED.map(freshPerson),
+      clinPool: CLINICAL_SEED.map(freshPerson),
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.68, originMode
+    });
+    const snap = plan => plan.rows.map(r=>r.empty?null:{d:fmtISO(r.date), f:r.facility.id, fin:r.finTeam.map(p=>p.id), clin:r.clinTeam.map(p=>p.id)});
+    const base = snap(generatePlan(args(undefined)));
+    const ignore = snap(generatePlan(args('ignore')));
+    const count = snap(generatePlan(args('count')));
+    if(JSON.stringify(base)!==JSON.stringify(ignore)) throw new Error('originMode=ignore diverged from the no-origin baseline');
+    if(JSON.stringify(base)!==JSON.stringify(count)) throw new Error('originMode=count diverged from the no-origin baseline');
+    return 'ok';
+  });
   check('distanceTerm at bias 0 is neutral for every facility', ()=>{
     const savedLocations = state.locations;
     try{
@@ -4420,6 +4482,55 @@ async function runSelfTests(){
       state.locations = savedLocations;
       state.registry = savedRegistry;
     }
+  });
+  check('travelKm: 0 at the origin facility, otherwise facilityKm+originKm; ignore mode reduces to facilityKm (B3)', ()=>{
+    const savedLocations = state.locations, savedOriginMode = state.originMode;
+    try{
+      const locHome = {id:'loc_home', name:'home', km:0};
+      const locFar = {id:'loc_far', name:'far', km:40};
+      state.locations = [locHome, locFar];
+      const person = {originLocationId:'loc_far'};
+      const facilityAtOrigin = {locationId:'loc_far'};
+      const facilityElsewhere = {locationId:'loc_home'};
+      state.originMode = 'count';
+      if(travelKm(person, facilityAtOrigin)!==0) throw new Error('expected 0 when facility matches origin');
+      if(travelKm(person, facilityElsewhere)!==40) throw new Error('expected facilityKm(0)+originKm(40)=40, got '+travelKm(person, facilityElsewhere));
+      state.originMode = 'ignore';
+      if(travelKm(person, facilityElsewhere)!==0) throw new Error('ignore mode should reduce to facilityKm alone');
+      return 'ok';
+    } finally {
+      state.locations = savedLocations;
+      state.originMode = savedOriginMode;
+    }
+  });
+  check('origin favor: closer-to-origin person is preferred over an equally-weighted farther one (B3)', ()=>{
+    const savedLocations = state.locations;
+    try{
+      const locA = {id:'loc_a', name:'a', km:0};
+      const locB = {id:'loc_b', name:'b', km:50};
+      state.locations = [locA, locB];
+      const near = freshPerson({id:'p_near', name:'near', originLocationId:'loc_a', weight:1});
+      const far = freshPerson({id:'p_far', name:'far', originLocationId:'loc_b', weight:1});
+      const facility = {id:'f_x', locationId:'loc_a'};
+      const tctx = travelContext([near, far], [facility]);
+      const ctx = {facility, dctx:null, facilityPersonVisits:{}, familiarityGamma:0, assignedCount:{}, tctx, originMode:'favor'};
+      const chosen = sainteLagueAssign([near, far], 1, new Date(2026,8,7), ctx);
+      if(!chosen.length || chosen[0].id!=='p_near') throw new Error('expected the near-origin person to be preferred, got '+(chosen[0]&&chosen[0].id));
+      return 'ok';
+    } finally {
+      state.locations = savedLocations;
+    }
+  });
+  check('origin seed defaults: شلتوت/مريم/أسماء get their named origins, everyone else دمنهور (B3)', ()=>{
+    const shaltoot = freshPerson({id:'p_shaltoot'});
+    const mariam = freshPerson({id:'p_mariam'});
+    const asmaa = freshPerson({id:'p_asmaa'});
+    const other = freshPerson({id:'p_abaza'});
+    if(shaltoot.originLocationId!==locationIdFor('ايتاي')) throw new Error('شلتوت origin mismatch');
+    if(mariam.originLocationId!==locationIdFor('كفر الدوار')) throw new Error('مريم origin mismatch');
+    if(asmaa.originLocationId!==locationIdFor('النفرة')) throw new Error('أسماء origin mismatch');
+    if(other.originLocationId!==locationIdFor('دمنهور')) throw new Error('default origin should be دمنهور');
+    return 'ok';
   });
   check('hydrateLocations: seeds from LOCATION_DISTANCE_KM plus النفرة=8, backfills facility locationId', ()=>{
     const savedLocations = state.locations, savedRegistry = state.registry, savedStoreLocations = store.locations;
