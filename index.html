@@ -14,7 +14,12 @@
 :root[data-theme="dark"]{--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#6E606A; --ink-300:#544750; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#6E606A; --ink-300:#544750; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
 }
-html{color-scheme:light dark}
+html{color-scheme:light dark; scrollbar-width:thin; scrollbar-color:var(--hairline-strong) transparent}
+input[type="checkbox"], input[type="radio"]{accent-color:var(--primary)}
+::-webkit-scrollbar{width:8px; height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--hairline-strong); border-radius:999px}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-400)}
 body{margin:0; background:var(--bg-page); color:var(--ink-900); font-family:"IBM Plex Sans Arabic","Noto Sans Arabic",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; font-variant-numeric:tabular-nums; line-height:1.65; transition:background var(--motion), color var(--motion); font-size:14px}
 body::before{content:""; position:fixed; inset:0; z-index:999; pointer-events:none; opacity:.025; mix-blend-mode:multiply; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 h1,h2,h3,h4{font-family:inherit; margin:0; line-height:1.3}
@@ -129,6 +134,15 @@ a{color:inherit}
 .calendar-head button{width:28px; height:28px; border-radius:50%; background:transparent; border:0; color:var(--ink-700)}
 .calendar-head button:hover{background:var(--wash-hover)}
 .calendar-head .label{font-size:14px; font-weight:600}
+.calendar-jump-row{display:flex; align-items:center; gap:6px; padding:0 4px 8px}
+.calendar-year-step{display:flex; align-items:center; gap:4px; font-size:13px; color:var(--ink-700); flex-shrink:0}
+.calendar-year-step button{width:22px; height:22px; border-radius:50%; background:transparent; border:0; color:var(--ink-500); font-size:13px; line-height:1}
+.calendar-year-step button:hover{background:var(--wash-hover); color:var(--ink-900)}
+.calendar-jump-input{flex:1; min-width:0; height:30px; padding-inline:8px; border-radius:var(--r-ctl); border:1px solid var(--hairline); background:var(--bg-raised); color:var(--ink-900); font-size:13px}
+.calendar-jump-input:focus-visible{border-color:var(--primary)}
+.calendar-paste{margin-block-start:8px}
+.calendar-paste-area{width:100%; min-height:60px; padding:8px; border-radius:var(--r-ctl); border:1px solid var(--hairline); background:var(--bg-raised); color:var(--ink-900); font-size:13px; font-family:inherit; resize:vertical; margin-block-end:6px}
+.calendar-paste-area:focus-visible{border-color:var(--primary)}
 .calendar-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px}
 .calendar-grid .wd{font-size:13px; color:var(--ink-500); text-align:center; padding-block:4px; font-weight:600}
 .calendar-day{width:100%; aspect-ratio:1; border-radius:8px; border:0; background:transparent; color:var(--ink-900); font-size:13px; transition:background var(--motion), color var(--motion)}
@@ -249,7 +263,7 @@ a{color:inherit}
 .review-toggle{margin-inline-start:auto}
 .fac-table-head{display:grid; grid-template-columns:26px 1.6fr .9fr .9fr .6fr .6fr .8fr .6fr .6fr; gap:8px; padding:8px 12px; font-size:13px; color:var(--ink-500); font-weight:600; border-block-end:1px solid var(--hairline)}
 .fac-row{display:grid; grid-template-columns:26px 1.6fr .9fr .9fr .6fr .6fr .8fr .6fr .6fr; gap:8px; align-items:center; padding:11px 12px; border-radius:var(--r-ctl); cursor:pointer; transition:background var(--motion); font-size:13px; border:0; background:transparent; width:100%; text-align:start}
-.fac-row-check{width:16px; height:16px}
+.fac-row-check{width:16px; height:16px; accent-color:var(--primary)}
 .fac-row:hover{background:var(--wash-hover)}
 .fac-row .fname{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .fac-row .fmeta{color:var(--ink-500); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -410,6 +424,54 @@ function validYMD(y,mo,d){
   const dt = new Date(y,mo,d);
   if(dt.getFullYear()!==y||dt.getMonth()!==mo||dt.getDate()!==d) return null;
   return dt;
+}
+function parseMonthYear(raw){
+  if(raw==null) return null;
+  let s = toAsciiDigits(String(raw)).trim();
+  if(!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})$/);
+  if(m){
+    const y=+m[1], mo=+m[2]-1;
+    return (y>=1900&&y<=2200&&mo>=0&&mo<=11) ? {year:y, month:mo} : null;
+  }
+  m = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if(m){
+    const mo=+m[1]-1, y=+m[2];
+    return (y>=1900&&y<=2200&&mo>=0&&mo<=11) ? {year:y, month:mo} : null;
+  }
+  m = s.match(/^([A-Za-z\u0600-\u06FF]+)\.?\s+(\d{4})$/);
+  if(m){
+    const y=+m[2];
+    const monKey = m[1].trim();
+    let mo = MONTHS_AR[monKey];
+    if(mo===undefined) mo = MONTHS_EN[monKey.slice(0,3).toLowerCase()];
+    if(mo===undefined) return null;
+    return (y>=1900&&y<=2200) ? {year:y, month:mo} : null;
+  }
+  return null;
+}
+function parseDateList(text){
+  const accepted = [];
+  const rejected = [];
+  const tokens = String(text||'').split(/[,،\n;]+/).map(s=>s.trim()).filter(Boolean);
+  for(const tok of tokens){
+    const parts = tok.split(/\.\.|إلى/).map(s=>s.trim()).filter(Boolean);
+    if(parts.length===2){
+      const start = parseDateFlexible(parts[0]);
+      const end = parseDateFlexible(parts[1]);
+      if(start && end && start<=end){
+        let d = start;
+        while(d<=end){ accepted.push(fmtISO(d)); d = addDays(d,1); }
+      } else {
+        rejected.push(tok);
+      }
+      continue;
+    }
+    const single = parseDateFlexible(tok);
+    if(single) accepted.push(fmtISO(single));
+    else rejected.push(tok);
+  }
+  return {accepted, rejected};
 }
 function fmtISO(dt){
   const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), d=String(dt.getDate()).padStart(2,'0');
@@ -1455,6 +1517,11 @@ workingDaysSummary:(n,names)=>`${n} يوم عمل · ${names}`,
 holidaysTrigger:n=>n===0?'لا إجازات':`${n} إجازات`,
 holidaysTitle:'إجازات إضافية', weekdaysLabel:'أيام العمل',
 quickThisThursday:'كل خميس', quickNextWeek:'الأسبوع القادم', quickClear:'مسح',
+prevYear:'السنة السابقة', nextYear:'السنة التالية', jumpToMonth:'الانتقال إلى شهر',
+jumpPlaceholder:'٢٠٢٦-٠٩، سبتمبر ٢٠٢٦...',
+pasteDatesLabel:'الصق تواريخ', pasteDatesPlaceholder:'٢٠٢٦-٠٩-١٠, ٢٠٢٦-٠٩-١٤..٢٠٢٦-٠٩-١٨...',
+pasteDatesAdd:'إضافة', pasteDatesResult:n=>`تم قبول ${n} تاريخ`,
+pasteDatesResultWithRejected:(ok,total,list)=>`تم قبول ${ok} من ${total} — مرفوض: ${list}`,
 rangeInvalid:'تاريخ النهاية قبل البداية',
 distributionTitle:'التوزيع', basicLabel:'أساسي', contractedLabel:'متعاقد',
 distributionSummary:(m,r)=>`${m} أساسي / ${r} متعاقد`,
@@ -1571,6 +1638,11 @@ workingDaysSummary:(n,names)=>`${n} working days · ${names}`,
 holidaysTrigger:n=>n===0?'No holidays':`${n} holidays`,
 holidaysTitle:'Extra holidays', weekdaysLabel:'Working days',
 quickThisThursday:'Every Thursday', quickNextWeek:'Next week', quickClear:'Clear',
+prevYear:'Previous year', nextYear:'Next year', jumpToMonth:'Jump to month',
+jumpPlaceholder:'2026-09, Sep 2026...',
+pasteDatesLabel:'Paste dates', pasteDatesPlaceholder:'2026-09-10, 2026-09-14..2026-09-18...',
+pasteDatesAdd:'Add', pasteDatesResult:n=>`${n} date${n===1?'':'s'} accepted`,
+pasteDatesResultWithRejected:(ok,total,list)=>`${ok} of ${total} accepted — rejected: ${list}`,
 rangeInvalid:'End date is before start',
 distributionTitle:'Distribution', basicLabel:'Basic', contractedLabel:'Contracted',
 distributionSummary:(m,r)=>`${m} basic / ${r} contracted`,
@@ -2269,6 +2341,30 @@ function buildCalendarMonth(year, month, opts){
   }
   return grid;
 }
+function buildCalendarHeader(viewDate, onNavigate){
+  const head = el('div', {class:'calendar-head'});
+  head.appendChild(el('button', {type:'button', html:ICONS.chevronRight, 'aria-label':t('back'), onclick:()=>onNavigate(new Date(viewDate.getFullYear(),viewDate.getMonth()-1,1))}));
+  head.appendChild(el('span', {class:'label'}, monthLabelFor(viewDate)));
+  head.appendChild(el('button', {type:'button', html:ICONS.chevronLeft, 'aria-label':t('next'), onclick:()=>onNavigate(new Date(viewDate.getFullYear(),viewDate.getMonth()+1,1))}));
+  return head;
+}
+function buildCalendarJumpRow(viewDate, onNavigate){
+  const row = el('div', {class:'calendar-jump-row'});
+  const yearStep = el('div', {class:'calendar-year-step'});
+  yearStep.appendChild(el('button', {type:'button', 'aria-label':t('prevYear'), onclick:()=>onNavigate(new Date(viewDate.getFullYear()-1,viewDate.getMonth(),1))}, '‹'));
+  yearStep.appendChild(el('span', null, String(viewDate.getFullYear())));
+  yearStep.appendChild(el('button', {type:'button', 'aria-label':t('nextYear'), onclick:()=>onNavigate(new Date(viewDate.getFullYear()+1,viewDate.getMonth(),1))}, '›'));
+  row.appendChild(yearStep);
+  const jumpInput = el('input', {type:'text', class:'calendar-jump-input', placeholder:t('jumpPlaceholder'), 'aria-label':t('jumpToMonth')});
+  function commitJump(){
+    const parsed = parseMonthYear(jumpInput.value);
+    if(parsed){ onNavigate(new Date(parsed.year, parsed.month, 1)); jumpInput.value=''; }
+  }
+  jumpInput.addEventListener('change', commitJump);
+  jumpInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); commitJump(); } });
+  row.appendChild(jumpInput);
+  return row;
+}
 function DateField(config){
   const wrap = el('div', {class:'field date-field'});
   if(config.label) wrap.appendChild(el('label', {class:'field-label'}, config.label));
@@ -2292,11 +2388,8 @@ function DateField(config){
     const body = el('div', {class:'calendar'});
     function renderMonth(){
       clear(body);
-      const head = el('div', {class:'calendar-head'});
-      head.appendChild(el('button', {type:'button', html:ICONS.chevronRight, 'aria-label':t('back'), onclick:()=>{ viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()-1,1); renderMonth(); }}));
-      head.appendChild(el('span', {class:'label'}, monthLabelFor(viewDate)));
-      head.appendChild(el('button', {type:'button', html:ICONS.chevronLeft, 'aria-label':t('next'), onclick:()=>{ viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()+1,1); renderMonth(); }}));
-      body.appendChild(head);
+      body.appendChild(buildCalendarHeader(viewDate, nd=>{ viewDate=nd; renderMonth(); }));
+      body.appendChild(buildCalendarJumpRow(viewDate, nd=>{ viewDate=nd; renderMonth(); }));
       const grid = buildCalendarMonth(viewDate.getFullYear(), viewDate.getMonth(), {
         selectedTest: iso=>iso===config.value,
         dimTest: config.dimTest,
@@ -2321,29 +2414,27 @@ function DatePickerMulti(config){
   const wrap = el('div', {class:'field'});
   if(config.label) wrap.appendChild(el('label', {class:'field-label'}, config.label));
   const trigger = el('button', {type:'button', class:'ctl-trigger'});
-  const valSpan = el('span', {class:'val'}, config.triggerLabel ? config.triggerLabel(config.values.length) : String(config.values.length));
+  let valueSet = new Set(config.values);
+  const valSpan = el('span', {class:'val'}, config.triggerLabel ? config.triggerLabel(valueSet.size) : String(valueSet.size));
   trigger.appendChild(valSpan);
   trigger.appendChild(el('span', {class:'caret', html:ICONS.calendar}));
   let viewDate = new Date();
+  function emitChange(){ config.onChange([...valueSet]); }
+  function refreshTrigger(){ valSpan.textContent = config.triggerLabel ? config.triggerLabel(valueSet.size) : String(valueSet.size); }
   const pop = Popover(trigger, ()=>{
     const body = el('div', {class:'calendar'});
-    const valueSet = new Set(config.values);
-    function refreshTrigger(){ valSpan.textContent = config.triggerLabel ? config.triggerLabel(valueSet.size) : String(valueSet.size); }
     function renderMonth(){
       clear(body);
-      const head = el('div', {class:'calendar-head'});
-      head.appendChild(el('button', {type:'button', html:ICONS.chevronRight, 'aria-label':t('back'), onclick:()=>{ viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()-1,1); renderMonth(); }}));
-      head.appendChild(el('span', {class:'label'}, monthLabelFor(viewDate)));
-      head.appendChild(el('button', {type:'button', html:ICONS.chevronLeft, 'aria-label':t('next'), onclick:()=>{ viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()+1,1); renderMonth(); }}));
-      body.appendChild(head);
+      body.appendChild(buildCalendarHeader(viewDate, nd=>{ viewDate=nd; renderMonth(); }));
+      body.appendChild(buildCalendarJumpRow(viewDate, nd=>{ viewDate=nd; renderMonth(); }));
       const grid = buildCalendarMonth(viewDate.getFullYear(), viewDate.getMonth(), {
         selectedTest: iso=>valueSet.has(iso),
         dimTest: config.dimTest,
         disabledTest: config.disabledTest,
         onDayClick:(iso)=>{
           if(valueSet.has(iso)) valueSet.delete(iso); else valueSet.add(iso);
-          config.onChange([...valueSet]);
-          renderMonth(); refreshTrigger(); paintChips([...valueSet]);
+          emitChange();
+          renderMonth(); refreshTrigger(); paintChips();
         }
       });
       body.appendChild(grid);
@@ -2351,38 +2442,57 @@ function DatePickerMulti(config){
         const row = el('div', {class:'calendar-quick'});
         row.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
           for(const iso of weekdayISOsInRange(4, config.rangeStart, config.rangeEnd)) valueSet.add(iso);
-          config.onChange([...valueSet]); renderMonth(); refreshTrigger(); paintChips([...valueSet]);
+          emitChange(); renderMonth(); refreshTrigger(); paintChips();
         }}, t('quickThisThursday')));
         row.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
           for(const iso of nextWeekISOs()) valueSet.add(iso);
-          config.onChange([...valueSet]); renderMonth(); refreshTrigger(); paintChips([...valueSet]);
+          emitChange(); renderMonth(); refreshTrigger(); paintChips();
         }}, t('quickNextWeek')));
         row.appendChild(el('button', {type:'button', class:'chip chip-danger', onclick:()=>{
-          valueSet.clear(); config.onChange([]); renderMonth(); refreshTrigger(); paintChips([]);
+          valueSet.clear(); emitChange(); renderMonth(); refreshTrigger(); paintChips();
         }}, t('quickClear')));
         body.appendChild(row);
       }
+      const pasteHead = el('div', {class:'collapsible-head', style:'margin-block-start:10px'}, [el('span', null, t('pasteDatesLabel')), el('span', {class:'car', html:ICONS.chevronDown})]);
+      const pasteBody = el('div', {class:'calendar-paste', hidden:true});
+      const pasteArea = el('textarea', {class:'calendar-paste-area', placeholder:t('pasteDatesPlaceholder'), rows:'3'});
+      const pasteResult = el('div', {class:'field-hint'});
+      pasteBody.appendChild(pasteArea);
+      pasteBody.appendChild(el('button', {type:'button', class:'btn btn-block', onclick:()=>{
+        const {accepted, rejected} = parseDateList(pasteArea.value);
+        for(const iso of accepted) valueSet.add(iso);
+        if(accepted.length) emitChange();
+        pasteResult.textContent = rejected.length
+          ? t('pasteDatesResultWithRejected')(accepted.length, accepted.length+rejected.length, rejected.join('، '))
+          : t('pasteDatesResult')(accepted.length);
+        pasteArea.value = '';
+        renderMonth(); refreshTrigger(); paintChips();
+      }}, t('pasteDatesAdd')));
+      pasteBody.appendChild(pasteResult);
+      pasteHead.addEventListener('click', ()=>{ pasteBody.hidden=!pasteBody.hidden; pasteHead.classList.toggle('open', !pasteBody.hidden); });
+      body.appendChild(pasteHead);
+      body.appendChild(pasteBody);
     }
     renderMonth();
     return body;
   }, {});
   wrap.appendChild(trigger);
   const chipRow = el('div', {class:'multi-chip-row'});
-  function paintChips(values){
+  function paintChips(){
     clear(chipRow);
-    for(const iso of values.slice().sort()){
+    for(const iso of [...valueSet].sort()){
       chipRow.appendChild(el('span', {class:'multi-chip'}, [
         formatDateDisplay(iso),
         el('button', {type:'button', 'aria-label':t('delete'), html:ICONS.x, onclick:()=>{
-          const next = config.values.filter(v=>v!==iso);
-          config.onChange(next);
-          valSpan.textContent = config.triggerLabel ? config.triggerLabel(next.length) : String(next.length);
-          paintChips(next);
+          valueSet.delete(iso);
+          emitChange();
+          refreshTrigger();
+          paintChips();
         }})
       ]));
     }
   }
-  paintChips(config.values);
+  paintChips();
   wrap.appendChild(chipRow);
   if(config.hint) wrap.appendChild(el('span', {class:'field-hint'}, config.hint));
   return wrap;
@@ -4797,6 +4907,45 @@ async function runSelfTests(){
     if(mapped.people.length!==1 || mapped.people[0].pool!=='fin') throw new Error('legacy people not flattened with pool');
     if(mapped.settings.range!=='quarter' || mapped.settings.ratioP!==0.3) throw new Error('legacy settings not folded in');
     if(mapped.history.initialCounts.fin.p_a!==2) throw new Error('legacy historyStats not mapped');
+    return 'ok';
+  });
+  check('parseMonthYear: accepts every format from the B4 spec', ()=>{
+    const cases = [
+      ['2026-09', {year:2026, month:8}],
+      ['9/2026', {year:2026, month:8}],
+      ['سبتمبر 2026', {year:2026, month:8}],
+      ['sep 2026', {year:2026, month:8}],
+      ['٢٠٢٦-٠٩', {year:2026, month:8}]
+    ];
+    for(const [input, expected] of cases){
+      const got = parseMonthYear(input);
+      if(!got || got.year!==expected.year || got.month!==expected.month)
+        throw new Error(`parseMonthYear(${input}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+    }
+    if(parseMonthYear('not a date')!==null) throw new Error('garbage input should return null');
+    return 'ok';
+  });
+  check('parseDateList: mixed formats, .. and إلى ranges, reports rejects', ()=>{
+    const {accepted, rejected} = parseDateList('2026-09-10, 2026-09-12..2026-09-14\n2026-09-20 إلى 2026-09-21; not-a-date، ١٢/٩/٢٠٢٦');
+    if(!accepted.includes('2026-09-10')) throw new Error('single ISO date not accepted');
+    if(!(accepted.includes('2026-09-12')&&accepted.includes('2026-09-13')&&accepted.includes('2026-09-14'))) throw new Error('.. range not expanded inclusively');
+    if(!(accepted.includes('2026-09-20')&&accepted.includes('2026-09-21'))) throw new Error('إلى range not expanded');
+    if(!accepted.includes('2026-09-12')) throw new Error('D/M/YYYY with Arabic-Indic digits not accepted');
+    if(rejected.length!==1 || rejected[0]!=='not-a-date') throw new Error('expected exactly one rejected token, got '+JSON.stringify(rejected));
+    return 'ok';
+  });
+  check('DatePickerMulti: chip delete does not depend on config.values staying in sync (A1 fix)', ()=>{
+    const emitted = [];
+    const config = { values:['2026-09-10','2026-09-15'], onChange: vals=>emitted.push(vals.slice().sort()), triggerLabel: n=>String(n) };
+    const wrap = DatePickerMulti(config);
+    const deleteButtons = () => [...wrap.querySelectorAll('.multi-chip button')];
+    if(deleteButtons().length!==2) throw new Error('expected 2 initial chips, got '+deleteButtons().length);
+    deleteButtons()[0].click();
+    if(emitted.length!==1 || emitted[0].length!==1) throw new Error('first delete did not emit exactly 1 remaining date');
+    config.values = ['totally','stale','garbage'];
+    deleteButtons()[0].click();
+    if(emitted.length!==2 || emitted[1].length!==0) throw new Error('second delete was corrupted by stale config.values — A1 regression');
+    if(deleteButtons().length!==0) throw new Error('expected 0 chips remaining after both deletes');
     return 'ok';
   });
 return results;
