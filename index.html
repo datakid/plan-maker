@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>الخطة</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%236D4461' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M16 3a13 13 0 1 0 13 13'/%3E%3Cpath d='M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6'/%3E%3Ccircle cx='8.5' cy='21' r='2.1' fill='%236D4461' stroke='none'/%3E%3Ccircle cx='25.5' cy='14.6' r='2.1' fill='%236D4461' stroke='none'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
@@ -364,22 +365,27 @@ const DEFAULT_FACILITY_ALIASES = {
 };
 const DEFAULT_PERSON_ALIASES = {
   'لبني':'لبنى','اسماء':'أسماء','اباظة':'أباظة','ابظة':'أباظة',
-  'شرنوبى':'شرنوبي','ميسره':'ميسرة'
+  'شرنوبى':'شرنوبي','ميسره':'ميسرة',
+  'هنداوي':'حاسب الي','صبحي':'فني'
 };
 let FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES);
 let PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES);
-function applyAlias(getTable){
+function buildAliasMap(table){
+  const m = new Map();
+  for(const k in table) m.set(norm(k), norm(table[k]));
+  return m;
+}
+let FACILITY_ALIAS_MAP = buildAliasMap(FACILITY_ALIASES);
+let PERSON_ALIAS_MAP = buildAliasMap(PERSON_ALIASES);
+function applyAlias(getMap){
   return function(raw){
     const n = norm(raw);
-    const table = getTable();
-    for(const k in table){
-      if(norm(k)===n) return norm(table[k]);
-    }
-    return n;
+    const m = getMap();
+    return m.has(n) ? m.get(n) : n;
   };
 }
-const normFacility = applyAlias(()=>FACILITY_ALIASES);
-const normPerson = applyAlias(()=>PERSON_ALIASES);
+const normFacility = applyAlias(()=>FACILITY_ALIAS_MAP);
+const normPerson = applyAlias(()=>PERSON_ALIAS_MAP);
 const MONTHS_AR = {
   'يناير':0,'فبراير':1,'مارس':2,'ابريل':3,'أبريل':3,'مايو':4,'يونيو':5,
   'يوليو':6,'اغسطس':7,'أغسطس':7,'سبتمبر':8,'اكتوبر':9,'أكتوبر':9,'نوفمبر':10,'ديسمبر':11
@@ -638,7 +644,7 @@ function spreadUnusedDays(pattern, unused){
   const out=[];
   let pi=0, placed=0;
   for(let i=0;i<total;i++){
-    const shouldBeGap = Math.floor((i*unused)/total) !== Math.floor(((i-1)*unused)/total) && placed<unused;
+    const shouldBeGap = Math.floor(((i+1)*unused)/total) !== Math.floor((i*unused)/total) && placed<unused;
     if(shouldBeGap){
       out.push(null);
       placed++;
@@ -895,11 +901,13 @@ function computeGates(plan, registry, retiredIds){
     if(basicSoFar<need) prefixOK=false;
   }
   gates.push({key:'prefix', pass:prefixOK});
-  let maxRun=0, cur=0;
+  let curBasic=0, curContracted=0, maxRunBasic=0, maxRunContracted=0;
   for(const r of nonEmpty){
-    if(r.kind==='contracted'){ cur++; maxRun=Math.max(maxRun,cur); } else cur=0;
+    if(r.kind==='basic'){ curBasic++; curContracted=0; maxRunBasic=Math.max(maxRunBasic,curBasic); }
+    else { curContracted++; curBasic=0; maxRunContracted=Math.max(maxRunContracted,curContracted); }
   }
-  gates.push({key:'run', pass: budget.M>=budget.R ? maxRun<=1 : true});
+  const minorityMaxRun = budget.M >= budget.R ? maxRunContracted : maxRunBasic;
+  gates.push({key:'run', pass: minorityMaxRun<=1});
   return gates;
 }
 function computeTotals(rows){
@@ -1095,8 +1103,8 @@ const CLINICAL_SEED = [
 ];
 const RETIRED_SEED = [
   {id:'p_adib', name:'اديب', gender:'m'},
-  {id:'p_hindawy', name:'هنداوي', gender:'m'},
-  {id:'p_sobhy', name:'صبحي', gender:'m'}
+  {id:'p_hindawy', name:'حاسب الي', gender:'m'},
+  {id:'p_sobhy', name:'فني', gender:'m'}
 ];
 const PERSON_ORIGIN_SEED = {p_shaltoot:'ايتاي', p_mariam:'كفر الدوار', p_asmaa:'النفرة'};
 function freshPerson(p){
@@ -1172,7 +1180,6 @@ function buildZip(files){
   for(const p of allParts){ out.set(p,pos); pos+=p.length; }
   return out;
 }
-const OOXML_HEADERS = ['جهة المرور','المنطقة','الخطة','المرور','التاريخ','القائم بالمرور'];
 function colLetter(i){
   let s='';
   i=i+1;
@@ -1597,7 +1604,7 @@ deleteFacility:'حذف الجهة', confirmDeleteFacility:'سيتم حذف هذ�
 autoKind:'تلقائي', kindOverrideLabel:'النوع', weightPresetNormal:'عادي', weightPresetLow:'منخفض', weightPresetRare:'نادر',
 lastVisitField:'آخر زيارة', visitHistoryField:'سجل الزيارات', last5:'آخر ٥ زيارات',
 teamTitle:'الفريق', addPerson:'إضافة شخص', newPersonName:'اسم الشخص الجديد',
-poolLabel:'المجموعة', poolFin:'مالية وإدارية', poolClin:'طبية', poolRetired:'متقاعد',
+poolLabel:'المجموعة', poolFin:'مالي واداري', poolClin:'فني', poolRetired:'متقاعد',
 genderLabel:'النوع', genderM:'ذكر', genderF:'أنثى', activeLabel:'نشط',
 weightLabel:'الوزن', weightHint:'نسبة نصيبه من الزيارات مقارنة بالباقين',
 fixedCountLabel:'حصة ثابتة', fixedCountHint:'عدد زيارات محدد بدل التوزيع النسبي',
@@ -1730,7 +1737,7 @@ deleteFacility:'Delete facility', confirmDeleteFacility:'This facility will be p
 autoKind:'Auto', kindOverrideLabel:'Kind', weightPresetNormal:'Normal', weightPresetLow:'Low', weightPresetRare:'Rare',
 lastVisitField:'Last visit', visitHistoryField:'Visit history', last5:'Last 5 visits',
 teamTitle:'Team', addPerson:'Add person', newPersonName:'New person name',
-poolLabel:'Pool', poolFin:'Financial/Admin', poolClin:'Clinical', poolRetired:'Retired',
+poolLabel:'Pool', poolFin:'Financial/Admin', poolClin:'Technical', poolRetired:'Retired',
 genderLabel:'Gender', genderM:'Male', genderF:'Female', activeLabel:'Active',
 weightLabel:'Weight', weightHint:'Their share of visits relative to the rest',
 fixedCountLabel:'Fixed count', fixedCountHint:'A set number of visits instead of proportional share',
@@ -1819,8 +1826,6 @@ const ICONS = {
   globe: svgIcon('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20 15 15 0 010-20z"/>'),
   search: svgIcon('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/>', 14)
 };
-function fmtISO2(dt){ return fmtISO(dt); }
-function daysAgoNum(lastVisit){ return lastVisit ? daysBetween(lastVisit, new Date()) : null; }
 function debounce(fn, ms){
   let t=null;
   return function(...args){ clearTimeout(t); t = setTimeout(()=>fn.apply(this,args), ms); };
@@ -1832,20 +1837,17 @@ const state = {
   tab: (location.hash||'#plan').replace('#','') || 'plan',
   range: 'month', customStart:null, customEnd:null,
   weekdays: new Set([1,2,3,4]), holidays: new Set(),
-  mode:'ratio', ratioP:0.68, countsM:null, countsR:null, originMode:'count', splitAsPercent:false,
+  mode:'ratio', ratioP:0.25, countsM:null, countsR:null, originMode:'count',
   registry:null, locations:null, finPool:null, clinPool:null, retiredPool:null,
   plan:null, planApproved:false, planStale:false,
   personAliasOverrides:{},
-  baseRegistryBeforeImport:null, importedRecords:null, importResult:null,
-  pendingRemap:null, importError:null, importKind:null,
   overTieMinVisits:3, overTieMinRatio:0.6, applyGenderPass:true,
   globalDistanceBias:0, familiarityGamma:0.35, hardBlockOverTied:false,
   exportMode:'full', exportColumns:{facility:true,category:true,cycle:true,typeLabel:true,date:true,team:true},
   exportExceptions:{facilities:{}, people:{}},
   facilitySearch:'', facilityKindFilter:'all', facilityCategoryFilter:'', facilityLocationFilter:'',
   facilityReviewOnly:false, facilitySelected:new Set(),
-  pendingRegistryImport:null, registryImportError:null, missingFacilityActions:{},
-  expandedRowIndex:null, retiredExpanded:false,
+  retiredExpanded:false,
   setupRowOpen:{period:true, distribution:false, team:false},
   selfTestResults:null, selfTestRunning:false,
   unresolvedNamesQueue: [],
@@ -1856,7 +1858,7 @@ let store = null;
 let persistTimer = null;
 function defaultStoreSettings(){
   return {
-    range:'month', weekdays:[1,2,3,4], holidays:[], ratioP:0.68,
+    range:'month', weekdays:[1,2,3,4], holidays:[], ratioP:0.25,
     customStart:null, customEnd:null,
     overTieMinVisits:3, overTieMinRatio:0.6, applyGenderPass:true,
     globalDistanceBias:0, familiarityGamma:0.35, hardBlockOverTied:false,
@@ -2661,7 +2663,7 @@ function showConfirmDialog(title, message, opts){
   function close(){ document.removeEventListener('keydown', onKey, true); scrim.remove(); dialog.remove(); }
   okBtn.focus();
 }
-const WORDMARK_SVG = '<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="3.5" y="5.5" width="25" height="23" rx="7.5" stroke="currentColor" stroke-width="2"/><path d="M10 3.5v4M22 3.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.5 13.5H18a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="13.5" r="1.8" fill="currentColor"/><circle cx="21.5" cy="25.5" r="1.8" fill="currentColor"/></svg>';
+const WORDMARK_SVG = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 3a13 13 0 1 0 13 13"/><path d="M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6"/><circle cx="8.5" cy="21" r="2.1" fill="currentColor" stroke="none"/><circle cx="25.5" cy="14.6" r="2.1" fill="currentColor" stroke="none"/></svg>';
 const TABS = ['plan','summary','facilities','team','settings'];
 const tabScroll = {};
 function applyTheme(){
@@ -4604,7 +4606,7 @@ async function runSelfTests(){
     return `ratio=${ratio.toFixed(2)}`;
   });
   await checkAsync('XLSX write→read round-trips Arabic text intact', async ()=>{
-    const header = OOXML_HEADERS;
+    const header = HISTORY_TEMPLATE_HEADERS;
     const dataRows = [['مركز دمنهور للاشعة','اشعة',3,'خطة المرور','4 Sep 2024','صبحي - ميسرة - شرنوبي - لبني']];
     const bytes = buildXlsxBytes(header, dataRows);
     const rowsBack = await parseXlsxArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength));
@@ -4619,7 +4621,7 @@ async function runSelfTests(){
     return 'ok';
   });
   check('header mapping resolves the canonical six columns', ()=>{
-    const {mapping, unmapped} = mapHeaders(OOXML_HEADERS);
+    const {mapping, unmapped} = mapHeaders(HISTORY_TEMPLATE_HEADERS);
     if(unmapped.length) throw new Error('unmapped: '+unmapped.join(','));
     return 'ok';
   });
@@ -4658,7 +4660,7 @@ async function runSelfTests(){
     const registry = buildRegistry(REGISTRY_SEED);
     const finPool = FIN_ADMIN_SEED.map(freshPerson);
     const clinPool = CLINICAL_SEED.map(freshPerson);
-    const {mapping} = mapHeaders(OOXML_HEADERS);
+    const {mapping} = mapHeaders(HISTORY_TEMPLATE_HEADERS);
     const rows = parseHistoryRows([
       ['مركز دمنهور للاشعة','اشعة',0,'خطة المرور','4 Sep 2024','صبحي - ميسرة - شرنوبي - لبني'],
       ['جهة غير معروفة','معمل',1,'خطة المرور','5 Sep 2024','فلان الفلاني - غادة']
@@ -4675,7 +4677,7 @@ async function runSelfTests(){
     const registry = buildRegistry(REGISTRY_SEED);
     const finPool = FIN_ADMIN_SEED.map(freshPerson);
     const clinPool = CLINICAL_SEED.map(freshPerson);
-    const {mapping} = mapHeaders(OOXML_HEADERS);
+    const {mapping} = mapHeaders(HISTORY_TEMPLATE_HEADERS);
     const histRows=[];
     for(let i=0;i<20;i++) histRows.push(['مركز دمنهور للاشعة','اشعة',0,'خطة المرور',`${i+1} Jan 2025`,'لبني - صبحي - شرنوبي - شوقي']);
     const records = parseHistoryRows(histRows, mapping);
@@ -5196,6 +5198,31 @@ async function runSelfTests(){
     const clinSum = clinDev.reduce((s,x)=>s+x.expected,0);
     if(Math.abs(finSum-(2*M+R))>0.001) throw new Error('finDeviation expected sum should equal 2M+R, got '+finSum);
     if(Math.abs(clinSum-(2*(M+R)))>0.001) throw new Error('clinDeviation expected sum should equal 2(M+R), got '+clinSum);
+    return 'ok';
+  });
+  check('spreadUnusedDays: never emits a gap before the first real slot (A7)', ()=>{
+    const pattern = Array.from({length:8}, (_,i)=>({id:i}));
+    const out = spreadUnusedDays(pattern, 2);
+    if(out[0]===null) throw new Error('leading gap emitted at position 0');
+    if(out.length!==10) throw new Error('expected total length 10, got '+out.length);
+    const gaps = out.filter(x=>x===null).length;
+    if(gaps!==2) throw new Error('expected exactly 2 gaps, got '+gaps);
+    const realItems = out.filter(x=>x!==null);
+    if(realItems.length!==8 || realItems.some((x,i)=>x!==pattern[i])) throw new Error('pattern items out of order or missing');
+    return 'ok';
+  });
+  check('computeGates run gate: checks whichever stream is the actual minority (A10)', ()=>{
+    const row = (kind,i) => ({empty:false, kind, facility:{id:'f'+i, kind, manualExcluded:false}, finTeam:[{id:'p'+i+'a'}], clinTeam:[{id:'p'+i+'b'}]});
+    const runGate = rows => computeGates({rows, budget:{M: rows.filter(r=>r.kind==='basic').length, R: rows.filter(r=>r.kind==='contracted').length}}, [], new Set()).find(g=>g.key==='run');
+
+    const minorityBasicClustered = [row('basic',1), row('basic',2), row('contracted',3), row('contracted',4), row('contracted',5)];
+    if(runGate(minorityBasicClustered).pass) throw new Error('should FAIL: basic is the minority (2<3) and clusters 2-in-a-row');
+
+    const minorityContractedClustered = [row('contracted',1), row('contracted',2), row('basic',3), row('basic',4), row('basic',5)];
+    if(runGate(minorityContractedClustered).pass) throw new Error('should FAIL: contracted is the minority (2<3) and clusters 2-in-a-row');
+
+    const noClustering = [row('basic',1), row('contracted',2), row('basic',3), row('contracted',4), row('contracted',5)];
+    if(!runGate(noClustering).pass) throw new Error('should PASS: the minority stream (basic, 2<3) never clusters');
     return 'ok';
   });
 return results;
