@@ -1515,7 +1515,16 @@ function makeBlockedChecker(){
 const I18N = {
 ar: {
 appName:'الخطة',
-tabPlan:'الخطة', tabFacilities:'الجهات', tabTeam:'الفريق', tabSettings:'الإعدادات',
+tabPlan:'الخطة', tabSummary:'الملخص', tabFacilities:'الجهات', tabTeam:'الفريق', tabSettings:'الإعدادات',
+summaryNoPlanYet:'لا توجد خطة بعد — أنشئ خطة من تبويب الخطة ليظهر الملخص.',
+summaryPeriodTitle:'الفترة والميزانية', summaryRangeLabel:'الفترة', summaryWorkingDaysLabel:'أيام العمل',
+summaryHolidaysLabel:'إجازات مُستبعدة', summaryMixLabel:'أساسي / متعاقد', summaryUnusedDaysLabel:'أيام غير مستغلة',
+summaryGatesTitle:'البوابات', summaryReadyToApprove:'جاهزة للاعتماد',
+summaryPeopleTitle:'لكل فرد', summaryInheritsPlan:'أيام الخطة', summaryInactiveFooter:n=>`${n} غير نشطين/متقاعدين (غير معروضين)`,
+summaryPlacesTitle:'الأماكن والمسافات', summaryFacilitiesUnit:'جهة', summaryVisitsUnit:'زيارة',
+summaryTotalKmLabel:n=>`إجمالي كم الخطة: ${n} كم`, summaryHeaviestJourneys:'أطول ٣ رحلات',
+summaryCoverageTitle:'التغطية', summaryScheduledUnit:'مجدولة هذه الدورة',
+summarySettingsTitle:'الإعدادات الفعّالة', summaryOn:'مفعّل', summaryOff:'متوقف',
 cancel:'إلغاء', confirm:'تأكيد', save:'حفظ', delete:'حذف', edit:'تعديل', add:'إضافة',
 close:'إغلاق', apply:'تطبيق', clear:'مسح', done:'تم', search:'بحث', all:'الكل',
 yes:'نعم', no:'لا', choose:'اختر...', back:'رجوع', next:'التالي',
@@ -1639,7 +1648,16 @@ gateFailedShort:'فشلت إحدى البوابات', teamBlockedTag:'جهتان
 };
 I18N.en = {
 appName:'al-Khitta',
-tabPlan:'Plan', tabFacilities:'Facilities', tabTeam:'Team', tabSettings:'Settings',
+tabPlan:'Plan', tabSummary:'Summary', tabFacilities:'Facilities', tabTeam:'Team', tabSettings:'Settings',
+summaryNoPlanYet:'No plan yet — generate one from the Plan tab to see the summary.',
+summaryPeriodTitle:'Period & budget', summaryRangeLabel:'Range', summaryWorkingDaysLabel:'Working days',
+summaryHolidaysLabel:'Holidays removed', summaryMixLabel:'Basic / contracted', summaryUnusedDaysLabel:'Unused days',
+summaryGatesTitle:'Gates', summaryReadyToApprove:'Ready to approve',
+summaryPeopleTitle:'Per person', summaryInheritsPlan:'Plan days', summaryInactiveFooter:n=>`${n} inactive/retired (not shown)`,
+summaryPlacesTitle:'Places & distances', summaryFacilitiesUnit:'facilities', summaryVisitsUnit:'visits',
+summaryTotalKmLabel:n=>`Total plan km: ${n} km`, summaryHeaviestJourneys:'Heaviest 3 journeys',
+summaryCoverageTitle:'Coverage', summaryScheduledUnit:'scheduled this cycle',
+summarySettingsTitle:'Effective settings', summaryOn:'On', summaryOff:'Off',
 cancel:'Cancel', confirm:'Confirm', save:'Save', delete:'Delete', edit:'Edit', add:'Add',
 close:'Close', apply:'Apply', clear:'Clear', done:'Done', search:'Search', all:'All',
 yes:'Yes', no:'No', choose:'Choose...', back:'Back', next:'Next',
@@ -2644,7 +2662,7 @@ function showConfirmDialog(title, message, opts){
   okBtn.focus();
 }
 const WORDMARK_SVG = '<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="3.5" y="5.5" width="25" height="23" rx="7.5" stroke="currentColor" stroke-width="2"/><path d="M10 3.5v4M22 3.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.5 13.5H18a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="13.5" r="1.8" fill="currentColor"/><circle cx="21.5" cy="25.5" r="1.8" fill="currentColor"/></svg>';
-const TABS = ['plan','facilities','team','settings'];
+const TABS = ['plan','summary','facilities','team','settings'];
 const tabScroll = {};
 function applyTheme(){
   if(state.theme==='auto') document.documentElement.removeAttribute('data-theme');
@@ -2678,7 +2696,7 @@ function renderTopbar(){
 function renderTabbar(){
   const root = document.getElementById('tabbarInner');
   clear(root);
-  const labels = {plan:t('tabPlan'), facilities:t('tabFacilities'), team:t('tabTeam'), settings:t('tabSettings')};
+  const labels = {plan:t('tabPlan'), summary:t('tabSummary'), facilities:t('tabFacilities'), team:t('tabTeam'), settings:t('tabSettings')};
   TABS.forEach((tab,i)=>{
     const selected = state.tab===tab;
     const btn = el('button', {
@@ -2710,6 +2728,7 @@ function renderActiveTab(){
   const root = document.getElementById('viewRoot');
   clear(root);
   if(state.tab==='plan') renderPlanTab(root);
+  else if(state.tab==='summary') renderSummaryTab(root);
   else if(state.tab==='facilities') renderFacilitiesTab(root);
   else if(state.tab==='team') renderTeamTab(root);
   else renderSettingsTab(root);
@@ -3771,6 +3790,127 @@ function renderReviewSection(root){
   }
   if(state.planApproved) footer.appendChild(el('button', {type:'button', class:'btn', onclick:openExportDrawer}, t('exportTitle')));
   card.appendChild(footer); root.appendChild(card);
+}
+function renderSummaryTab(root){
+  if(!state.plan){
+    root.appendChild(el('div', {class:'card'}, el('p', {class:'card-summary'}, t('summaryNoPlanYet'))));
+    return;
+  }
+  const plan = state.plan, meta = state.planMeta;
+  const nonEmpty = plan.rows.filter(r=>!r.empty);
+
+  const periodCard = el('div', {class:'card'});
+  periodCard.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryPeriodTitle'))));
+  const wdNames = [...state.weekdays].sort().map(i=>t('weekdaysShort')[i]).join('، ');
+  periodCard.appendChild(el('div', {class:'history-row'}, [el('span',null,t('summaryRangeLabel')), el('span',null, `${formatDateShort(plan.days[0])} – ${formatDateShort(plan.days[plan.days.length-1])}`)]));
+  periodCard.appendChild(el('div', {class:'history-row'}, [el('span',null,t('summaryWorkingDaysLabel')), el('span',null, `${plan.days.length} (${wdNames})`)]));
+  periodCard.appendChild(el('div', {class:'history-row'}, [el('span',null,t('summaryHolidaysLabel')), el('span',null, String(state.holidays.size))]));
+  const achievedPct = (plan.budget.M+plan.budget.R)>0 ? Math.round(plan.budget.M/(plan.budget.M+plan.budget.R)*100) : 0;
+  periodCard.appendChild(el('div', {class:'history-row'}, [el('span',null,t('summaryMixLabel')), el('span',null, `${plan.budget.M} / ${plan.budget.R} (${achievedPct}%)`)]));
+  periodCard.appendChild(el('div', {class:'history-row'}, [el('span',null,t('summaryUnusedDaysLabel')), el('span',null, String(plan.days.length-nonEmpty.length))]));
+  if(meta.weightOverrides.length) periodCard.appendChild(el('p', {class:'field-hint', style:'color:var(--gold);margin-block-start:8px'}, t('weightOverrideNote')(meta.weightOverrides.length)));
+  root.appendChild(periodCard);
+
+  const gatesCard = el('div', {class:'card'});
+  gatesCard.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryGatesTitle'))));
+  const allPass = meta.gates.every(g=>g.pass);
+  for(const g of meta.gates){
+    gatesCard.appendChild(el('div', {class:'gate-line '+(g.pass?'pass':'fail')}, el('span', null, (g.pass?'✓ ':'✕ ')+(t('gateLabels')[g.key]||g.key))));
+  }
+  gatesCard.appendChild(el('p', {class:'card-summary'}, state.planApproved ? t('approvedNote') : (allPass ? t('summaryReadyToApprove') : t('gateBlockNote'))));
+  root.appendChild(gatesCard);
+
+  const peopleCard = el('div', {class:'card'});
+  peopleCard.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryPeopleTitle'))));
+  const allDev = meta.finDeviation.concat(meta.clinDeviation);
+  const activePeople = [...state.finPool, ...state.clinPool].filter(p=>p.active!==false);
+  const inactiveCount = [...state.finPool, ...state.clinPool, ...state.retiredPool].filter(p=>p.active===false).length + state.retiredPool.filter(p=>p.active!==false).length;
+  for(const p of activePeople){
+    const dev = allDev.find(d=>d.person.id===p.id);
+    const assigned = dev ? dev.actual : 0, expected = dev ? dev.expected : 0, deviation = dev ? dev.deviation : 0;
+    const onRow = r => [...r.finTeam, ...r.clinTeam].some(x=>x.id===p.id);
+    const facilitiesVisited = new Set(nonEmpty.filter(onRow).map(r=>r.facility.id)).size;
+    let totalKm = 0;
+    for(const r of nonEmpty){ if(onRow(r)){ const km = travelKm(p, r.facility); if(km!=null) totalKm += km; } }
+    const originLoc = p.originLocationId ? state.locations.find(l=>l.id===p.originLocationId) : null;
+    const wwLabel = (p.workWeekdays && p.workWeekdays.length) ? p.workWeekdays.slice().sort().map(i=>t('weekdaysShort')[i]).join('،') : t('summaryInheritsPlan');
+    const metaBits = [
+      p.pool==='clin'?t('poolClin'):t('poolFin'), p.gender==='f'?t('genderF'):t('genderM'),
+      p.fixedCount!=null?t('statusFixedShare')(p.fixedCount):(t('weightLabel')+' '+(p.weight==null?1:p.weight)),
+      originLoc?originLoc.name:null, wwLabel,
+      (p.unavailable&&p.unavailable.length)?t('statusUnavailableDays')(p.unavailable.length):null,
+      (p.blockedFacilities&&p.blockedFacilities.length)?t('statusBlockedFacilities')(p.blockedFacilities.length):null
+    ].filter(Boolean).join(' · ');
+    const row = el('div', {class:'alt-row'});
+    row.appendChild(el('span', {class:'alt-name'}, [p.name, el('span', {class:'alt-meta', style:'margin-inline-start:8px'}, metaBits)]));
+    row.appendChild(el('span', {class:'alt-meta'}, `${assigned} (${expected.toFixed(1)}, ${deviation>=0?'+':''}${deviation.toFixed(1)}) · ${facilitiesVisited} · ${Math.round(totalKm)} ${t('kmUnit')}`));
+    peopleCard.appendChild(row);
+  }
+  if(inactiveCount) peopleCard.appendChild(el('p', {class:'card-summary'}, t('summaryInactiveFooter')(inactiveCount)));
+  root.appendChild(peopleCard);
+
+  const placesCard = el('div', {class:'card'});
+  placesCard.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryPlacesTitle'))));
+  const byLocation = {};
+  for(const f of state.registry){
+    if(!f.locationId) continue;
+    byLocation[f.locationId] = byLocation[f.locationId] || {facilities:0, visits:0};
+    byLocation[f.locationId].facilities++;
+  }
+  for(const r of nonEmpty){
+    if(!r.facility.locationId) continue;
+    byLocation[r.facility.locationId] = byLocation[r.facility.locationId] || {facilities:0, visits:0};
+    byLocation[r.facility.locationId].visits++;
+  }
+  let totalPlanKm = 0; const journeys = [];
+  for(const r of nonEmpty){
+    const km = facilityKm(r.facility);
+    if(km!=null){ totalPlanKm += km; journeys.push({name:r.facility.name, km}); }
+  }
+  for(const loc of [...state.locations].sort((a,b)=>a.name.localeCompare(b.name))){
+    const agg = byLocation[loc.id]; if(!agg) continue;
+    placesCard.appendChild(el('div', {class:'location-row'}, [el('span',null,loc.name), el('span',{class:'field-hint'}, `${agg.facilities} ${t('summaryFacilitiesUnit')} · ${loc.km} ${t('kmUnit')} · ${agg.visits} ${t('summaryVisitsUnit')}`)]));
+  }
+  placesCard.appendChild(el('p', {class:'card-summary'}, t('summaryTotalKmLabel')(Math.round(totalPlanKm))));
+  journeys.sort((a,b)=>b.km-a.km);
+  if(journeys.length){
+    placesCard.appendChild(el('p', {class:'field-hint', style:'margin-block-start:8px'}, t('summaryHeaviestJourneys')));
+    for(const j of journeys.slice(0,3)) placesCard.appendChild(el('div', {class:'history-row'}, [el('span',null,j.name), el('span',null, j.km+' '+t('kmUnit'))]));
+  }
+  root.appendChild(placesCard);
+
+  const coverageCard = el('div', {class:'card'});
+  coverageCard.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryCoverageTitle'))));
+  const categories = [...new Set(state.registry.map(f=>f.category))].sort();
+  for(const cat of categories){
+    const facs = state.registry.filter(f=>f.category===cat && !f.manualExcluded);
+    const scheduled = nonEmpty.filter(r=>r.facility.category===cat).length;
+    const neverVisited = facs.filter(f=>!f.lastVisit).length;
+    let oldest = null;
+    for(const f of facs){ if(f.lastVisit && (!oldest || f.lastVisit<oldest)) oldest = f.lastVisit; }
+    coverageCard.appendChild(el('div', {class:'history-row'}, [el('span',null,cat), el('span',{class:'field-hint'}, `${facs.length} · ${scheduled} ${t('summaryScheduledUnit')} · ${neverVisited} ${t('neverVisited')} · ${oldest?t('daysAgo')(daysBetween(oldest,new Date())):'—'}`)]));
+  }
+  if(meta.nearMisses.length){
+    coverageCard.appendChild(el('p', {class:'field-hint', style:'margin-block-start:10px'}, t('nearMissTitle')));
+    for(const f of meta.nearMisses.slice(0,10)) coverageCard.appendChild(el('div', {class:'history-row'}, [el('span',null,f.name), el('span',{class:'field-hint'},f.category)]));
+  }
+  if(plan.pinnedOverflow.length) coverageCard.appendChild(el('p', {class:'field-hint', style:'color:var(--gold);margin-block-start:8px'}, t('pinnedOverflowWarning')(plan.pinnedOverflow.length)));
+  root.appendChild(coverageCard);
+
+  const settingsCard = el('div', {class:'card'});
+  settingsCard.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summarySettingsTitle'))));
+  const originLabels = {ignore:t('originIgnore'), count:t('originCount'), favor:t('originFavor')};
+  const mixValue = state.mode==='counts' ? `${state.countsM}/${state.countsR}` : Math.round(state.ratioP*100)+'%';
+  const settingsLines = [
+    [t('distributionTitle'), mixValue],
+    [t('genderPassLabel'), state.applyGenderPass ? t('summaryOn') : t('summaryOff')],
+    [t('overTieTitle'), `${state.overTieMinVisits} / ${Math.round(state.overTieMinRatio*100)}%`],
+    [t('familiarityGammaLabel'), state.familiarityGamma],
+    [t('distanceBiasLabel'), state.globalDistanceBias],
+    [t('originModeLabel'), originLabels[state.originMode]||state.originMode]
+  ];
+  for(const [label,val] of settingsLines) settingsCard.appendChild(el('div', {class:'history-row'}, [el('span',null,label), el('span',null,String(val))]));
+  root.appendChild(settingsCard);
 }
 function filteredFacilities(){
   let list = state.registry.slice();
