@@ -849,8 +849,13 @@ function computeThirds(nonEmptyRows){
   });
   return thirds.map(t=>({basic:t.filter(r=>r.kind==='basic').length, contracted:t.filter(r=>r.kind==='contracted').length, total:t.length}));
 }
-function computeDeviation(pool, totals, totalSlots){
-  const activeWeightSum = pool.filter(p=>p.active!==false && p.fixedCount==null).reduce((s,p)=>s+(p.weight==null?1:p.weight),0);
+function computeDeviation(pool, totals, totalSlots, days){
+  function availDays(p){
+    if(!days || !days.length) return 1;
+    return days.filter(d=>!isUnavailable(p,d)).length;
+  }
+  const weightOf = p => (p.weight==null?1:p.weight) * availDays(p);
+  const activeWeightSum = pool.filter(p=>p.active!==false && p.fixedCount==null).reduce((s,p)=>s+weightOf(p),0);
   const fixedSum = pool.filter(p=>p.fixedCount!=null).reduce((s,p)=>s+p.fixedCount,0);
   const remainingSlots = Math.max(0, totalSlots-fixedSum);
   return pool.map(p=>{
@@ -858,7 +863,7 @@ function computeDeviation(pool, totals, totalSlots){
     let expected;
     if(p.fixedCount!=null) expected = p.fixedCount;
     else if(p.active===false) expected = 0;
-    else expected = activeWeightSum>0 ? (p.weight/activeWeightSum)*remainingSlots : 0;
+    else expected = activeWeightSum>0 ? (weightOf(p)/activeWeightSum)*remainingSlots : 0;
     return {person:p, actual, expected, deviation: actual-expected};
   });
 }
@@ -1096,7 +1101,7 @@ const RETIRED_SEED = [
 const PERSON_ORIGIN_SEED = {p_shaltoot:'ايتاي', p_mariam:'كفر الدوار', p_asmaa:'النفرة'};
 function freshPerson(p){
   const originName = (p && PERSON_ORIGIN_SEED[p.id]) || 'دمنهور';
-  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0, originLocationId: locationIdFor(originName)}, p);
+  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0, originLocationId: locationIdFor(originName), workWeekdays:null, excludedRanges:[]}, p);
 }
 function escapeXml(s){
   return String(s==null?'':s)
@@ -1488,11 +1493,18 @@ function makeOverTiedChecker(facilityPersonVisits, minVisits, minRatio){
     return (v/total) >= minRatio;
   };
 }
+function isUnavailable(person, date){
+  const ww = (person.workWeekdays && person.workWeekdays.length) ? person.workWeekdays : [...state.weekdays];
+  if(!ww.includes(date.getDay())) return true;
+  const iso = fmtISO(date);
+  if(person.unavailable && person.unavailable.length && person.unavailable.indexOf(iso)>=0) return true;
+  if(person.excludedRanges && person.excludedRanges.length){
+    for(const r of person.excludedRanges){ if(r && r.from && r.to && iso>=r.from && iso<=r.to) return true; }
+  }
+  return false;
+}
 function makeUnavailableChecker(){
-  return function(person, date){
-    if(!person.unavailable || !person.unavailable.length) return false;
-    return person.unavailable.indexOf(fmtISO(date))>=0;
-  };
+  return isUnavailable;
 }
 function makeBlockedChecker(){
   return function(person, facility){
@@ -1516,6 +1528,9 @@ fromLabel:'من', toLabel:'إلى',
 workingDaysSummary:(n,names)=>`${n} يوم عمل · ${names}`,
 holidaysTrigger:n=>n===0?'لا إجازات':`${n} إجازات`,
 holidaysTitle:'إجازات إضافية', weekdaysLabel:'أيام العمل',
+personWorkWeekdaysLabel:'أيام عمل هذا الفرد', personWorkWeekdaysDiffers:'يختلف عن أيام الخطة',
+excludedRangeLabel:'فترة إجازة', addRangeAction:'إضافة الفترة',
+statusCustomWeekdays:'أيام مخصصة', statusExcludedRanges:n=>`${n} فترة إجازة`,
 quickThisThursday:'كل خميس', quickNextWeek:'الأسبوع القادم', quickClear:'مسح',
 prevYear:'السنة السابقة', nextYear:'السنة التالية', jumpToMonth:'الانتقال إلى شهر',
 jumpPlaceholder:'٢٠٢٦-٠٩، سبتمبر ٢٠٢٦...',
@@ -1637,6 +1652,9 @@ fromLabel:'From', toLabel:'To',
 workingDaysSummary:(n,names)=>`${n} working days · ${names}`,
 holidaysTrigger:n=>n===0?'No holidays':`${n} holidays`,
 holidaysTitle:'Extra holidays', weekdaysLabel:'Working days',
+personWorkWeekdaysLabel:"This person's working days", personWorkWeekdaysDiffers:'Differs from the plan',
+excludedRangeLabel:'Leave period', addRangeAction:'Add period',
+statusCustomWeekdays:'Custom days', statusExcludedRanges:n=>`${n} leave period${n===1?'':'s'}`,
 quickThisThursday:'Every Thursday', quickNextWeek:'Next week', quickClear:'Clear',
 prevYear:'Previous year', nextYear:'Next year', jumpToMonth:'Jump to month',
 jumpPlaceholder:'2026-09, Sep 2026...',
@@ -2008,7 +2026,7 @@ function savePersonAliases(){
   persistStore();
 }
 function serializePersonOverride(p){
-  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity, originLocationId:p.originLocationId};
+  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, fixedCount:p.fixedCount, unavailable:p.unavailable, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity, originLocationId:p.originLocationId, workWeekdays:p.workWeekdays, excludedRanges:p.excludedRanges};
 }
 function loadPeople(){
   let flat = Array.isArray(store.people) ? store.people : [];
@@ -3490,8 +3508,8 @@ function handleGenerate(){
   state.plan = plan;
   state.planMeta = {
     gates, totals, thirds: computeThirds(nonEmpty),
-    finDeviation: computeDeviation(finActive, totals.finCounts, plan.budget.M+plan.budget.R),
-    clinDeviation: computeDeviation(clinActive, totals.clinCounts, plan.budget.M+plan.budget.R),
+    finDeviation: computeDeviation(finActive, totals.finCounts, 2*plan.budget.M+plan.budget.R, plan.days),
+    clinDeviation: computeDeviation(clinActive, totals.clinCounts, 2*(plan.budget.M+plan.budget.R), plan.days),
     nearMisses: computeNearMisses(plan, 10),
     weightOverrides: computeWeightOverrideNotes(plan),
     cycle: nextCycleNumber()
@@ -3985,7 +4003,9 @@ function renderFacilitiesTab(root){
 function personStatusChips(p){
   const chips = [];
   if(p.active===false) chips.push(t('inactiveTag'));
+  if(p.workWeekdays && p.workWeekdays.length && !(p.workWeekdays.length===state.weekdays.size && p.workWeekdays.every(d=>state.weekdays.has(d)))) chips.push(t('statusCustomWeekdays'));
   if(p.unavailable && p.unavailable.length) chips.push(t('statusUnavailableDays')(p.unavailable.length));
+  if(p.excludedRanges && p.excludedRanges.length) chips.push(t('statusExcludedRanges')(p.excludedRanges.length));
   if(p.blockedFacilities && p.blockedFacilities.length) chips.push(t('statusBlockedFacilities')(p.blockedFacilities.length));
   if(p.fixedCount!=null) chips.push(t('statusFixedShare')(p.fixedCount));
   return chips;
@@ -4010,6 +4030,22 @@ function openPersonDrawer(p){
       options:[{value:'fin',label:t('poolFin')},{value:'clin',label:t('poolClin')},{value:'retired',label:t('poolRetired')}],
       onChange:v=>{ movePersonToPool(p, v); savePeople(); rerender(); renderActiveTab(); }
     }));
+    const wwField = el('div', {class:'field'});
+    wwField.appendChild(el('label', {class:'field-label'}, t('personWorkWeekdaysLabel')));
+    const wwStrip = el('div', {class:'weekday-strip'});
+    const effectiveWW = new Set((p.workWeekdays && p.workWeekdays.length) ? p.workWeekdays : [...state.weekdays]);
+    const wwDiffers = p.workWeekdays && p.workWeekdays.length && !(p.workWeekdays.length===state.weekdays.size && p.workWeekdays.every(d=>state.weekdays.has(d)));
+    t('weekdaysShort').forEach((label,idx)=>{
+      wwStrip.appendChild(el('button', {type:'button', 'aria-pressed': effectiveWW.has(idx)?'true':'false', onclick:()=>{
+        const next = new Set(effectiveWW);
+        if(next.has(idx)) next.delete(idx); else next.add(idx);
+        p.workWeekdays = [...next].sort();
+        savePeople(); rerender(); renderActiveTab();
+      }}, label));
+    });
+    wwField.appendChild(wwStrip);
+    if(wwDiffers) wwField.appendChild(el('span', {class:'field-hint'}, t('personWorkWeekdaysDiffers')));
+    body.appendChild(wwField);
     body.appendChild(SelectField({
       label:t('genderLabel'), value:p.gender||'m',
       options:[{value:'m',label:t('genderM')},{value:'f',label:t('genderF')}],
@@ -4037,6 +4073,32 @@ function openPersonDrawer(p){
       triggerLabel:n=>t('statusUnavailableDays')(n),
       onChange:vals=>{ p.unavailable=vals; savePeople(); }
     }));
+    const rangeField = el('div', {class:'field'});
+    rangeField.appendChild(el('label', {class:'field-label'}, t('excludedRangeLabel')));
+    const rangeRow = el('div', {class:'range-row'});
+    rangeRow.appendChild(DateField({label:t('fromLabel'), value:p._rangeFrom||null, onChange:v=>{ p._rangeFrom=v; }}));
+    rangeRow.appendChild(DateField({label:t('toLabel'), value:p._rangeTo||null, rangeStart:p._rangeFrom||null, onChange:v=>{ p._rangeTo=v; }}));
+    rangeField.appendChild(rangeRow);
+    rangeField.appendChild(el('button', {type:'button', class:'btn btn-block', style:'margin-block-start:8px', onclick:()=>{
+      if(!p._rangeFrom || !p._rangeTo || p._rangeFrom>p._rangeTo) return;
+      p.excludedRanges = (p.excludedRanges||[]).concat([{from:p._rangeFrom, to:p._rangeTo}]);
+      p._rangeFrom=null; p._rangeTo=null;
+      savePeople(); rerender(); renderActiveTab();
+    }}, t('addRangeAction')));
+    if(p.excludedRanges && p.excludedRanges.length){
+      const rangeList = el('div', {class:'multi-chip-row'});
+      p.excludedRanges.forEach((r,i)=>{
+        rangeList.appendChild(el('span', {class:'multi-chip'}, [
+          formatDateDisplay(r.from)+' — '+formatDateDisplay(r.to),
+          el('button', {type:'button', 'aria-label':t('delete'), html:ICONS.x, onclick:()=>{
+            p.excludedRanges = p.excludedRanges.filter((_,j)=>j!==i);
+            savePeople(); rerender(); renderActiveTab();
+          }})
+        ]));
+      });
+      rangeField.appendChild(rangeList);
+    }
+    body.appendChild(rangeField);
     body.appendChild(TokenFieldInput({
       label:t('blockedLabel'), tokens:(p.blockedFacilities||[]).map(id=>{ const f=state.registry.find(x=>x.id===id); return {id, label:f?f.name:id}; }),
       placeholder:t('blockedLabel'),
@@ -4946,6 +5008,54 @@ async function runSelfTests(){
     deleteButtons()[0].click();
     if(emitted.length!==2 || emitted[1].length!==0) throw new Error('second delete was corrupted by stale config.values — A1 regression');
     if(deleteButtons().length!==0) throw new Error('expected 0 chips remaining after both deletes');
+    return 'ok';
+  });
+  check('isUnavailable: work-weekday pattern (default = plan), excluded dates, excluded ranges (B5)', ()=>{
+    const savedWeekdays = state.weekdays;
+    try{
+      state.weekdays = new Set([1,2,3,4]);
+      const p1 = freshPerson({id:'p_ww1'});
+      const sat = new Date(2026,8,5), mon = new Date(2026,8,7);
+      if(!isUnavailable(p1, sat)) throw new Error('Saturday should be unavailable by default (not in plan weekdays)');
+      if(isUnavailable(p1, mon)) throw new Error('Monday should be available by default (in plan weekdays)');
+      const p2 = freshPerson({id:'p_ww2', workWeekdays:[6]});
+      if(isUnavailable(p2, sat)) throw new Error('override should make Saturday available');
+      if(!isUnavailable(p2, mon)) throw new Error('override should make Monday unavailable');
+      const p3 = freshPerson({id:'p_ww3', unavailable:['2026-09-07']});
+      if(!isUnavailable(p3, mon)) throw new Error('explicit excluded date should be unavailable');
+      const p4 = freshPerson({id:'p_ww4', excludedRanges:[{from:'2026-09-06', to:'2026-09-08'}]});
+      if(!isUnavailable(p4, mon)) throw new Error('date inside an excluded range should be unavailable');
+      if(isUnavailable(p4, new Date(2026,8,10))) throw new Error('date outside the excluded range should be available');
+      return 'ok';
+    } finally {
+      state.weekdays = savedWeekdays;
+    }
+  });
+  check('computeDeviation: weights expected share by available working days, not just base weight (B5)', ()=>{
+    const savedWeekdays = state.weekdays;
+    try{
+      state.weekdays = new Set([1,2,3,4]);
+      const fullTime = freshPerson({id:'p_ft', weight:1});
+      const partTime = freshPerson({id:'p_pt', weight:1, workWeekdays:[1]});
+      const days = []; let d = new Date(2026,8,7);
+      for(let i=0;i<20;i++){ days.push(new Date(d)); d = addDays(d,1); }
+      const dev = computeDeviation([fullTime, partTime], {}, 100, days);
+      const ft = dev.find(x=>x.person.id==='p_ft'), pt = dev.find(x=>x.person.id==='p_pt');
+      if(!(pt.expected < ft.expected)) throw new Error(`part-time expected (${pt.expected}) should be well below full-time (${ft.expected})`);
+      return `full-time=${ft.expected.toFixed(2)}, part-time=${pt.expected.toFixed(2)}`;
+    } finally {
+      state.weekdays = savedWeekdays;
+    }
+  });
+  check('computeDeviation seat totals: expected sums equal 2M+R (fin) and 2(M+R) (clin) — fixes A5', ()=>{
+    const pool = [freshPerson({id:'p_a',weight:1}), freshPerson({id:'p_b',weight:1}), freshPerson({id:'p_c',weight:2})];
+    const M=9, R=25;
+    const finDev = computeDeviation(pool, {}, 2*M+R, null);
+    const clinDev = computeDeviation(pool, {}, 2*(M+R), null);
+    const finSum = finDev.reduce((s,x)=>s+x.expected,0);
+    const clinSum = clinDev.reduce((s,x)=>s+x.expected,0);
+    if(Math.abs(finSum-(2*M+R))>0.001) throw new Error('finDeviation expected sum should equal 2M+R, got '+finSum);
+    if(Math.abs(clinSum-(2*(M+R)))>0.001) throw new Error('clinDeviation expected sum should equal 2(M+R), got '+clinSum);
     return 'ok';
   });
 return results;
