@@ -577,33 +577,42 @@ function originTerm(person, facility, tctx, originMode){
   return Math.min(2, Math.max(0.15, 1 - ORIGIN_FAVOR_STRENGTH*(tctx.nrm(km) - tctx.mean)));
 }
 function rankStream(facilities, planStart, NEVER, dctx, bias){
-  const scored = facilities.map(f=>{
-    const overdue = f.pinned ? Infinity
-      : (f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER);
+  const pinned = [], rest = [];
+  for(const f of facilities){ (f.pinned ? pinned : rest).push(f); }
+  const tieBreak = (a,b) => {
+    const va = a.visitCount||0, vb = b.visitCount||0;
+    if(va!==vb) return va-vb;
+    return norm(a.name)<norm(b.name) ? -1 : (norm(a.name)>norm(b.name)?1:0);
+  };
+  pinned.sort(tieBreak);
+  const scored = rest.map(f=>{
+    const overdue = f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER;
     const weight = f.weight==null?1:f.weight;
-    const score = overdue===Infinity ? Infinity : overdue*weight*distanceTerm(f, dctx, bias);
+    const score = overdue*weight*distanceTerm(f, dctx, bias);
     return {f, overdue, score};
   });
   scored.sort((a,b)=>{
     if(b.score!==a.score) return b.score-a.score;
-    const va = a.f.visitCount||0, vb = b.f.visitCount||0;
-    if(va!==vb) return va-vb;
-    return norm(a.f.name)<norm(b.f.name) ? -1 : (norm(a.f.name)>norm(b.f.name)?1:0);
+    return tieBreak(a.f, b.f);
   });
-  return scored.map(s=>s.f);
+  return pinned.concat(scored.map(s=>s.f));
 }
 function slotBudget(N, mode, opts){
   let M,R;
+  const p = opts.p==null?0.68:opts.p;
   if(mode==='ratio'){
-    const p = opts.p==null?0.68:opts.p;
     M = Math.round(p*N);
     R = N-M;
   } else {
-    M = opts.M; R = opts.R;
+    M = opts.M!=null ? opts.M : Math.round(p*N);
+    R = opts.R!=null ? opts.R : (N-M);
   }
   const notes = [];
   if(M+R>N){
     notes.push('mode counts exceed N');
+    const scale = (M+R)>0 ? N/(M+R) : 0;
+    M = Math.round(M*scale);
+    R = N-M;
   }
   const basicPoolLen = opts.basicPoolLen, contractedPoolLen = opts.contractedPoolLen;
   const desiredM = M, desiredR = R;
@@ -1413,6 +1422,12 @@ function deserializeRegistry(saved){
     visitHistory: (f.visitHistory||[]).map(v=>({date: parseDateFlexible(v.date), team: v.team})).filter(v=>v.date)
   }));
 }
+function pushVisit(facility, date, team){
+  if(!facility.visitHistory) facility.visitHistory = [];
+  facility.visitHistory.push({date, team});
+  facility.visitHistory.sort((a,b)=>b.date-a.date);
+  if(facility.visitHistory.length>20) facility.visitHistory.length = 20;
+}
 function ingestHistory(records, registry, finPool, clinPool, retiredPool, personAliasOverrides){
   personAliasOverrides = personAliasOverrides || {};
   const registryByName = new Map(registry.map(f=>[normFacility(f.name), f]));
@@ -1451,10 +1466,7 @@ function ingestHistory(records, registry, finPool, clinPool, retiredPool, person
     if(!facility.lastVisit || date>facility.lastVisit) facility.lastVisit = date;
     matchedRowCount++;
     const names = rec.teamRaw.split('-').map(s=>s.trim()).filter(Boolean);
-    if(!facility.visitHistory) facility.visitHistory = [];
-    facility.visitHistory.push({date, team: names});
-    facility.visitHistory.sort((a,b)=>b.date-a.date);
-    if(facility.visitHistory.length>20) facility.visitHistory.length = 20;
+    pushVisit(facility, date, names);
     for(const rawName of names){
       const pKey = normPerson(rawName);
       const override = personAliasOverrides[pKey];
@@ -1582,6 +1594,7 @@ prefix:'بوابة التوزيع التراكمي', run:'أطول تتابع م
 jumpToRow:'الانتقال للصف', achievedMix:(m,r,n)=>`المزيج المحقق: ${m} أساسي / ${r} متعاقد من ${n} (${Math.round(n?m/n*100:0)}٪)`,
 genderDroppedNote:n=>`تعذّر ضبط توازن النوع في ${n} يوم — مُدرجة أدناه`,
 genderAchievedNote:(ok,total)=>`توازن النوع 3-1: تحقق في ${ok} من ${total} فريق رباعي`,
+genderInvalidNote:n=>`${n} فريق لم تتحقق فيه موازنة 3-1:`,
 overTiedNote:n=>`${n} حالة تكرار زائد تم تجاوز الوزن فيها — راجع القائمة`,
 weightOverrideNote:n=>`${n} إسناد تجاوز الوزن المحدد لعدم توفر بديل — راجع القائمة`,
 thirdsTitle:'التوزيع على الأثلاث', thirdLabel:i=>`الثلث ${i}`,
@@ -1715,6 +1728,7 @@ prefix:'Cumulative distribution gate', run:'Longest contracted run ≤1 when bas
 jumpToRow:'Jump to row', achievedMix:(m,r,n)=>`Achieved mix: ${m} basic / ${r} contracted of ${n} (${Math.round(n?m/n*100:0)}%)`,
 genderDroppedNote:n=>`Gender balance could not be fixed on ${n} day(s) — listed below`,
 genderAchievedNote:(ok,total)=>`Gender 3-1 balance: achieved on ${ok} of ${total} four-person team(s)`,
+genderInvalidNote:n=>`${n} team(s) without 3-1 balance:`,
 overTiedNote:n=>`${n} over-tie case(s) where weight was overridden — review the list`,
 weightOverrideNote:n=>`${n} assignment(s) overrode weight for lack of an alternative — review the list`,
 thirdsTitle:'Distribution across thirds', thirdLabel:i=>`Third ${i}`,
@@ -3546,7 +3560,7 @@ function handleApprovePlan(){
   for(const r of state.plan.rows){
     if(r.empty) continue;
     r.facility.lastVisit = r.date; r.facility.visitCount = (r.facility.visitCount||0)+1;
-    r.facility.visitHistory = (r.facility.visitHistory||[]).concat([{date:r.date, team:[...r.finTeam,...r.clinTeam].map(p=>p.name)}]).slice(-20);
+    pushVisit(r.facility, r.date, [...r.finTeam,...r.clinTeam].map(p=>p.name));
     for(const p of [...r.finTeam, ...r.clinTeam]){
       const key = r.facility.id+'|'+p.id; state.facilityPersonVisits[key] = (state.facilityPersonVisits[key]||0)+1;
     }
@@ -3608,7 +3622,13 @@ function renderPeriodRowBody(){
 function renderDistributionRowBody(){
   const wrap = el('div', null); const seg = el('div', {class:'segmented'});
   [['ratio', t('percentToggle')], ['counts', '#']].forEach(([val,label])=>{
-    seg.appendChild(el('button', {type:'button', 'aria-pressed': state.mode===val?'true':'false', onclick:()=>{ state.mode=val; saveSettings(); renderActiveTab(); }}, label));
+    seg.appendChild(el('button', {type:'button', 'aria-pressed': state.mode===val?'true':'false', onclick:()=>{
+      if(val==='counts' && state.mode!=='counts' && (state.countsM==null || state.countsR==null)){
+        const liveBudget = previewSlotBudget();
+        state.countsM = liveBudget.M; state.countsR = liveBudget.R;
+      }
+      state.mode=val; saveSettings(); renderActiveTab();
+    }}, label));
   }); wrap.appendChild(seg);
   const budget = previewSlotBudget();
   if(state.mode==='ratio'){
@@ -3690,29 +3710,29 @@ function openRowDrawer(row, plan){
       const totalsKey = row.finTeam.includes(p) ? state.planMeta.totals.finCounts : state.planMeta.totals.clinCounts;
       const line = el('div', {class:'alt-row'});
       line.appendChild(el('span', {class:'alt-name'}, [p.name, el('span',{class:'alt-meta', style:'margin-inline-start:8px'}, t('currentLoadLabel')(totalsKey[p.id]||0))]));
-      const swapBtn = el('button', {type:'button', class:'btn btn-sm', onclick:()=>{
-        Popover(swapBtn, ()=>{
-          const list = el('div', {class:'popover-list'}); const used = new Set([...row.finTeam, ...row.clinTeam].map(x=>x.id));
-          const unavailChecker = makeUnavailableChecker(), blockedChecker = makeBlockedChecker();
-          const alts = poolPeople.filter(person=>person.active!==false && !used.has(person.id));
-          if(!alts.length) list.appendChild(el('div', {class:'popover-item'}, t('noAlternatives')));
-          alts.forEach(alt=>{
-            const reason = unavailChecker(alt, row.date) ? t('ineligibleUnavailable')(formatDateShort(row.date)) : (blockedChecker(alt, row.facility) ? t('ineligibleBlocked') : null);
-            const item = el('button', {type:'button', class:'popover-item'+(reason?' ineligible':''), disabled:!!reason, onclick:()=>{
-              const idx = row[pool].indexOf(p); row[pool][idx] = alt;
-              if(state.planApproved) state.planApproved = false;
-              activeDrawerClose && activeDrawerClose(); renderActiveTab();
-            }}, reason ? `${alt.name} · ${reason}` : alt.name); list.appendChild(item);
-          }); listKeyNav(list);
-          return list;
-        }, {}).open();
-      }}, t('swapAction')); line.appendChild(swapBtn);
+      const swapBtn = el('button', {type:'button', class:'btn btn-sm'}, t('swapAction'));
+      Popover(swapBtn, ()=>{
+        const list = el('div', {class:'popover-list'}); const used = new Set([...row.finTeam, ...row.clinTeam].map(x=>x.id));
+        const unavailChecker = makeUnavailableChecker(), blockedChecker = makeBlockedChecker();
+        const alts = poolPeople.filter(person=>person.active!==false && !used.has(person.id));
+        if(!alts.length) list.appendChild(el('div', {class:'popover-item'}, t('noAlternatives')));
+        alts.forEach(alt=>{
+          const reason = unavailChecker(alt, row.date) ? t('ineligibleUnavailable')(formatDateShort(row.date)) : (blockedChecker(alt, row.facility) ? t('ineligibleBlocked') : null);
+          const item = el('button', {type:'button', class:'popover-item'+(reason?' ineligible':''), disabled:!!reason, onclick:()=>{
+            const idx = row[pool].indexOf(p); row[pool][idx] = alt;
+            if(state.planApproved) state.planApproved = false;
+            activeDrawerClose && activeDrawerClose(); renderActiveTab();
+          }}, reason ? `${alt.name} · ${reason}` : alt.name); list.appendChild(item);
+        }); listKeyNav(list);
+        return list;
+      }, {});
+      line.appendChild(swapBtn);
       teamCard.appendChild(line);
     }
     body.appendChild(teamCard);
     const histCard = el('div', {style:'margin-block-start:18px'});
     histCard.appendChild(el('h3', {style:'font-size:13px;color:var(--ink-500);margin-block-end:8px'}, t('historyTitle')));
-    const hist = (f.visitHistory||[]).slice(-5).reverse();
+    const hist = (f.visitHistory||[]).slice(0,5);
     if(!hist.length) histCard.appendChild(el('p', {class:'card-summary'}, t('noHistory')));
     else for(const h of hist) histCard.appendChild(el('div', {class:'history-row'}, [el('span',null,fmtISO(h.date)), el('span',null,(h.team||[]).join('، '))]));
     body.appendChild(histCard); return body;
@@ -3755,8 +3775,15 @@ function renderReviewSection(root){
   if(plan.genderDropped.length){
     card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold);margin-block-start:10px'}, t('genderDroppedNote')(plan.genderDropped.length)));
   } else {
-    const basicCount = plan.rows.filter(r=>!r.empty && r.kind==='basic').length;
-    if(basicCount) card.appendChild(el('p', {class:'field-hint', style:'margin-block-start:10px'}, t('genderAchievedNote')(basicCount, basicCount)));
+    const basicRowsForGender = plan.rows.filter(r=>!r.empty && r.kind==='basic');
+    const basicCount = basicRowsForGender.length;
+    const invalidRows = basicRowsForGender.filter(isBasicInvalid);
+    const validCount = basicCount - invalidRows.length;
+    if(basicCount) card.appendChild(el('p', {class:'field-hint', style:'margin-block-start:10px'}, t('genderAchievedNote')(validCount, basicCount)));
+    if(invalidRows.length){
+      card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('genderInvalidNote')(invalidRows.length)));
+      for(const r of invalidRows) card.appendChild(el('div', {class:'history-row'}, [el('span',null,r.facility.name), el('span',{class:'field-hint'}, formatDateShort(r.date))]));
+    }
   }
   if(meta.weightOverrides.length) card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('weightOverrideNote')(meta.weightOverrides.length)));
   if(plan.pinnedOverflow.length) card.appendChild(el('p', {class:'field-hint', style:'color:var(--danger)'}, t('pinnedOverflowWarning')(plan.pinnedOverflow.length)));
@@ -4015,7 +4042,7 @@ function openFacilityDrawer(facility){
       el('label', {class:'field-label'}, t('lastVisitField')),
       el('p', {class:'card-summary'}, facilityLastVisitLabel(facility))
     ]));
-    const hist = (facility.visitHistory||[]).slice(-5).reverse();
+    const hist = (facility.visitHistory||[]).slice(0,5);
     if(hist.length){
       const histField = el('div', {class:'field'});
       histField.appendChild(el('label', {class:'field-label'}, t('last5')));
@@ -5223,6 +5250,47 @@ async function runSelfTests(){
 
     const noClustering = [row('basic',1), row('contracted',2), row('basic',3), row('contracted',4), row('contracted',5)];
     if(!runGate(noClustering).pass) throw new Error('should PASS: the minority stream (basic, 2<3) never clusters');
+    return 'ok';
+  });
+  check('slotBudget: counts mode derives from ratio when null and clamps M+R<=N (A6)', ()=>{
+    const withNulls = slotBudget(20, 'counts', {p:0.25, M:null, R:null, basicPoolLen:999, contractedPoolLen:999});
+    if(withNulls.M!==5 || withNulls.R!==15) throw new Error('expected a 0.25-ratio default (5/15), got '+JSON.stringify(withNulls));
+    const overRequested = slotBudget(20, 'counts', {p:0.25, M:15, R:15, basicPoolLen:999, contractedPoolLen:999});
+    if(overRequested.M+overRequested.R!==20) throw new Error('M+R should clamp to N=20, got '+(overRequested.M+overRequested.R));
+    return 'ok';
+  });
+  check('pushVisit: single descending invariant used by both import and approve paths (A8)', ()=>{
+    const f = {visitHistory: []};
+    pushVisit(f, new Date(2026,8,1), ['a']);
+    pushVisit(f, new Date(2026,8,10), ['b']);
+    pushVisit(f, new Date(2026,8,5), ['c']);
+    const isDescending = f.visitHistory.every((v,i)=>i===0 || f.visitHistory[i-1].date>=v.date);
+    if(!isDescending) throw new Error('visitHistory not sorted descending after pushVisit calls');
+    if(facilityMaxGap(f)<0) throw new Error('facilityMaxGap went negative — descending invariant broken');
+    for(let i=0;i<25;i++) pushVisit(f, new Date(2026,0,i+1), ['x']);
+    if(f.visitHistory.length!==20) throw new Error('expected truncation to 20, got '+f.visitHistory.length);
+    return 'ok';
+  });
+  check('rankStream: pinned facilities partition first, no NaN/Infinity in the comparator (A9)', ()=>{
+    const facs = [
+      {name:'ب', pinned:false, lastVisit:new Date(2026,7,1), visitCount:0, weight:1},
+      {name:'أ', pinned:true, lastVisit:null, visitCount:5, weight:1},
+      {name:'ج', pinned:true, lastVisit:null, visitCount:1, weight:1},
+      {name:'د', pinned:false, lastVisit:null, visitCount:0, weight:1}
+    ];
+    const out = rankStream(facs, new Date(2026,8,1), 720, null, 0);
+    if(!out[0].pinned || !out[1].pinned) throw new Error('pinned facilities should lead the list');
+    if(out[0].name!=='ج') throw new Error('pinned tie-break should order by visitCount (ج has fewer visits than أ)');
+    if(out.some(f=>f===undefined)) throw new Error('NaN/undefined leaked into the sorted output');
+    return 'ok';
+  });
+  check('gender report: counts actual 3-1 rows instead of always claiming 100% (A12)', ()=>{
+    const validRow = {empty:false, kind:'basic', finTeam:[{gender:'m'},{gender:'m'},{gender:'m'}], clinTeam:[{gender:'f'}]};
+    const invalidRow = {empty:false, kind:'basic', finTeam:[{gender:'m'},{gender:'m'}], clinTeam:[{gender:'f'},{gender:'f'}]};
+    const basicRows = [validRow, invalidRow, validRow];
+    const invalidCount = basicRows.filter(isBasicInvalid).length;
+    if(invalidCount!==1) throw new Error('expected exactly 1 invalid row detected, got '+invalidCount);
+    if(basicRows.length - invalidCount !== 2) throw new Error('expected 2 valid rows, the old code would have claimed 3');
     return 'ok';
   });
 return results;
