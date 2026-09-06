@@ -5293,6 +5293,84 @@ async function runSelfTests(){
     if(basicRows.length - invalidCount !== 2) throw new Error('expected 2 valid rows, the old code would have claimed 3');
     return 'ok';
   });
+  check('B10: workWeekdays={2} + 3 excluded Tuesdays -> zero assignments outside those days across a full quarter', ()=>{
+    const savedWeekdays = state.weekdays;
+    try{
+      state.weekdays = new Set([1,2,3,4]);
+      const tuesdays = [];
+      let d = new Date(2026,8,1);
+      while(tuesdays.length<3){ if(d.getDay()===2) tuesdays.push(fmtISO(d)); d = addDays(d,1); }
+      const restricted = freshPerson({id:'p_restricted', name:'Restricted', workWeekdays:[2], unavailable:tuesdays});
+      const finPool = [restricted, ...FIN_ADMIN_SEED.map(freshPerson)];
+      const plan = generatePlan({
+        registry: buildRegistry(REGISTRY_SEED), finPool, clinPool: CLINICAL_SEED.map(freshPerson),
+        startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+        weekdays: state.weekdays, holidays:new Set(), exceptions:new Set(),
+        mode:'ratio', ratioP:0.25, isUnavailable
+      });
+      for(const row of plan.rows){
+        if(row.empty) continue;
+        const onRow = [...row.finTeam, ...row.clinTeam].some(p=>p.id==='p_restricted');
+        if(!onRow) continue;
+        const iso = fmtISO(row.date);
+        if(row.date.getDay()!==2) throw new Error('assigned on a non-Tuesday: '+iso);
+        if(tuesdays.includes(iso)) throw new Error('assigned on an explicitly excluded Tuesday: '+iso);
+      }
+      return 'ok';
+    } finally {
+      state.weekdays = savedWeekdays;
+    }
+  });
+  check('B10: store round-trip preserves originLocationId, workWeekdays, excludedRanges', ()=>{
+    const sample = {
+      version:3, settings: defaultStoreSettings(),
+      locations: [{id:'loc_x', name:'x', km:12}], facilities: [],
+      people: [{id:'p_x', pool:'fin', originLocationId:'loc_x', workWeekdays:[1,3], excludedRanges:[{from:'2026-09-01',to:'2026-09-05'}], unavailable:['2026-09-10']}],
+      history: {facilityPersonVisits:{}, initialCounts:{fin:{},clin:{}}, lastCycleNumber:0},
+      aliases: {people:{}, facilities:{}}, unresolvedNames: []
+    };
+    const roundTripped = normalizeStoreV3(JSON.parse(JSON.stringify(sample)));
+    const p = roundTripped.people[0];
+    if(p.originLocationId!=='loc_x') throw new Error('originLocationId lost');
+    if(JSON.stringify(p.workWeekdays)!==JSON.stringify([1,3])) throw new Error('workWeekdays lost');
+    if(JSON.stringify(p.excludedRanges)!==JSON.stringify([{from:'2026-09-01',to:'2026-09-05'}])) throw new Error('excludedRanges lost');
+    if(JSON.stringify(p.unavailable)!==JSON.stringify(['2026-09-10'])) throw new Error('unavailable lost');
+    if(roundTripped.locations[0].km!==12) throw new Error('locations lost');
+    return 'ok';
+  });
+  check('B10: visitHistory stays descending through the real ingestHistory call site, and through a later approve-style push', ()=>{
+    const registry = [{id:'f_hist', name:'مركز الاختبار', category:'الاولي', kind:'basic', weight:1, lastVisit:null, visitCount:0, pinned:false, manualExcluded:false, visitHistory:[], reviewFlag:null}];
+    const records = [
+      {rowIndex:1, cycleRaw:'1', dateRaw:'2026-09-15', facilityRaw:'مركز الاختبار', categoryRaw:'الاولي', teamRaw:'شخص'},
+      {rowIndex:2, cycleRaw:'1', dateRaw:'2026-09-01', facilityRaw:'مركز الاختبار', categoryRaw:'الاولي', teamRaw:'شخص'},
+      {rowIndex:3, cycleRaw:'1', dateRaw:'2026-09-10', facilityRaw:'مركز الاختبار', categoryRaw:'الاولي', teamRaw:'شخص'}
+    ];
+    ingestHistory(records, registry, [], [], [], {});
+    const f = registry[0];
+    const isDescending = f.visitHistory.every((v,i)=>i===0 || f.visitHistory[i-1].date>=v.date);
+    if(!isDescending) throw new Error('ingestHistory left visitHistory out of order: '+JSON.stringify(f.visitHistory.map(v=>fmtISO(v.date))));
+    pushVisit(f, new Date(2026,8,20), ['team']);
+    const stillDescending = f.visitHistory.every((v,i)=>i===0 || f.visitHistory[i-1].date>=v.date);
+    if(!stillDescending) throw new Error('approve-style pushVisit broke the descending order');
+    if(fmtISO(f.visitHistory[0].date)!=='2026-09-20') throw new Error('newest visit should be first after the approve-style push');
+    return 'ok';
+  });
+  check('B10: per-person assigned counts reconcile with computeTotals', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson), clinPool = CLINICAL_SEED.map(freshPerson);
+    const plan = generatePlan({
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.25
+    });
+    const totals = computeTotals(plan.rows);
+    const finDeviation = computeDeviation(finPool, totals.finCounts, 2*plan.budget.M+plan.budget.R, plan.days);
+    const clinDeviation = computeDeviation(clinPool, totals.clinCounts, 2*(plan.budget.M+plan.budget.R), plan.days);
+    for(const dev of finDeviation) if(dev.actual !== (totals.finCounts[dev.person.id]||0)) throw new Error('fin actual does not reconcile for '+dev.person.id);
+    for(const dev of clinDeviation) if(dev.actual !== (totals.clinCounts[dev.person.id]||0)) throw new Error('clin actual does not reconcile for '+dev.person.id);
+    return 'ok';
+  });
 return results;
 }
 (function init(){
