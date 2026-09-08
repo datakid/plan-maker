@@ -510,6 +510,10 @@ function facilityMaxGap(f){
   }
   return maxGap;
 }
+function pushVisit(facility, date, team){
+  if(!facility.visitHistory) facility.visitHistory = [];
+  facility.visitHistory = facility.visitHistory.concat([{date, team}]).sort((a,b)=>b.date-a.date).slice(0,20);
+}
 function computeNever(facilities){
   let maxGap = 0;
   for(const f of facilities){
@@ -610,20 +614,25 @@ function weekdayTerm(v, dow, dctx, settings){
   return m;
 }
 function rankStream(facilities, planStart, NEVER, dctx, bias){
-  const scored = facilities.map(f=>{
-    const overdue = f.pinned ? Infinity
-      : (f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER);
+  const pinned = [], rest = [];
+  for(const f of facilities){ (f.pinned ? pinned : rest).push(f); }
+  const tieBreak = (a,b) => {
+    const va = a.visitCount||0, vb = b.visitCount||0;
+    if(va!==vb) return va-vb;
+    return norm(a.name)<norm(b.name) ? -1 : (norm(a.name)>norm(b.name)?1:0);
+  };
+  pinned.sort(tieBreak);
+  const scored = rest.map(f=>{
+    const overdue = f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER;
     const weight = f.weight==null?1:f.weight;
-    const score = overdue===Infinity ? Infinity : overdue*weight*distanceTerm(f, dctx, bias);
+    const score = overdue*weight*distanceTerm(f, dctx, bias);
     return {f, overdue, score};
   });
   scored.sort((a,b)=>{
     if(b.score!==a.score) return b.score-a.score;
-    const va = a.f.visitCount||0, vb = b.f.visitCount||0;
-    if(va!==vb) return va-vb;
-    return norm(a.f.name)<norm(b.f.name) ? -1 : (norm(a.f.name)>norm(b.f.name)?1:0);
+    return tieBreak(a.f, b.f);
   });
-  return scored.map(s=>s.f);
+  return pinned.concat(scored.map(s=>s.f));
 }
 function slotBudget(N, mode, opts){
   let M,R;
@@ -1402,8 +1411,10 @@ const RETIRED_SEED = [
   {id:'p_hindawy', name:'حاسب الي', gender:'m'},
   {id:'p_sobhy', name:'فني', gender:'m'}
 ];
+const PERSON_ORIGIN_SEED = {p_shaltoot:'ايتاي', p_mariam:'كفر الدوار', p_asmaa:'النفرة'};
 function freshPerson(p){
-  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0, workWeekdays:null, excludedRanges:[], originLocationId:locationIdFor('دمنهور')}, p);
+  const originName = (p && PERSON_ORIGIN_SEED[p.id]) || 'دمنهور';
+  return Object.assign({weight:1, fixedCount:null, unavailable:[], blockedFacilities:[], active:true, distanceAffinity:0, workWeekdays:null, excludedRanges:[], originLocationId:locationIdFor(originName)}, p);
 }
 function escapeXml(s){
   return String(s==null?'':s)
@@ -1745,10 +1756,7 @@ function ingestHistory(records, registry, finPool, clinPool, retiredPool, person
     if(!facility.lastVisit || date>facility.lastVisit) facility.lastVisit = date;
     matchedRowCount++;
     const names = rec.teamRaw.split('-').map(s=>s.trim()).filter(Boolean);
-    if(!facility.visitHistory) facility.visitHistory = [];
-    facility.visitHistory.push({date, team: names});
-    facility.visitHistory.sort((a,b)=>b.date-a.date);
-    if(facility.visitHistory.length>20) facility.visitHistory.length = 20;
+    pushVisit(facility, date, names);
     for(const rawName of names){
       const pKey = normPerson(rawName);
       const override = personAliasOverrides[pKey];
@@ -1903,6 +1911,7 @@ window:'كل زيارة ضمن أيام عمل الجهة المسموحة'
 jumpToRow:'الانتقال للصف', achievedMix:(m,r,n)=>`المزيج المحقق: ${m} أساسي / ${r} متعاقد من ${n} (${Math.round(n?m/n*100:0)}٪)`,
 genderDroppedNote:n=>`تعذّر ضبط توازن النوع في ${n} يوم — مُدرجة أدناه`,
 genderAchievedNote:(ok,total)=>`توازن النوع 3-1: تحقق في ${ok} من ${total} فريق رباعي`,
+genderInvalidNote:n=>`${n} فريق لم تتحقق فيه موازنة 3-1:`,
 overTiedNote:n=>`${n} حالة تكرار زائد تم تجاوز الوزن فيها — راجع القائمة`,
 weightOverrideNote:n=>`${n} إسناد تجاوز الوزن المحدد لعدم توفر بديل — راجع القائمة`,
 thirdsTitle:'التوزيع على الأثلاث', thirdLabel:i=>`الثلث ${i}`,
@@ -2069,6 +2078,7 @@ window:'Every visit falls within the facility\'s allowed weekdays'
 jumpToRow:'Jump to row', achievedMix:(m,r,n)=>`Achieved mix: ${m} basic / ${r} contracted of ${n} (${Math.round(n?m/n*100:0)}%)`,
 genderDroppedNote:n=>`Gender balance could not be fixed on ${n} day(s) — listed below`,
 genderAchievedNote:(ok,total)=>`Gender 3-1 balance: achieved on ${ok} of ${total} four-person team(s)`,
+genderInvalidNote:n=>`${n} team(s) without 3-1 balance:`,
 overTiedNote:n=>`${n} over-tie case(s) where weight was overridden — review the list`,
 weightOverrideNote:n=>`${n} assignment(s) overrode weight for lack of an alternative — review the list`,
 thirdsTitle:'Distribution across thirds', thirdLabel:i=>`Third ${i}`,
@@ -3960,7 +3970,7 @@ function handleApprovePlan(){
   for(const r of state.plan.rows){
     if(r.empty) continue;
     r.facility.lastVisit = r.date; r.facility.visitCount = (r.facility.visitCount||0)+1;
-    r.facility.visitHistory = (r.facility.visitHistory||[]).concat([{date:r.date, team:[...r.finTeam,...r.clinTeam].map(p=>p.name)}]).sort((a,b)=>b.date-a.date).slice(0,20);
+    pushVisit(r.facility, r.date, [...r.finTeam,...r.clinTeam].map(p=>p.name));
     for(const p of [...r.finTeam, ...r.clinTeam]){
       const key = r.facility.id+'|'+p.id; state.facilityPersonVisits[key] = (state.facilityPersonVisits[key]||0)+1;
     }
@@ -4225,8 +4235,15 @@ function renderReviewSection(root){
     for(const d of plan.genderDropped) dropList.appendChild(el('li', null, `${formatDateShort(d.date)} · ${d.facility}`));
     card.appendChild(dropList);
   } else {
-    const basicCount = plan.rows.filter(r=>!r.empty && r.kind==='basic').length;
-    if(basicCount) card.appendChild(el('p', {class:'field-hint', style:'margin-block-start:10px'}, t('genderAchievedNote')(basicCount, basicCount)));
+    const basicRowsForGender = plan.rows.filter(r=>!r.empty && r.kind==='basic');
+    const basicCount = basicRowsForGender.length;
+    const invalidRows = basicRowsForGender.filter(isBasicInvalid);
+    const validCount = basicCount - invalidRows.length;
+    if(basicCount) card.appendChild(el('p', {class:'field-hint', style:'margin-block-start:10px'}, t('genderAchievedNote')(validCount, basicCount)));
+    if(invalidRows.length){
+      card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('genderInvalidNote')(invalidRows.length)));
+      for(const r of invalidRows) card.appendChild(el('div', {class:'history-row'}, [el('span',null,r.facility.name), el('span',{class:'field-hint'}, formatDateShort(r.date))]));
+    }
   }
   if(meta.weightOverrides.length) card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('weightOverrideNote')(meta.weightOverrides.length)));
   if(plan.pinnedOverflow.length) card.appendChild(el('p', {class:'field-hint', style:'color:var(--danger)'}, t('pinnedOverflowWarning')(plan.pinnedOverflow.length)));
@@ -5684,6 +5701,124 @@ async function runSelfTests(){
     if(JSON.stringify(snap(bare))!==JSON.stringify(snap(allOff))) throw new Error('Baseline-3 (all preferences explicitly off) diverged from Baseline-1/2');
     return `${snap(bare).filter(Boolean).length} rows — Baseline-3 confirmed byte-identical to Baseline-1/2`;
   });
+  check('Baseline chain (Phase 12): Baseline-2 byte-identical to Baseline-1, and Baseline-3 byte-identical to Baseline-2, at BOTH shipped ratioP values', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const snap = plan => JSON.stringify(plan.rows.map(r=>r.empty?null:{d:fmtISO(r.date), f:r.facility.id, fin:r.finTeam.map(p=>p.id), clin:r.clinTeam.map(p=>p.id)}));
+    const results = [];
+    for(const ratioP of [0.68, 0.25]){
+      const baseOpts = {
+        registry, finPool, clinPool,
+        startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+        weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+        mode:'ratio', ratioP
+      };
+      const baseline1 = generatePlan(baseOpts);
+      const baseline2 = generatePlan(Object.assign({}, baseOpts, {maxVisitsPerDay:1, poolUtilizationCap:0.85}));
+      const baseline3 = generatePlan(Object.assign({}, baseOpts, {maxVisitsPerDay:1, cadence:{mode:'off'}, weekdayProfiles:{}, originMode:'ignore'}));
+      if(baseline1.isShared || baseline2.isShared || baseline3.isShared) throw new Error(`ratioP=${ratioP}: a baseline run was routed through planShared`);
+      if(snap(baseline1)!==snap(baseline2)) throw new Error(`ratioP=${ratioP}: Baseline-2 diverged from Baseline-1`);
+      if(snap(baseline2)!==snap(baseline3)) throw new Error(`ratioP=${ratioP}: Baseline-3 diverged from Baseline-2`);
+      results.push(`ratioP=${ratioP}: ${JSON.parse(snap(baseline1)).filter(Boolean).length} rows`);
+    }
+    return results.join('; ')+' — chain holds at both values';
+  });
+  check('shipped defaults (Phase 12): default cadence/origin cause no extra drops vs Baseline-3, and all gates pass', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const retiredIds = new Set(RETIRED_SEED.map(p=>p.id));
+    const defaults = defaultStoreSettings();
+    const baseOpts = {
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:defaults.ratioP, isUnavailable:makeUnavailableChecker()
+    };
+    const baseline3 = generatePlan(Object.assign({}, baseOpts, {maxVisitsPerDay:1, cadence:{mode:'off'}, weekdayProfiles:{}, originMode:'ignore'}));
+    const shipped = generatePlan(Object.assign({}, baseOpts, {
+      maxVisitsPerDay:defaults.maxVisitsPerDay, poolUtilizationCap:defaults.poolUtilizationCap,
+      cadence:defaults.cadence, weekdayProfiles:defaults.weekdayProfiles,
+      originMode:defaults.originMode, originStrength:defaults.originStrength
+    }));
+    const dropsBaseline = baseline3.rows.filter(r=>r.empty).length;
+    const dropsShipped = shipped.sharedDrops ? shipped.sharedDrops.length : shipped.rows.filter(r=>r.empty).length;
+    const placedBaseline = baseline3.rows.filter(r=>!r.empty).length;
+    const placedShipped = shipped.rows.filter(r=>!r.empty).length;
+    if(placedShipped<placedBaseline) throw new Error(`shipped defaults placed fewer visits than Baseline-3: ${placedShipped} vs ${placedBaseline}`);
+    const peopleCtx = {finPool, clinPool, isUnavailable:makeUnavailableChecker(), maxVisitsPerDay:defaults.maxVisitsPerDay};
+    const gates = computeGates(shipped, registry, retiredIds, peopleCtx);
+    const failed = gates.filter(g=>!g.pass);
+    if(failed.length) throw new Error('shipped-defaults plan failed gates: '+failed.map(g=>g.key).join(', '));
+    return `Baseline-3 placed ${placedBaseline} (${dropsBaseline} empty), shipped defaults placed ${placedShipped} (${dropsShipped} drops), ${gates.length} gates all pass`;
+  });
+  check('packVisits (Phase 12 slack damper): at V=k·N (zero slack), cadence "prefer" drops exactly as many as "off"', ()=>{
+    const N=10, k=2, V=k*N;
+    const days = Array.from({length:N}, (_,i)=>new Date(2026,8,1+i));
+    const f = {id:'f1', kind:'basic', visitWeekdays:null};
+    const sequence = Array.from({length:V}, ()=>({kind:'basic', facility:f}));
+    const aFin = new Array(N).fill(99), aClin = new Array(N).fill(99);
+    const off = packVisits(sequence.slice(), days, k, aFin, aClin, {hasDatePrefs:false});
+    const prefer = packVisits(sequence.slice(), days, k, aFin, aClin, {hasDatePrefs:true, cadence:{mode:'prefer', gapDays:2, strength:0.7}, dctx:null, settings:{}, W:3});
+    if(off.placed.length!==V || off.dropped.length!==0) throw new Error(`expected "off" to place all ${V} with zero slack, got placed=${off.placed.length} dropped=${off.dropped.length}`);
+    if(prefer.dropped.length!==off.dropped.length) throw new Error(`slack damper failed: "off" dropped ${off.dropped.length}, "prefer" dropped ${prefer.dropped.length}`);
+    return `V=${V}=k·N (zero slack): both "off" and "prefer" placed all ${prefer.placed.length}, 0 drops either way`;
+  });
+  check('computeDeviation (Phase 12): cadence/weekday preferences (default scope) never shift per-person deviation, only origin/travel does', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const checker = makeUnavailableChecker();
+    const baseOpts = {
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.25, isUnavailable:checker
+    };
+    function devByPerson(plan){
+      const totals = computeTotals(plan.rows);
+      const finActive = finPool.filter(p=>p.active!==false), clinActive = clinPool.filter(p=>p.active!==false);
+      const finDev = computeDeviation(finActive, totals.finCounts, 2*plan.budget.M+plan.budget.R, plan.days, checker);
+      const clinDev = computeDeviation(clinActive, totals.clinCounts, 2*(plan.budget.M+plan.budget.R), plan.days, checker);
+      const map = {};
+      for(const d of [...finDev, ...clinDev]) map[d.person.id] = d.deviation;
+      return map;
+    }
+    const baseline = Object.assign({}, baseOpts, {maxVisitsPerDay:1, poolUtilizationCap:0.85, originMode:'count', originStrength:0.5, cadence:{mode:'off'}, weekdayProfiles:{}, preferenceCeiling:2.5});
+    const devBase = devByPerson(generatePlan(baseline));
+    const cadenceMaxed = Object.assign({}, baseline, {cadence:{mode:'prefer', gapDays:2, strength:1}});
+    const devCadence = devByPerson(generatePlan(cadenceMaxed));
+    const weekdayMaxed = Object.assign({}, baseline, {weekdayProfiles:{1:{kindPref:'contracted', kindStrength:1}, 4:{kindPref:'basic', kindStrength:1}}});
+    const devWeekday = devByPerson(generatePlan(weekdayMaxed));
+    for(const id in devBase){
+      if(Math.abs(devCadence[id]-devBase[id])>1e-9) throw new Error(`cadence (default scope='plan') shifted ${id}'s deviation — it should only affect date placement, never who is chosen`);
+      if(Math.abs(devWeekday[id]-devBase[id])>1e-9) throw new Error(`weekdayProfiles shifted ${id}'s deviation — it should only affect date placement, never who is chosen`);
+    }
+    return `${Object.keys(devBase).length} people: cadence and weekdayProfiles at max strength produce zero per-person deviation shift under default scope`;
+  });
+  check('Summary tab (Phase 12): per-person assigned counts reconcile exactly with computeTotals', ()=>{
+    const registry = buildRegistry(REGISTRY_SEED);
+    const finPool = FIN_ADMIN_SEED.map(freshPerson);
+    const clinPool = CLINICAL_SEED.map(freshPerson);
+    const checker = makeUnavailableChecker();
+    const plan = generatePlan({
+      registry, finPool, clinPool,
+      startDate:new Date(2026,8,1), endDate:new Date(2026,10,30),
+      weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(),
+      mode:'ratio', ratioP:0.25, isUnavailable:checker
+    });
+    const totals = computeTotals(plan.rows);
+    const finActive = finPool.filter(p=>p.active!==false), clinActive = clinPool.filter(p=>p.active!==false);
+    const finDev = computeDeviation(finActive, totals.finCounts, 2*plan.budget.M+plan.budget.R, plan.days, checker);
+    const clinDev = computeDeviation(clinActive, totals.clinCounts, 2*(plan.budget.M+plan.budget.R), plan.days, checker);
+    for(const d of [...finDev, ...clinDev]){
+      const nonEmpty = plan.rows.filter(r=>!r.empty);
+      const directCount = nonEmpty.filter(r=>r.finTeam.some(p=>p.id===d.person.id)||r.clinTeam.some(p=>p.id===d.person.id)).length;
+      if(d.actual!==directCount) throw new Error(`${d.person.name}: deviation.actual=${d.actual} but a direct row count gives ${directCount}`);
+    }
+    return `${finDev.length+clinDev.length} people checked — Summary tab's source data (computeDeviation over computeTotals) matches a direct row count exactly`;
+  });
   check('packVisits (Phase 7 packer amendment): cadence "prefer" consolidates onto fewer, better-spaced days when capacity allows', ()=>{
     const days = Array.from({length:10}, (_,i)=>new Date(2026,8,i+1));
     const f = {id:'f1', kind:'basic', visitWeekdays:null};
@@ -5927,6 +6062,39 @@ async function runSelfTests(){
     const gap = facilityMaxGap(f);
     if(gap!==7) throw new Error('expected max gap 7 days, got '+gap);
     return `order ok, maxGap=${gap}`;
+  });
+  check('rankStream: pinned facilities partition first, no NaN/Infinity in the comparator (A9)', ()=>{
+    const facs = [
+      {name:'ب', pinned:false, lastVisit:new Date(2026,7,1), visitCount:0, weight:1},
+      {name:'أ', pinned:true, lastVisit:null, visitCount:5, weight:1},
+      {name:'ج', pinned:true, lastVisit:null, visitCount:1, weight:1},
+      {name:'د', pinned:false, lastVisit:null, visitCount:0, weight:1}
+    ];
+    const out = rankStream(facs, new Date(2026,8,1), 720, null, 0);
+    if(!out[0].pinned || !out[1].pinned) throw new Error('pinned facilities should lead the list');
+    if(out[0].name!=='ج') throw new Error('pinned tie-break should order by visitCount (ج has fewer visits than أ)');
+    if(out.some(f=>f===undefined)) throw new Error('NaN/undefined leaked into the sorted output');
+    return 'ok';
+  });
+  check('gender report: counts actual 3-1 rows instead of always claiming 100% (A12)', ()=>{
+    const validRow = {empty:false, kind:'basic', finTeam:[{gender:'m'},{gender:'m'},{gender:'m'}], clinTeam:[{gender:'f'}]};
+    const invalidRow = {empty:false, kind:'basic', finTeam:[{gender:'m'},{gender:'m'}], clinTeam:[{gender:'f'},{gender:'f'}]};
+    const basicRows = [validRow, invalidRow, validRow];
+    const invalidCount = basicRows.filter(isBasicInvalid).length;
+    if(invalidCount!==1) throw new Error('expected exactly 1 invalid row detected, got '+invalidCount);
+    if(basicRows.length - invalidCount !== 2) throw new Error('expected 2 valid rows, the old code would have claimed 3');
+    return 'ok';
+  });
+  check('origin seed defaults: شلتوت/مريم/أسماء get their named origins, everyone else دمنهور (B3)', ()=>{
+    const shaltoot = freshPerson({id:'p_shaltoot'});
+    const mariam = freshPerson({id:'p_mariam'});
+    const asmaa = freshPerson({id:'p_asmaa'});
+    const other = freshPerson({id:'p_abaza'});
+    if(shaltoot.originLocationId!==locationIdFor('ايتاي')) throw new Error('شلتوت origin mismatch');
+    if(mariam.originLocationId!==locationIdFor('كفر الدوار')) throw new Error('مريم origin mismatch');
+    if(asmaa.originLocationId!==locationIdFor('النفرة')) throw new Error('أسماء origin mismatch');
+    if(other.originLocationId!==locationIdFor('دمنهور')) throw new Error('default origin should be دمنهور');
+    return 'ok';
   });
   check('ingestion: unresolved facility/person detected, known history matched', ()=>{
     const registry = buildRegistry(REGISTRY_SEED);
