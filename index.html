@@ -4,9 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>الخطة</title>
+<script>
+(function(){
+  try{
+    var lang = localStorage.getItem('alkhitta.lang') || 'ar';
+    var theme = localStorage.getItem('alkhitta.theme') || 'auto';
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang==='ar' ? 'rtl' : 'ltr';
+    if(theme!=='auto') document.documentElement.setAttribute('data-theme', theme);
+  }catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=JetBrains+Mono:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -15,8 +26,13 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#6E606A; --ink-300:#544750; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
 }
 html{color-scheme:light dark}
+html{scrollbar-width:thin; scrollbar-color:var(--ink-300) transparent}
+::-webkit-scrollbar{width:9px; height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--ink-300); border-radius:999px; border:2px solid transparent; background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-400); background-clip:padding-box}
 body{margin:0; background:var(--bg-page); color:var(--ink-900); font-family:"IBM Plex Sans Arabic","Noto Sans Arabic",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; font-variant-numeric:tabular-nums; line-height:1.65; transition:background var(--motion), color var(--motion); font-size:14px}
-body::before{content:""; position:fixed; inset:0; z-index:999; pointer-events:none; opacity:.025; mix-blend-mode:multiply; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+body::before{content:""; position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.025; mix-blend-mode:multiply; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 h1,h2,h3,h4{font-family:inherit; margin:0; line-height:1.3}
 h1{font-size:22px; font-weight:600}
 h2{font-size:17px; font-weight:600}
@@ -30,19 +46,23 @@ a{color:inherit}
 :focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px; border-radius:4px}
 @media (prefers-reduced-motion: reduce){*{transition:none !important; animation:none !important}
 }
-.app-topbar{max-width:1040px; margin-inline:auto; padding-inline:20px; padding-block:16px 8px; display:flex; align-items:center; justify-content:space-between}
-.wordmark{display:flex; align-items:center; gap:8px; font-size:15px; font-weight:600}
-.wordmark svg{width:22px; height:22px; color:var(--primary)}
-.wordmark svg circle{fill:var(--wash-selected)}
+.app-topbar{max-width:1040px; margin-inline:auto; padding-inline:20px; padding-block:20px 10px; display:flex; align-items:center; justify-content:space-between; gap:16px}
+.wordmark{display:flex; align-items:center; gap:12px; font-size:15px; font-weight:600}
+.wordmark-mark{width:38px; height:38px; border-radius:12px; background:var(--primary); display:inline-flex; align-items:center; justify-content:center; color:var(--on-primary); box-shadow:0 4px 12px -4px var(--shadow-tint); flex:0 0 auto}
+.wordmark-mark svg{width:21px; height:21px}
+.wordmark-mark svg circle{fill:var(--on-primary)}
+.wordmark-name{font-family:Fraunces,"IBM Plex Sans Arabic",serif; font-weight:600; font-size:19px; letter-spacing:-.01em; color:var(--ink-900)}
 .topbar-controls{display:flex; gap:6px}
 .icon-btn{background:transparent; border:0; border-radius:var(--r-chip); width:var(--ctl-h); height:var(--ctl-h); display:inline-flex; align-items:center; justify-content:center; color:var(--ink-700); font-size:13px; transition:background var(--motion), color var(--motion)}
 .icon-btn:hover{background:var(--wash-hover); color:var(--ink-900)}
-.tabbar{position:sticky; top:0; z-index:20; background:var(--bg-page); transition:box-shadow var(--motion), border-color var(--motion)}
+.tabbar{position:sticky; top:0; z-index:20; padding-block:10px 4px; background:linear-gradient(var(--bg-page) 78%, rgba(0,0,0,0)); transition:box-shadow var(--motion), border-color var(--motion)}
 .tabbar.scrolled{box-shadow:0 1px 0 0 var(--hairline)}
-.tabbar-inner{max-width:1040px; margin-inline:auto; padding-inline:20px; display:flex; gap:4px; padding-block:6px}
-.tab-btn{background:transparent; border:0; padding:9px 18px; border-radius:var(--r-chip); font-size:14px; font-weight:500; color:var(--ink-500); transition:background var(--motion), color var(--motion)}
-.tab-btn:hover{color:var(--ink-900); background:var(--wash-hover)}
+.tabbar-wrap{max-width:1040px; margin-inline:auto; padding-inline:20px}
+.tabbar-inner{display:inline-flex; gap:4px; max-width:100%; overflow-x:auto; background:var(--bg-card); border:1px solid var(--hairline); border-radius:var(--r-chip); padding:5px; box-shadow:0 1px 2px var(--shadow-tint)}
+.tab-btn{display:flex; align-items:center; gap:8px; background:transparent; border:0; padding:8px 16px; border-radius:var(--r-chip); font-size:13.5px; font-weight:600; color:var(--ink-500); white-space:nowrap; transition:background var(--motion), color var(--motion)}
+.tab-btn:hover{color:var(--ink-700); background:var(--wash-hover)}
 .tab-btn[aria-selected="true"]{background:var(--wash-selected); color:var(--primary)}
+.tab-btn svg{width:15px; height:15px; flex:0 0 auto; display:block}
 .view-container{max-width:1040px; margin-inline:auto; padding-inline:20px; padding-block:20px 100px; display:flex; flex-direction:column; gap:16px}
 .stale-bar{display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--gold-soft); color:var(--gold); border-radius:var(--r-ctl); padding:10px 16px; font-size:13px; font-weight:500}
 .stale-bar button{background:var(--gold); color:var(--bg-card); border:0; border-radius:var(--r-chip); padding:6px 14px; font-size:13px; font-weight:500; flex-shrink:0}
@@ -100,7 +120,7 @@ a{color:inherit}
 .avatar-chip{display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:var(--wash-selected); color:var(--primary); font-size:13px; font-weight:600; flex-shrink:0}
 .avatar-row{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
 .avatar-row .inactive{opacity:.45; text-decoration:line-through}
-.popover{position:fixed; z-index:60; background:var(--bg-raised); border:1px solid var(--hairline); border-radius:var(--r-card); box-shadow:var(--shadow-float); padding:8px; min-width:180px; max-width:min(360px, calc(100vw - 24px)); max-height:min(420px, calc(100vh - 24px)); overflow:auto}
+.popover{position:fixed; z-index:85; background:var(--bg-raised); border:1px solid var(--hairline); border-radius:var(--r-card); box-shadow:var(--shadow-float); padding:8px; min-width:180px; max-width:min(360px, calc(100vw - 24px)); max-height:min(420px, calc(100vh - 24px)); overflow:auto}
 .popover-list{display:flex; flex-direction:column; gap:1px}
 .popover-item{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 12px; border-radius:calc(var(--r-ctl) - 2px); border:0; background:transparent; color:var(--ink-900); font-size:14px; text-align:start; width:100%; transition:background var(--motion)}
 .popover-item:hover, .popover-item.hl{background:var(--wash-hover)}
@@ -177,16 +197,11 @@ a{color:inherit}
 .slider-bubble{position:absolute; bottom:100%; margin-block-end:6px; left:50%; transform:translateX(-50%); background:var(--ink-900); color:var(--bg-page); font-size:13px; padding:3px 7px; border-radius:6px; white-space:nowrap}
 :root[data-theme="dark"] .slider-bubble{background:var(--bg-card); border:1px solid var(--hairline); color:var(--ink-900)}
 .slider-stops{position:relative; height:0}
-.split-bar{position:relative; height:40px; border-radius:var(--r-ctl); overflow:hidden; display:flex; background:var(--wash-hover)}
-.split-bar .seg-basic{background:var(--primary); display:flex; align-items:center; padding-inline:12px; color:var(--on-primary); font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden}
-.split-bar .seg-gold{background:var(--gold); display:flex; align-items:center; justify-content:flex-end; padding-inline:12px; color:var(--on-primary); font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden}
-[dir="rtl"] .split-bar .seg-gold{justify-content:flex-start}
-.split-divider{position:absolute; top:0; bottom:0; width:14px; margin-inline-start:-7px; cursor:ew-resize; z-index:2; display:flex; align-items:center; justify-content:center}
-.split-divider::after{content:""; width:3px; height:20px; border-radius:2px; background:var(--bg-card); opacity:.85}
 .scrim{position:fixed; inset:0; background:rgba(38,32,41,.45); z-index:70; opacity:0; transition:opacity var(--motion)}
 .scrim.show{opacity:1}
 .drawer{position:fixed; top:0; bottom:0; inset-inline-start:0; width:460px; max-width:92vw; background:var(--bg-raised); z-index:71; box-shadow:var(--shadow-float); display:flex; flex-direction:column; transform:translateX(-100%); transition:transform var(--motion)}
 [dir="rtl"] .drawer{transform:translateX(100%)}
+body.drawer-open{overflow:hidden}
 .drawer.show{transform:translateX(0)}
 .drawer-head{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-block-end:1px solid var(--hairline); flex-shrink:0}
 .drawer-head h2{font-size:15px; font-weight:600}
@@ -226,8 +241,9 @@ a{color:inherit}
 .result-row.contracted .rcat{background:var(--gold-soft); color:var(--gold)}
 .result-row .rteam{font-size:13px; color:var(--ink-500); text-align:end; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px}
 .result-row.same-date{margin-block-start:-4px; border-start-start-radius:0; border-start-end-radius:0}
+.result-row.has-following-same-date{border-end-start-radius:0; border-end-end-radius:0}
 .spacer-row{height:8px}
-.results-sticky-head{position:sticky; top:52px; z-index:5; display:grid; grid-template-columns:78px 1fr auto auto; gap:12px; padding:0 12px 6px; font-size:13px; color:var(--ink-500); font-weight:600; background:var(--bg-card)}
+.results-sticky-head{position:sticky; top:var(--tabbar-h, 52px); z-index:5; display:grid; grid-template-columns:78px 1fr auto auto; gap:12px; margin-inline:-24px; padding:0 36px 6px; border-inline-start:3px solid transparent; font-size:13px; color:var(--ink-500); font-weight:600; background:var(--bg-card)}
 .score-breakdown{display:flex; flex-direction:column; gap:6px; font-size:13px}
 .score-line{display:flex; justify-content:space-between; gap:8px; color:var(--ink-700)}
 .score-line b{color:var(--ink-900); font-weight:600}
@@ -254,12 +270,12 @@ a{color:inherit}
 .collapsible-head{display:flex; align-items:center; justify-content:space-between; cursor:pointer}
 .collapsible-head .car{transition:transform var(--motion); color:var(--ink-500)}
 .collapsible-head.open .car{transform:rotate(180deg)}
-.filter-bar{position:sticky; top:52px; z-index:5; background:var(--bg-page); padding-block:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.filter-bar{position:sticky; top:var(--tabbar-h, 52px); z-index:5; background:var(--bg-page); padding-block:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center}
 .filter-bar .search-field{flex:1; min-width:180px}
 .review-toggle{margin-inline-start:auto}
 .fac-table-head{display:grid; grid-template-columns:26px 1.6fr .9fr .9fr .6fr .6fr .8fr .6fr .6fr; gap:8px; padding:8px 12px; font-size:13px; color:var(--ink-500); font-weight:600; border-block-end:1px solid var(--hairline)}
 .fac-row{display:grid; grid-template-columns:26px 1.6fr .9fr .9fr .6fr .6fr .8fr .6fr .6fr; gap:8px; align-items:center; padding:11px 12px; border-radius:var(--r-ctl); cursor:pointer; transition:background var(--motion); font-size:13px; border:0; background:transparent; width:100%; text-align:start}
-.fac-row-check{width:16px; height:16px}
+.fac-row-check{width:16px; height:16px; accent-color:var(--primary)}
 .fac-row:hover{background:var(--wash-hover)}
 .fac-row .fname{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .fac-row .fmeta{color:var(--ink-500); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -319,26 +335,67 @@ a{color:inherit}
 .review-queue-item:last-child{background-image:none}
 @media print{.app-topbar, .tabbar, .footer-note, .sticky-primary, .stale-bar, .drawer, .scrim, .toast-region, body::before{display:none !important}
 body{background:#fff; color:#000}
-.view-container{padding:0; max-width:none}
+.view-container{padding:0; max-width:none; display:none !important}
 #printSurface{display:block !important}
 #printSurface table{width:100%; border-collapse:collapse; font-size:13px}
 #printSurface th, #printSurface td{border:1px solid #999; padding:6px 8px; text-align:start}
 }
 #printSurface{display:none}
 @media (max-width:640px){.card{padding:16px}
+.tab-btn .tab-label{display:none}
+.tab-btn{padding:9px}
 .fac-table-head{display:none}
 .fac-row{grid-template-columns:1fr; gap:4px; padding:12px}
+.fac-row .fmeta::before, .fac-row .fstatus::before{content:attr(data-label) ": "; color:var(--ink-500); font-size:11px; font-weight:600}
 .team-grid{grid-template-columns:1fr 1fr}
 .drawer{width:100vw; max-width:100vw}
 .result-row{grid-template-columns:60px 1fr auto}
 .result-row .rteam{display:none}
 .range-row > *{min-width:100%}
 }
+:root{--font-display:Fraunces,"IBM Plex Sans Arabic",serif; --font-num:"JetBrains Mono","IBM Plex Sans Arabic",ui-monospace,monospace; --skin-lift:0 1px 2px var(--shadow-tint), 0 16px 40px -24px var(--shadow-tint); --skin-lift-hover:0 1px 2px var(--shadow-tint), 0 10px 24px -16px var(--shadow-tint); --skin-stagger:45ms}
+.card{box-shadow:var(--skin-lift)}
+.drawer{box-shadow:0 40px 90px -30px var(--shadow-tint), var(--shadow-float)}
+.card-head h2, .drawer-head h2, .confirm-dialog h3, .team-card-name, .month-section h3{font-family:var(--font-display); letter-spacing:0}
+.card-head h2{font-size:18px; font-weight:600; color:var(--ink-900)}
+.month-section h3{font-size:15px; font-weight:600; color:var(--ink-700)}
+:root[lang="en"] .settings-section h3, :root[lang="en"] .setup-row-head h3{font-family:var(--font-num); font-size:10.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-400)}
+:root[lang="en"] .month-section h3{font-style:italic; font-weight:500}
+.result-row .rdate, .totals-bar-dev, .diff-count, .score-line, .alt-meta, .stepper input, .slider-bubble, .history-row > span:last-child{font-family:var(--font-num); font-variant-numeric:tabular-nums}
+.result-row .rdate{font-size:12.5px; color:var(--ink-500)}
+.result-row .rcat, .pool-badge, .status-chip{font-family:var(--font-num); font-size:11px; border-radius:7px}
+:root[lang="en"] .result-row .rcat, :root[lang="en"] .pool-badge, :root[lang="en"] .status-chip{font-size:10px; letter-spacing:.09em; text-transform:uppercase}
+.result-row{border-radius:var(--r-ctl); transition:background var(--motion), transform var(--motion), box-shadow var(--motion)}
+.result-row:hover{transform:translateY(-1px); box-shadow:var(--skin-lift-hover)}
+.result-row:active{transform:translateY(0)}
+@media (prefers-reduced-motion: no-preference){.result-row{animation:skin-rise .34s var(--ease) both; animation-delay:calc(var(--i, 0) * var(--skin-stagger))}
+}
+@keyframes skin-rise{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+.result-row .rteam{max-width:320px}
+.rteam .pill{display:inline-flex; align-items:center; padding:3px 10px; margin-inline-end:4px; border-radius:var(--r-chip); font-size:12.5px; font-weight:500; white-space:nowrap}
+.rteam .pill.fin{background:var(--wash-selected); color:var(--primary)}
+.rteam .pill.clin{box-shadow:inset 0 0 0 1px var(--hairline-strong); color:var(--ink-700)}
+.rteam .pill.hl{background:var(--wash-selected); color:var(--primary); box-shadow:0 0 0 2px var(--focus-ring)}
+.totals-bar-track{height:6px}
+.totals-bar-fill{transition:width .5s var(--ease)}
+.alt-row, .history-row, .review-queue-item, .location-row{background-image:none; border-block-end:1px dashed var(--hairline)}
+.alt-row:last-child, .history-row:last-child, .review-queue-item:last-child, .location-row:last-child{border-block-end:0}
+.gate-line{padding:9px 14px; border-radius:var(--r-ctl)}
+.gate-line.pass{background:var(--wash-hover)}
+.wordmark-mark{width:42px; height:42px; border-radius:14px; box-shadow:0 6px 16px -6px var(--shadow-tint)}
+.wordmark-mark svg{width:23px; height:23px}
+.wordmark-name{font-family:var(--font-display); font-size:20px}
+.skin-stats .history-row{padding-block:11px; align-items:baseline}
+.skin-stats .history-row > span:first-child{color:var(--ink-400); font-size:12.5px}
+.skin-stats .history-row > span:last-child{font-family:var(--font-display); font-size:17px; font-weight:600; color:var(--ink-900)}
+@media print{.card{box-shadow:none}
+.result-row{animation:none; transform:none; box-shadow:none}
+}
 </style>
 </head>
 <body>
 <header class="app-topbar" id="topbarRoot"></header>
-<nav class="tabbar" id="tabbar"><div class="tabbar-inner" id="tabbarInner" role="tablist"></div></nav>
+<nav class="tabbar" id="tabbar"><div class="tabbar-wrap"><div class="tabbar-inner" id="tabbarInner" role="tablist"></div></div></nav>
 <main class="view-container" id="viewRoot"></main>
 <div id="liveRegion" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
 <p class="footer-note">الخطة 2.0</p>
@@ -355,12 +412,12 @@ function norm(s){
     .replace(/\s+/g,' ').trim().toLowerCase();
 }
 const DEFAULT_FACILITY_ALIASES = {
-  'التانيه':'الثانية','التانية':'الثانية','الاولى':'الاولي','اشعه':'اشعة',
+  'التانيه':'الثانية','التانية':'الثانية','اشعه':'اشعة',
   'مستشفى':'مستشفي','غسيل كلوى':'غسيل كلوي'
 };
 const DEFAULT_PERSON_ALIASES = {
   'لبني':'لبنى','اسماء':'أسماء','اباظة':'أباظة','ابظة':'أباظة',
-  'شرنوبى':'شرنوبي','ميسره':'ميسرة','هنداوي':'حاسب الي','صبحي':'فني'
+  'شرنوبى':'شرنوبي','ميسره':'ميسرة'
 };
 let FACILITY_ALIASES = Object.assign({}, DEFAULT_FACILITY_ALIASES);
 let PERSON_ALIASES = Object.assign({}, DEFAULT_PERSON_ALIASES);
@@ -417,6 +474,13 @@ function parseDateFlexible(raw){
   }
   return null;
 }
+function isDateAmbiguousDdMm(raw){
+  const s = toAsciiDigits(String(raw==null?'':raw)).trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m) return false;
+  const a=+m[1], b=+m[2];
+  return a<=12 && b<=12 && a!==b;
+}
 function validYMD(y,mo,d){
   if(!(y>=1900&&y<=2200)) return null;
   if(!(mo>=0&&mo<=11)) return null;
@@ -456,7 +520,7 @@ function parseDateList(text){
   const accepted = [], rejected = [];
   const tokens = String(text||'').split(/[,،;\n]+/).map(s=>s.trim()).filter(Boolean);
   for(const tok of tokens){
-    const rangeParts = tok.split(/\.\.|\s+إلى\s+/);
+    const rangeParts = tok.split(/\.\.|\s+(?:إلى|الى)\s+/);
     if(rangeParts.length===2){
       const a = parseDateFlexible(rangeParts[0].trim());
       const b = parseDateFlexible(rangeParts[1].trim());
@@ -510,9 +574,12 @@ function facilityMaxGap(f){
   }
   return maxGap;
 }
+const VISIT_HISTORY_CAP = 20;
 function pushVisit(facility, date, team){
   if(!facility.visitHistory) facility.visitHistory = [];
-  facility.visitHistory = facility.visitHistory.concat([{date, team}]).sort((a,b)=>b.date-a.date).slice(0,20);
+  const d = date instanceof Date ? date : parseDateFlexible(date);
+  if(!d) return;
+  facility.visitHistory = facility.visitHistory.concat([{date:d, team}]).sort((a,b)=>b.date-a.date).slice(0,VISIT_HISTORY_CAP);
 }
 function computeNever(facilities){
   let maxGap = 0;
@@ -525,15 +592,31 @@ function computeNever(facilities){
 function locationIdFor(name){
   return 'loc_' + norm(name).replace(/\s+/g,'_');
 }
+function uniqueLocationId(name, existingLocs){
+  const base = locationIdFor(name);
+  if(!existingLocs.some(l=>l.id===base)) return base;
+  let n = 2;
+  while(existingLocs.some(l=>l.id===base+'_'+n)) n++;
+  return base+'_'+n;
+}
+let _locationKmMapSource = null, _locationKmMapCache = null;
+function invalidateLocationKmCache(){ _locationKmMapSource = null; }
+function locationKmMap(){
+  if(_locationKmMapSource!==state.locations){
+    _locationKmMapSource = state.locations;
+    _locationKmMapCache = new Map((state.locations||[]).map(l=>[l.id,l.km]));
+  }
+  return _locationKmMapCache;
+}
 function facilityKm(f){
   if(!f || !f.locationId || !state.locations) return null;
-  const loc = state.locations.find(l=>l.id===f.locationId);
-  return loc ? loc.km : null;
+  const km = locationKmMap().get(f.locationId);
+  return km===undefined ? null : km;
 }
 function locationKm(locationId){
   if(!locationId || !state.locations) return null;
-  const loc = state.locations.find(l=>l.id===locationId);
-  return loc ? loc.km : null;
+  const km = locationKmMap().get(locationId);
+  return km===undefined ? null : km;
 }
 const PREF_CEILING = 2.5;
 function preferenceTerm(x, xbar, strength, lo, hi){
@@ -660,13 +743,13 @@ function slotBudget(N, mode, opts){
     const spareContracted = contractedPoolLen-R;
     const absorb = Math.min(shortfallFromBasic, Math.max(0,spareContracted));
     R += absorb;
-    notes.push(`basic pool short by ${shortfallFromBasic}, shifted to contracted`);
+    if(absorb>0) notes.push(`basic pool short by ${shortfallFromBasic}, shifted to contracted`);
   }
   if(shortfallFromContracted>0){
     const spareBasic = basicPoolLen-M;
     const absorb = Math.min(shortfallFromContracted, Math.max(0,spareBasic));
     M += absorb;
-    notes.push(`contracted pool short by ${shortfallFromContracted}, shifted to basic`);
+    if(absorb>0) notes.push(`contracted pool short by ${shortfallFromContracted}, shifted to basic`);
   }
   const unused = N-(M+R);
   return {M,R,unused,notes};
@@ -786,25 +869,25 @@ function sainteLagueAssign(pool, count, day, ctx){
 }
 const BASIC_CATEGORIES = new Set(['ادارة الفرع','الاولي','الثانية','الثالثة']);
 const CONTRACTED_CATEGORIES = new Set(['معمل','غسيل كلوي','اشعة','صيدلية','رسم عصب','مستشفي','حضانات']);
+const BASIC_CATEGORIES_N = new Set([...BASIC_CATEGORIES].map(norm));
+const CONTRACTED_CATEGORIES_N = new Set([...CONTRACTED_CATEGORIES].map(norm));
 const ADMIN_LOW_FREQ_NAMES = new Set(['ادارة الفرع','التوثيق والمعلومات','الشئون الطبية','الشئون القانونية','الملحق','الزراعة']);
 function computeWeight(name){
   if(ADMIN_LOW_FREQ_NAMES.has(name)) return 0.5;
-  if(name.endsWith('مسائي')) return 0.35;
+  if(norm(name).endsWith(norm('مسائي'))) return 0.35;
   return 1;
 }
-function classifyKind(name, category, location, beheiraLocations){
+function classifyKind(name, category, location){
   if(/مدارس/.test(name)) return 'excluded';
-  if(category==='اخري') return 'excluded';
-  if(beheiraLocations && !beheiraLocations.has(location)) return 'excluded';
-  if(BASIC_CATEGORIES.has(category)) return 'basic';
-  if(CONTRACTED_CATEGORIES.has(category)) return 'contracted';
+  if(norm(category)===norm('اخري')) return 'excluded';
+  if(BASIC_CATEGORIES_N.has(norm(category))) return 'basic';
+  if(CONTRACTED_CATEGORIES_N.has(norm(category))) return 'contracted';
   return 'excluded';
 }
 function buildRegistry(seedRows){
-  const beheiraLocations = new Set(seedRows.map(r=>r[2]));
   return seedRows.map((r,i)=>({
     id:'f_'+i, name:r[0], category:r[1], location:r[2], locationId: r[2]?locationIdFor(r[2]):null,
-    kind: classifyKind(r[0], r[1], r[2], beheiraLocations),
+    kind: classifyKind(r[0], r[1], r[2]),
     weight: computeWeight(r[0]),
     lastVisit:null, visitCount:0, pinned:false, manualExcluded:false,
     visitHistory:[], reviewFlag:null
@@ -819,28 +902,57 @@ function isBasicInvalid(row){
   const {m,f} = teamGenderCounts(row);
   return (m===2&&f===2)||(m===4&&f===0)||(m===0&&f===4);
 }
+function invalidateExplainSlot(row, pool, idx){
+  const key = pool==='finTeam' ? 'finExplain' : 'clinExplain';
+  if(row[key]) row[key][idx] = null;
+}
 function swapPersonBetweenRows(rowA, poolA, personA, rowB, poolB, personB){
   const idxA = rowA[poolA].indexOf(personA);
   const idxB = rowB[poolB].indexOf(personB);
   rowA[poolA][idxA]=personB;
   rowB[poolB][idxB]=personA;
 }
-function tryFixGenderPair(rowA, rowB){
+function personsBusyOnDate(rows, dateKey, excludeRows){
+  const ids = new Set();
+  for(const r of rows){
+    if(r.empty || excludeRows.includes(r)) continue;
+    if(fmtISO(r.date)!==dateKey) continue;
+    for(const p of r.finTeam) ids.add(p.id);
+    for(const p of r.clinTeam) ids.add(p.id);
+  }
+  return ids;
+}
+function tryFixGenderPair(rowA, rowB, allRows, isUnavailable, isBlocked){
+  const dateKeyA = fmtISO(rowA.date), dateKeyB = fmtISO(rowB.date);
   for(const pool of ['finTeam','clinTeam']){
     for(const personA of rowA[pool]){
       for(const personB of rowB[pool]){
         if(personA.gender===personB.gender) continue;
-        if(rowA[pool].some(p=>p!==personA&&p.id===personB.id)) continue;
-        if(rowB[pool].some(p=>p!==personB&&p.id===personA.id)) continue;
+        if(rowA.finTeam.some(p=>p!==personA&&p.id===personB.id)) continue;
+        if(rowA.clinTeam.some(p=>p!==personA&&p.id===personB.id)) continue;
+        if(rowB.finTeam.some(p=>p!==personB&&p.id===personA.id)) continue;
+        if(rowB.clinTeam.some(p=>p!==personB&&p.id===personA.id)) continue;
+        if(allRows){
+          const busyOnB = personsBusyOnDate(allRows, dateKeyB, [rowA,rowB]);
+          const busyOnA = personsBusyOnDate(allRows, dateKeyA, [rowA,rowB]);
+          if(busyOnB.has(personA.id)) continue;
+          if(busyOnA.has(personB.id)) continue;
+        }
+        if(isUnavailable && (isUnavailable(personA, rowB.date) || isUnavailable(personB, rowA.date))) continue;
+        if(isBlocked && (isBlocked(personA, rowB.facility) || isBlocked(personB, rowA.facility))) continue;
         swapPersonBetweenRows(rowA,pool,personA,rowB,pool,personB);
-        if(!isBasicInvalid(rowA) && !isBasicInvalid(rowB)) return true;
+        if(!isBasicInvalid(rowA) && !isBasicInvalid(rowB)){
+          invalidateExplainSlot(rowA, pool, rowA[pool].indexOf(personB));
+          invalidateExplainSlot(rowB, pool, rowB[pool].indexOf(personA));
+          return true;
+        }
         swapPersonBetweenRows(rowA,pool,personB,rowB,pool,personA);
       }
     }
   }
   return false;
 }
-function applyGenderBalance(rows){
+function applyGenderBalance(rows, isUnavailable, isBlocked){
   const basicRows = rows.filter(r=>!r.empty && r.kind==='basic');
   const dropped=[];
   let attempts=0;
@@ -850,7 +962,7 @@ function applyGenderBalance(rows){
     let fixedWith=null;
     for(let j=1;j<list.length && attempts<200;j++){
       attempts++;
-      if(tryFixGenderPair(rowA, list[j])){ fixedWith=list[j]; break; }
+      if(tryFixGenderPair(rowA, list[j], rows, isUnavailable, isBlocked)){ fixedWith=list[j]; break; }
     }
     if(!fixedWith){
       dropped.push({date:rowA.date, facility:rowA.facility.name, reason:'gender-balance-no-partner'});
@@ -915,7 +1027,7 @@ function generatePlan(opts){
     row.clinTeam = sainteLagueAssign(clinPool, 2, row.date, Object.assign({}, ctx, {assignedCount:clinAssigned}));
   }
   let genderDropped=[];
-  if(applyGender!==false) genderDropped = applyGenderBalance(rows);
+  if(applyGender!==false) genderDropped = applyGenderBalance(rows, isUnavailable, isBlocked);
   return {
     rows, budget, N, days, genderDropped, dctx, globalDistanceBias: bias,
     planStart: days[0]||startDate, NEVER,
@@ -943,8 +1055,13 @@ function packVisits(sequence, days, k, aFin, aClin, datePrefs){
   }
   const hasDatePrefs = !!(datePrefs && datePrefs.hasDatePrefs);
   const W = (datePrefs && datePrefs.W) || 3;
+  const availableDOWs = new Set(days.map(d=>d.getDay()));
   for(let s=0; s<V; s++){
     const v = sequence[s];
+    if(v.facility.visitWeekdays && !v.facility.visitWeekdays.some(dow=>availableDOWs.has(dow))){
+      dropped.push({facility:v.facility, kind:v.kind, reason:'window-empty'});
+      continue;
+    }
     const d0 = Math.max(Math.floor(s*N/V), last);
     let chosenD = null;
     let windowExplain = null;
@@ -1016,7 +1133,10 @@ function relocateUnfillable(rows, days, k, aFin, aClin, load, finUsed, clinUsed,
         moved = true; break;
       }
     }
-    if(!moved) dropped.push({facility:row.facility, kind:row.kind, reason:'capacity'});
+    if(!moved){
+      load[row.dayIdx]--; finUsed[row.dayIdx]-=finCount; clinUsed[row.dayIdx]-=2;
+      dropped.push({facility:row.facility, kind:row.kind, reason:'capacity'});
+    }
   }
   const kept = rows.filter(r=>{
     const finCount = r.kind==='basic'?2:1;
@@ -1090,7 +1210,7 @@ function planShared(opts){
   const baseCtx = {isUnavailable, isBlocked, isOverTied, dctx, facilityPersonVisits, familiarityGamma, hardBlockOverTied};
   const {rows:relocatedRows, dropped:relocateDrops} = relocateUnfillable(builtRows, days, k, aFin, aClin, load, finUsed, clinUsed, finPool, clinPool, finAssigned, clinAssigned, baseCtx);
   let genderDropped=[];
-  if(applyGender!==false) genderDropped = applyGenderBalance(relocatedRows);
+  if(applyGender!==false) genderDropped = applyGenderBalance(relocatedRows, isUnavailable, isBlocked);
   const rowsByDay = new Map();
   for(const r of relocatedRows){ if(!rowsByDay.has(r.dayIdx)) rowsByDay.set(r.dayIdx, []); rowsByDay.get(r.dayIdx).push(r); }
   const rows = [];
@@ -1408,8 +1528,8 @@ const CLINICAL_SEED = [
 ];
 const RETIRED_SEED = [
   {id:'p_adib', name:'اديب', gender:'m'},
-  {id:'p_hindawy', name:'حاسب الي', gender:'m'},
-  {id:'p_sobhy', name:'فني', gender:'m'}
+  {id:'p_hindawy', name:'هنداوي', gender:'m'},
+  {id:'p_sobhy', name:'صبحي', gender:'m'}
 ];
 const PERSON_ORIGIN_SEED = {p_shaltoot:'ايتاي', p_mariam:'كفر الدوار', p_asmaa:'النفرة'};
 function freshPerson(p){
@@ -1727,6 +1847,7 @@ function ingestHistory(records, registry, finPool, clinPool, retiredPool, person
   const unresolvedFacilities = [];
   const unresolvedPeople = new Map();
   const unparseableRows = [];
+  const ambiguousDateRows = [];
   const facilityPersonVisits = {};
   const initialFin = {}, initialClin = {};
   let maxCycle = -1;
@@ -1736,11 +1857,12 @@ function ingestHistory(records, registry, finPool, clinPool, retiredPool, person
     if(!isNaN(cycleNum)) maxCycle = Math.max(maxCycle, cycleNum);
     const date = parseDateFlexible(rec.dateRaw);
     if(!date){ unparseableRows.push({rowIndex:rec.rowIndex, reason:'date', raw:rec.dateRaw}); continue; }
+    if(isDateAmbiguousDdMm(rec.dateRaw)) ambiguousDateRows.push({rowIndex:rec.rowIndex, raw:rec.dateRaw});
     const fKey = normFacility(rec.facilityRaw);
     let facility = registryByName.get(fKey);
     if(!facility){
       const cat = rec.categoryRaw.trim();
-      const isBasic = BASIC_CATEGORIES.has(cat), isContracted = CONTRACTED_CATEGORIES.has(cat);
+      const isBasic = BASIC_CATEGORIES_N.has(norm(cat)), isContracted = CONTRACTED_CATEGORIES_N.has(norm(cat));
       facility = {
         id:'hist_'+registry.length,
         name: rec.facilityRaw.trim(), category: cat, location:null,
@@ -1786,7 +1908,7 @@ function ingestHistory(records, registry, finPool, clinPool, retiredPool, person
     }
   }
   return {
-    unresolvedFacilities, unresolvedPeople, unparseableRows, facilityPersonVisits,
+    unresolvedFacilities, unresolvedPeople, unparseableRows, ambiguousDateRows, facilityPersonVisits,
     initialFin, initialClin, maxCycle, matchedRowCount, totalRows: records.length
   };
 }
@@ -1829,6 +1951,8 @@ weekdays:['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمع
 weekdaysShort:['ح','ن','ث','ر','خ','ج','س'],
 months:['يناير','فبراير','مارس','ابريل','مايو','يونيو','يوليو','اغسطس','سبتمبر','اكتوبر','نوفمبر','ديسمبر'],
 planStaleMsg:'الخطة لم تعد مطابقة للبيانات', regenerateAction:'إعادة التوليد',
+persistErrorMsg:'تعذّر حفظ البيانات (قد تكون مساحة التخزين ممتلئة) — التغييرات الأخيرة قد لا تُحفظ',
+lastApprovedHint:date=>`آخر خطة معتمدة كانت بتاريخ ${date} — لم تُحفظ الخطة نفسها بعد إعادة التحميل، أعد التوليد للمتابعة`,
 periodTitle:'الفترة', rangeWeek:'أسبوع', rangeMonth:'شهر', rangeQuarter:'ربع', rangeCustom:'مخصص',
 fromLabel:'من', toLabel:'إلى',
 workingDaysSummary:(n,names)=>`${n} يوم عمل · ${names}`,
@@ -1850,6 +1974,7 @@ maxVisitsPerDayLabel:'أقصى جهات في اليوم',
 maxVisitsPerDayHint:'قد تُزار أكثر من جهة في نفس اليوم عند توفر الفريق',
 facilityWeekdaysLabel:'أيام زيارة الجهة', facilityWeekdaysReset:'كل أيام الخطة',
 cadenceIntroToast:'جديد: الخطة الآن تفضّل توزيع الزيارات على أيام متباعدة',
+corruptStoreToast:'تعذّرت قراءة البيانات المحفوظة، فبدأنا بنسخة جديدة — نسخة من البيانات القديمة محفوظة للمراجعة',
 tabSummary:'الملخص', summaryNoPlan:'وّلد خطة أولاً لعرض الملخص',
 summaryPeriodTitle:'الفترة والميزانية', summaryPeriodWorkingDays:'أيام العمل', summaryPeriodHolidays:'الإجازات المستبعدة',
 summaryAchievedMixLabel:'المزيج المحقق', summaryUnusedDays:'أيام غير مستغلة', summaryMaxPerDay:'أقصى جهات باليوم',
@@ -1874,6 +1999,7 @@ originStrengthLabel:'قوة تفضيل القرب من نقطة الانطلاق
 cadenceGroupTitle:'الإيقاع', cadenceOff:'بدون', cadencePrefer:'يفضّل', cadenceStrict:'إلزامي',
 cadenceGapLabel:'أقل فاصل بالأيام', cadenceScopeLabel:'نطاق الإيقاع', cadenceScopePlan:'الخطة ككل', cadenceScopePlanPerson:'الخطة + الفرد',
 cadenceStrengthLabel:'قوة التفضيل', cadenceWindowLabel:'مدى البحث عن يوم أفضل', cadenceCurrentChip:'الإيقاع',
+cadenceStrengthPersonScopeHint:'عند نطاق «الخطة + الشخص»، القوة الفعلية مقيّدة بحد أقصى 0.4 بغض النظر عن موضع الشريط',
 weekdayGroupTitle:'أيام الأسبوع', weekdayProfilesCurrentChip:n=>`أيام مخصصة (${n})`,
 weekdayProfilePopoverTitle:d=>`تفضيلات ${d}`,
 kindPrefLabel:'تفضيل النوع', kindPrefNone:'بدون تفضيل', kindPrefBasic:'أساسي', kindPrefContracted:'متعاقد',
@@ -1909,7 +2035,7 @@ prefix:'بوابة التوزيع التراكمي', run:'أطول تتابع م
 window:'كل زيارة ضمن أيام عمل الجهة المسموحة'
 },
 jumpToRow:'الانتقال للصف', achievedMix:(m,r,n)=>`المزيج المحقق: ${m} أساسي / ${r} متعاقد من ${n} (${Math.round(n?m/n*100:0)}٪)`,
-genderDroppedNote:n=>`تعذّر ضبط توازن النوع في ${n} يوم — مُدرجة أدناه`,
+genderDroppedNote:n=>`تعذّر موازنة النوع في ${n} زيارة — مُبقاة كما هي ضمن الخطة، انظر القائمة أدناه`,
 genderAchievedNote:(ok,total)=>`توازن النوع 3-1: تحقق في ${ok} من ${total} فريق رباعي`,
 genderInvalidNote:n=>`${n} فريق لم تتحقق فيه موازنة 3-1:`,
 overTiedNote:n=>`${n} حالة تكرار زائد تم تجاوز الوزن فيها — راجع القائمة`,
@@ -1933,6 +2059,7 @@ locationsTitle:'المواقع', locationsHint:'قيمة كم واحدة لكل 
 deleteFacility:'حذف الجهة', confirmDeleteFacility:'سيتم حذف هذه الجهة نهائيًا من السجل.',
 autoKind:'تلقائي', kindOverrideLabel:'النوع', weightPresetNormal:'عادي', weightPresetLow:'منخفض', weightPresetRare:'نادر',
 lastVisitField:'آخر زيارة', visitHistoryField:'سجل الزيارات', last5:'آخر ٥ زيارات',
+historyCapHint:n=>`يُحتفظ بآخر ${n} زيارة لكل جهة`,
 teamTitle:'الفريق', addPerson:'إضافة شخص', newPersonName:'اسم الشخص الجديد',
 poolLabel:'المجموعة', poolFin:'مالي واداري', poolClin:'فني', poolRetired:'متقاعد',
 genderLabel:'النوع', genderM:'ذكر', genderF:'أنثى', activeLabel:'نشط',
@@ -1968,6 +2095,7 @@ undoImport:'تراجع', importedToast:'تم الاستيراد',
 importErrorPrefix:'تعذّر قراءة الملف — الصيغة غير مدعومة. استخدم XLSX أو CSV.',
 restoreError:'تعذّرت الاستعادة — الملف تالف أو غير متوافق.',
 unresolvedTitle:'أسماء غير معروفة', resolveLinkExisting:'ربط بموجود',
+ambiguousDateNote:n=>`${n} تاريخ من نوع يوم/شهر/سنة قابل للالتباس — تم تفسيره كيوم/شهر`,
 resolveAddNew:'إضافة جديد', resolveIgnore:'تجاهل',
 settingsAppearance:'المظهر', themeLabel:'المظهر', themeLight:'فاتح', themeDark:'داكن', themeAuto:'تلقائي',
 languageLabel:'اللغة',
@@ -1996,6 +2124,8 @@ weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
 weekdaysShort:['S','M','T','W','T','F','S'],
 months:['January','February','March','April','May','June','July','August','September','October','November','December'],
 planStaleMsg:'Plan no longer matches the data', regenerateAction:'Regenerate',
+persistErrorMsg:'Could not save data (storage may be full) — recent changes may not be saved',
+lastApprovedHint:date=>`Last approved plan was on ${date} — the plan itself isn't saved across reloads, regenerate to continue`,
 periodTitle:'Period', rangeWeek:'Week', rangeMonth:'Month', rangeQuarter:'Quarter', rangeCustom:'Custom',
 fromLabel:'From', toLabel:'To',
 workingDaysSummary:(n,names)=>`${n} working days · ${names}`,
@@ -2017,6 +2147,7 @@ maxVisitsPerDayLabel:'Max facilities per day',
 maxVisitsPerDayHint:'More than one facility may be visited on the same day when the team is available',
 facilityWeekdaysLabel:'Facility visit weekdays', facilityWeekdaysReset:'All plan weekdays',
 cadenceIntroToast:'New: the plan now prefers spacing visits across non-consecutive days',
+corruptStoreToast:'Saved data could not be read, so we started fresh — a copy of the old data was kept for review',
 tabSummary:'Summary', summaryNoPlan:'Generate a plan first to see the summary',
 summaryPeriodTitle:'Period and budget', summaryPeriodWorkingDays:'Working days', summaryPeriodHolidays:'Holidays excluded',
 summaryAchievedMixLabel:'Achieved mix', summaryUnusedDays:'Unused days', summaryMaxPerDay:'Max facilities per day',
@@ -2041,6 +2172,7 @@ originStrengthLabel:'Strength of preference for the origin location', distanceCu
 cadenceGroupTitle:'Cadence', cadenceOff:'Off', cadencePrefer:'Prefer', cadenceStrict:'Strict',
 cadenceGapLabel:'Minimum gap in days', cadenceScopeLabel:'Cadence scope', cadenceScopePlan:'Whole plan', cadenceScopePlanPerson:'Plan + person',
 cadenceStrengthLabel:'Preference strength', cadenceWindowLabel:'Look-ahead window', cadenceCurrentChip:'Cadence',
+cadenceStrengthPersonScopeHint:"At 'plan + person' scope, the effective strength is capped at 0.4 regardless of the slider position",
 weekdayGroupTitle:'Weekdays', weekdayProfilesCurrentChip:n=>`Custom weekdays (${n})`,
 weekdayProfilePopoverTitle:d=>`${d} preferences`,
 kindPrefLabel:'Kind preference', kindPrefNone:'No preference', kindPrefBasic:'Basic', kindPrefContracted:'Contracted',
@@ -2076,7 +2208,7 @@ prefix:'Cumulative distribution gate', run:'Longest contracted run ≤1 when bas
 window:'Every visit falls within the facility\'s allowed weekdays'
 },
 jumpToRow:'Jump to row', achievedMix:(m,r,n)=>`Achieved mix: ${m} basic / ${r} contracted of ${n} (${Math.round(n?m/n*100:0)}%)`,
-genderDroppedNote:n=>`Gender balance could not be fixed on ${n} day(s) — listed below`,
+genderDroppedNote:n=>`Gender balance couldn't be achieved for ${n} visit(s) — kept in the plan as scheduled, see below`,
 genderAchievedNote:(ok,total)=>`Gender 3-1 balance: achieved on ${ok} of ${total} four-person team(s)`,
 genderInvalidNote:n=>`${n} team(s) without 3-1 balance:`,
 overTiedNote:n=>`${n} over-tie case(s) where weight was overridden — review the list`,
@@ -2100,6 +2232,7 @@ locationsTitle:'Locations', locationsHint:'One km value per location, applied to
 deleteFacility:'Delete facility', confirmDeleteFacility:'This facility will be permanently removed from the registry.',
 autoKind:'Auto', kindOverrideLabel:'Kind', weightPresetNormal:'Normal', weightPresetLow:'Low', weightPresetRare:'Rare',
 lastVisitField:'Last visit', visitHistoryField:'Visit history', last5:'Last 5 visits',
+historyCapHint:n=>`Keeps the last ${n} visits per facility`,
 teamTitle:'Team', addPerson:'Add person', newPersonName:'New person name',
 poolLabel:'Pool', poolFin:'Financial/Admin', poolClin:'Technical', poolRetired:'Retired',
 genderLabel:'Gender', genderM:'Male', genderF:'Female', activeLabel:'Active',
@@ -2135,6 +2268,7 @@ undoImport:'Undo', importedToast:'Imported',
 importErrorPrefix:'Could not read the file — format not supported. Use XLSX or CSV.',
 restoreError:'Could not restore — the file is corrupted or incompatible.',
 unresolvedTitle:'Unknown names', resolveLinkExisting:'Link to existing',
+ambiguousDateNote:n=>`${n} date(s) in DD/MM/YYYY form could be read either way — interpreted as day/month`,
 resolveAddNew:'Add new', resolveIgnore:'Ignore',
 settingsAppearance:'Appearance', themeLabel:'Theme', themeLight:'Light', themeDark:'Dark', themeAuto:'Auto',
 languageLabel:'Language',
@@ -2191,8 +2325,15 @@ const ICONS = {
   sun: svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
   moon: svgIcon('<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>'),
   globe: svgIcon('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20 15 15 0 010-20z"/>'),
-  search: svgIcon('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/>', 14)
+  search: svgIcon('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/>', 14),
+  building: svgIcon('<rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8 12.5h2M14 12.5h2M8 16h2M14 16h2M4.5 9h15M12 9v11.5"/>'),
+  users: svgIcon('<circle cx="9" cy="8.2" r="3.4"/><path d="M3.2 19.5c.5-3.2 2.8-5.1 5.8-5.1s5.3 1.9 5.8 5.1"/><circle cx="17" cy="9.2" r="2.7"/><path d="M15.9 14.4c2.5.4 4.3 2.3 4.7 4.9"/>'),
+  chart: svgIcon('<path d="M4 4.5v15h16"/><path d="M8.5 16.5v-5M13 16.5v-9M17.5 16.5v-6.5"/>'),
+  sliders: svgIcon('<path d="M4 7h8.2M18.8 7H20M4 12h3.2M13.2 12H20M4 17h10.2"/><circle cx="15.5" cy="7" r="2.1"/><circle cx="10" cy="12" r="2.1"/><circle cx="17.8" cy="17" r="2.1"/>')
 };
+function isDebugMode(){
+  try{ return new URLSearchParams(location.search).has('debug'); }catch(e){ return false; }
+}
 function debounce(fn, ms){
   let t=null;
   return function(...args){ clearTimeout(t); t = setTimeout(()=>fn.apply(this,args), ms); };
@@ -2308,20 +2449,33 @@ function migrateLegacyStore(){
   return s;
 }
 function persistStoreNow(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){}
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    state.persistError = false;
+  }catch(e){
+    state.persistError = true;
+  }
 }
 function persistStore(){
   if(persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(persistStoreNow, 250);
 }
+function backupCorruptStore(raw){
+  if(!raw) return;
+  try{ localStorage.setItem('alkhitta.v3.corrupt.'+Date.now(), raw); }catch(e){}
+  state.pendingCorruptStoreToast = true;
+}
 function hydrateStore(){
-  try{
-    const raw = localStorage.getItem(STORE_KEY);
-    if(raw){
+  const raw = localStorage.getItem(STORE_KEY);
+  if(raw){
+    try{
       const parsed = JSON.parse(raw);
       if(parsed && parsed.version===3 && parsed.settings && Array.isArray(parsed.facilities) && Array.isArray(parsed.people)) return parsed;
+      backupCorruptStore(raw);
+    }catch(e){
+      backupCorruptStore(raw);
     }
-  }catch(e){}
+  }
   const migrated = migrateLegacyStore();
   store = migrated;
   persistStoreNow();
@@ -2480,7 +2634,7 @@ function hydrateLocations(){
     if(!f.location){ f.locationId = null; delete f.distanceKm; continue; }
     let loc = byName.get(norm(f.location));
     if(!loc){
-      loc = {id: locationIdFor(f.location), name: f.location, km: f.distanceKm!=null ? f.distanceKm : 0};
+      loc = {id: uniqueLocationId(f.location, locs), name: f.location, km: f.distanceKm!=null ? f.distanceKm : 0};
       locs.push(loc); byId.set(loc.id, loc); byName.set(norm(loc.name), loc);
     }
     f.locationId = loc.id;
@@ -2510,14 +2664,15 @@ function applyStoreToRuntime(){
 let activePopover = null;
 function Popover(anchor, buildContent, opts){
   opts = opts || {};
-  let popEl = null, prevFocus = null;
+  let popEl = null, prevFocus = null, resizeObs = null;
   function position(){
     const r = anchor.getBoundingClientRect();
+    const isRTL = document.documentElement.getAttribute('dir')==='rtl';
     popEl.style.visibility = 'hidden';
     popEl.style.display = 'block';
     if(opts.matchWidth) popEl.style.width = Math.max(r.width, 200)+'px';
     const pw = popEl.offsetWidth, ph = popEl.offsetHeight;
-    let top = r.bottom+6, left = r.left;
+    let top = r.bottom+6, left = isRTL ? r.right-pw : r.left;
     if(top+ph > window.innerHeight-12) top = Math.max(12, r.top-ph-6);
     if(left+pw > window.innerWidth-12) left = window.innerWidth-12-pw;
     if(left<12) left = 12;
@@ -2538,6 +2693,10 @@ function Popover(anchor, buildContent, opts){
     popEl.appendChild(buildContent(close));
     document.body.appendChild(popEl);
     position();
+    if(window.ResizeObserver){
+      resizeObs = new ResizeObserver(()=>position());
+      resizeObs.observe(popEl);
+    }
     document.addEventListener('mousedown', onDocMouseDown, true);
     document.addEventListener('keydown', onKeydown, true);
     window.addEventListener('resize', position);
@@ -2550,6 +2709,7 @@ function Popover(anchor, buildContent, opts){
   }
   function close(){
     if(!popEl) return;
+    if(resizeObs){ resizeObs.disconnect(); resizeObs = null; }
     document.removeEventListener('mousedown', onDocMouseDown, true);
     document.removeEventListener('keydown', onKeydown, true);
     window.removeEventListener('resize', position);
@@ -2661,6 +2821,7 @@ function SliderField(config){
   let dragging = false;
   function onMove(e){
     if(!dragging) return;
+    if(e.cancelable) e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const v = fromClientX(clientX);
     paint(v);
@@ -2680,7 +2841,7 @@ function SliderField(config){
     dragging = true;
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchmove', onMove);
+    document.addEventListener('touchmove', onMove, {passive:false});
     document.addEventListener('touchend', onUp);
   }
   handle.addEventListener('mousedown', startDrag);
@@ -3017,6 +3178,7 @@ function openDrawer(title, bodyFn, footerFn){
   }
   document.body.appendChild(scrim);
   document.body.appendChild(drawer);
+  document.body.classList.add('drawer-open');
   requestAnimationFrame(()=>{ scrim.classList.add('show'); drawer.classList.add('show'); });
   function trapFocus(e){
     const focusables = [...drawer.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(n=>!n.disabled);
@@ -3031,6 +3193,7 @@ function openDrawer(title, bodyFn, footerFn){
   function close(){
     document.removeEventListener('keydown', onKey, true);
     scrim.classList.remove('show'); drawer.classList.remove('show');
+    document.body.classList.remove('drawer-open');
     setTimeout(()=>{ scrim.remove(); drawer.remove(); }, 150);
     if(activeDrawerClose===close) activeDrawerClose = null;
     if(prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus();
@@ -3096,6 +3259,8 @@ function cycleTheme(){
   renderTopbar();
 }
 function toggleLang(){
+  if(activeDrawerClose) activeDrawerClose();
+  if(activePopover) activePopover.close();
   state.lang = state.lang==='ar' ? 'en' : 'ar';
   localStorage.setItem('alkhitta.lang', state.lang);
   document.documentElement.lang = state.lang;
@@ -3107,7 +3272,7 @@ function toggleLang(){
 function renderTopbar(){
   const root = document.getElementById('topbarRoot');
   clear(root);
-  root.appendChild(el('div', {class:'wordmark'}, [el('span', {html:WORDMARK_SVG}), el('span', null, t('appName'))]));
+  root.appendChild(el('div', {class:'wordmark'}, [el('span', {class:'wordmark-mark', html:WORDMARK_SVG}), el('span', {class:'wordmark-name'}, t('appName'))]));
   const controls = el('div', {class:'topbar-controls'});
   const themeIcon = state.theme==='dark' ? ICONS.moon : (state.theme==='light' ? ICONS.sun : ICONS.globe);
   controls.appendChild(el('button', {type:'button', class:'icon-btn', 'aria-label':'theme', html:themeIcon, onclick:cycleTheme}));
@@ -3118,12 +3283,17 @@ function renderTabbar(){
   const root = document.getElementById('tabbarInner');
   clear(root);
   const labels = {plan:t('tabPlan'), summary:t('tabSummary'), facilities:t('tabFacilities'), team:t('tabTeam'), settings:t('tabSettings')};
+  const tabIcons = {plan:ICONS.calendar, summary:ICONS.chart, facilities:ICONS.building, team:ICONS.users, settings:ICONS.sliders};
   TABS.forEach((tab,i)=>{
     const selected = state.tab===tab;
     const btn = el('button', {
       type:'button', class:'tab-btn', role:'tab', id:'tab-'+tab, 'aria-selected': selected?'true':'false',
+      'aria-controls':'viewRoot', 'aria-label':labels[tab], title:labels[tab],
       tabindex: selected?'0':'-1', onclick:()=>switchTab(tab)
-    }, labels[tab]);
+    }, [
+      el('span', {html:tabIcons[tab], 'aria-hidden':'true'}),
+      el('span', {class:'tab-label'}, labels[tab])
+    ]);
     btn.addEventListener('keydown', e=>{
       if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
       e.preventDefault();
@@ -3136,6 +3306,7 @@ function renderTabbar(){
     });
     root.appendChild(btn);
   });
+  requestAnimationFrame(updateTabbarHeightVar);
 }
 function switchTab(tab, pushHash){
   if(activeDrawerClose) activeDrawerClose();
@@ -3148,12 +3319,25 @@ function switchTab(tab, pushHash){
 function renderActiveTab(){
   const root = document.getElementById('viewRoot');
   clear(root);
+  root.dataset.view = state.tab;
+  root.setAttribute('role','tabpanel');
+  root.setAttribute('aria-labelledby','tab-'+state.tab);
+  root.setAttribute('tabindex','0');
+  if(state.persistError){
+    root.appendChild(el('div', {class:'stale-bar', style:'background:var(--danger-soft);color:var(--danger)'}, [
+      el('span', null, t('persistErrorMsg'))
+    ]));
+  }
   if(state.tab==='plan') renderPlanTab(root);
   else if(state.tab==='summary') renderSummaryTab(root);
   else if(state.tab==='facilities') renderFacilitiesTab(root);
   else if(state.tab==='team') renderTeamTab(root);
   else renderSettingsTab(root);
   requestAnimationFrame(()=>window.scrollTo(0, tabScroll[state.tab]||0));
+}
+function updateTabbarHeightVar(){
+  const bar = document.getElementById('tabbar');
+  if(bar) document.documentElement.style.setProperty('--tabbar-h', bar.getBoundingClientRect().height+'px');
 }
 function initShell(){
   document.title = t('appName');
@@ -3162,10 +3346,18 @@ function initShell(){
   applyTheme();
   renderTopbar();
   renderTabbar();
+  const tabbarEl = document.getElementById('tabbar');
+  let scrollTicking = false;
   window.addEventListener('scroll', ()=>{
-    const bar = document.getElementById('tabbar');
-    if(bar) bar.classList.toggle('scrolled', window.scrollY>4);
+    if(scrollTicking) return;
+    scrollTicking = true;
+    requestAnimationFrame(()=>{
+      if(tabbarEl) tabbarEl.classList.toggle('scrolled', window.scrollY>4);
+      scrollTicking = false;
+    });
   });
+  window.addEventListener('resize', debounce(updateTabbarHeightVar, 100));
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(updateTabbarHeightVar);
   window.addEventListener('hashchange', ()=>{
     const h = (location.hash||'#plan').replace('#','');
     if(TABS.indexOf(h)>=0 && h!==state.tab) switchTab(h, false);
@@ -3277,10 +3469,12 @@ function applyRegistryDiff(diff, registry, missingActions){
     if(!f.location){ f.locationId = null; return; }
     let loc = state.locations.find(l=>norm(l.name)===norm(f.location));
     if(!loc){
-      loc = {id: locationIdFor(f.location), name: f.location, km: importedKm!=null?importedKm:0};
+      loc = {id: uniqueLocationId(f.location, state.locations), name: f.location, km: importedKm!=null?importedKm:0};
       state.locations.push(loc);
+      invalidateLocationKmCache();
     } else if(importedKm!=null){
       loc.km = importedKm;
+      invalidateLocationKmCache();
     }
     f.locationId = loc.id;
   }
@@ -3782,6 +3976,7 @@ function openImportDrawer(kind){
           el('div', {class:'diff-item'}, [el('span',null,t('unresolvedTitle')), el('span',{class:'diff-count'}, String(r.unresolvedPeople.size))])
         ]));
         if(r.unparseableRows.length) body.appendChild(el('p', {class:'field-hint'}, String(r.unparseableRows.length)));
+        if(r.ambiguousDateRows && r.ambiguousDateRows.length) body.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('ambiguousDateNote')(r.ambiguousDateRows.length)));
       } else {
         const groups = [['added', t('diffAdded')], ['changed', t('diffChanged')], ['missing', t('diffMissing')]];
         for(const [gkey, glabel] of groups){
@@ -3844,7 +4039,7 @@ function applyImport(kind, diffResult, historyReport, missingActions, close){
     const snapshot = serializeRegistry(state.registry);
     applyRegistryDiff(diffResult, state.registry, missingActions);
     saveRegistry();
-    lastImportUndo = ()=>{ state.registry = deserializeRegistry(snapshot); saveRegistry(); renderActiveTab(); };
+    lastImportUndo = ()=>{ state.registry = deserializeRegistry(snapshot); relinkPlanFacilities(); saveRegistry(); renderActiveTab(); };
   } else if(kind==='team'){
     const snapshot = {
       fin: state.finPool.map(p=>Object.assign({},p)),
@@ -3876,7 +4071,7 @@ function applyImport(kind, diffResult, historyReport, missingActions, close){
     }
     saveRegistry(); savePeople(); saveHistoryStats(); saveUnresolvedNames();
     lastImportUndo = ()=>{
-      state.registry = deserializeRegistry(snapshot.registry);
+      state.registry = deserializeRegistry(snapshot.registry); relinkPlanFacilities();
       state.finPool = snapshot.fin; state.clinPool = snapshot.clin; state.retiredPool = snapshot.retired;
       state.facilityPersonVisits = snapshot.facilityPersonVisits; state.finInitialCounts = snapshot.finInitialCounts;
       state.clinInitialCounts = snapshot.clinInitialCounts; state.lastCycleNumber = snapshot.lastCycleNumber;
@@ -3929,7 +4124,7 @@ function computeWeightOverrideNotes(plan){
 function formatDateShort(date){ return `${t('weekdaysShort')[date.getDay()]} ${date.getDate()}`; }
 function handleGenerate(){
   const range = resolveDateRangeState();
-  if(!range) return;
+  if(!range){ showToast(t('rangeInvalid')); return; }
   const finActive = state.finPool.filter(p=>p.active!==false); const clinActive = state.clinPool.filter(p=>p.active!==false);
   const retiredIds = new Set(state.retiredPool.map(p=>p.id));
   const plan = generatePlan({
@@ -3965,7 +4160,17 @@ function handleGenerate(){
   if(live) live.textContent = t('resultsTitle')+' — '+plan.rows.filter(r=>!r.empty).length;
 }
 let approveSnapshot = null;
+function relinkPlanFacilities(){
+  if(!state.plan) return;
+  const byId = new Map(state.registry.map(f=>[f.id,f]));
+  for(const row of state.plan.rows){
+    if(row.empty) continue;
+    const f = byId.get(row.facility.id);
+    if(f) row.facility = f;
+  }
+}
 function handleApprovePlan(){
+  if(state.planApproved) return;
   approveSnapshot = {registry: serializeRegistry(state.registry), facilityPersonVisits: Object.assign({}, state.facilityPersonVisits), lastCycleNumber: state.lastCycleNumber};
   for(const r of state.plan.rows){
     if(r.empty) continue;
@@ -3976,12 +4181,13 @@ function handleApprovePlan(){
     }
   }
   state.lastCycleNumber = state.planMeta.cycle; state.planApproved = true;
+  store.lastApprovedAt = fmtISO(new Date());
   saveRegistry(); saveHistoryStats(); renderActiveTab();
 }
 function handleUndoApprove(){
   if(approveSnapshot){
     state.registry = deserializeRegistry(approveSnapshot.registry); state.facilityPersonVisits = approveSnapshot.facilityPersonVisits;
-    state.lastCycleNumber = approveSnapshot.lastCycleNumber; saveRegistry(); saveHistoryStats();
+    state.lastCycleNumber = approveSnapshot.lastCycleNumber; relinkPlanFacilities(); saveRegistry(); saveHistoryStats();
   }
   state.planApproved = false; renderActiveTab();
 }
@@ -4106,6 +4312,7 @@ function renderPlanTab(root){
   importRow.appendChild(el('button', {type:'button', class:'btn-link', onclick:()=>openImportDrawer('history')}, t('historyImportLink')));
   setupCard.appendChild(importRow); root.appendChild(setupCard);
   if(!state.plan){
+    if(store.lastApprovedAt) root.appendChild(el('p', {class:'field-hint', style:'margin-block-end:8px'}, t('lastApprovedHint')(store.lastApprovedAt)));
     const genBtn = el('button', {type:'button', class:'btn btn-primary btn-block sticky-primary', disabled: !resolveDateRangeState(), onclick:handleGenerate}, t('generateBtn'));
     root.appendChild(genBtn); return;
   }
@@ -4174,6 +4381,7 @@ function openRowDrawer(row, plan){
             : (blockedChecker(alt, row.facility) ? t('ineligibleBlocked') : null);
           const item = el('button', {type:'button', class:'popover-item'+(reason?' ineligible':''), disabled:!!reason, onclick:()=>{
             const idx = row[pool].indexOf(p); row[pool][idx] = alt;
+            invalidateExplainSlot(row, pool, idx);
             if(state.planApproved) state.planApproved = false;
             swapPop.close(); activeDrawerClose && activeDrawerClose(); renderActiveTab();
           }}, reason ? `${alt.name} · ${reason}` : alt.name); list.appendChild(item);
@@ -4198,8 +4406,9 @@ function renderResultsSection(root){
   head.appendChild(el('button', {type:'button', class:'btn btn-sm btn-ghost', onclick:handleGenerate}, t('regenerateBtn')));
   card.appendChild(head);
   card.appendChild(el('div', {class:'results-sticky-head'}, [el('span',null,t('colDate')), el('span',null,t('colFacility')), el('span',null,t('colCategory')), el('span',null,t('colTeam'))]));
-  let curMonth = null, curDateKey = null;
-  for(const row of plan.rows){
+  let curMonth = null, curDateKey = null, rowIdx = 0;
+  for(let i=0;i<plan.rows.length;i++){
+    const row = plan.rows[i];
     if(row.empty){
       card.appendChild(el('div', {class:'spacer-row'})); curDateKey = null; continue;
     }
@@ -4210,13 +4419,20 @@ function renderResultsSection(root){
     const dateKey = fmtISO(row.date);
     const sameDateAsPrev = dateKey===curDateKey;
     curDateKey = dateKey;
-    const team = [...row.finTeam, ...row.clinTeam].map(p=>p.name).join('، ');
-    const rowEl = el('button', {type:'button', class:'result-row'+(row.kind==='contracted'?' contracted':'')+(sameDateAsPrev?' same-date':''), onclick:()=>openRowDrawer(row, plan)}, [
+    const nextRow = plan.rows[i+1];
+    const hasFollowingSameDate = !!(nextRow && !nextRow.empty && fmtISO(nextRow.date)===dateKey);
+    const teamPills = [
+      ...row.finTeam.map(p=>el('span', {class:'pill fin', 'data-p':p.id}, p.name)),
+      ...row.clinTeam.map(p=>el('span', {class:'pill clin', 'data-p':p.id}, p.name))
+    ];
+    const rowEl = el('button', {type:'button', class:'result-row'+(row.kind==='contracted'?' contracted':'')+(sameDateAsPrev?' same-date':'')+(hasFollowingSameDate?' has-following-same-date':''), onclick:()=>openRowDrawer(row, plan)}, [
       el('span', {class:'rdate'}, sameDateAsPrev?'':formatDateShort(row.date)),
       el('span', {class:'rfac'}, row.facility.name),
       el('span', {class:'rcat'}, row.facility.category),
-      el('span', {class:'rteam'}, team)
-    ]); card.appendChild(rowEl);
+      el('span', {class:'rteam'}, teamPills)
+    ]);
+    rowEl.style.setProperty('--i', Math.min(rowIdx, 18)); rowIdx++;
+    card.appendChild(rowEl);
   }
   root.appendChild(card);
 }
@@ -4228,7 +4444,11 @@ function renderReviewSection(root){
     const line = el('div', {class:'gate-line fail'}); line.appendChild(el('span', null, t('gateLabels')[g.key]||g.key));
     card.appendChild(line);
   }
-  if(allPass) card.appendChild(el('p', {class:'card-summary'}, t('achievedMix')(plan.budget.M, plan.budget.R, plan.budget.M+plan.budget.R)));
+  if(allPass){
+    const actualM = plan.rows.filter(r=>!r.empty && r.kind==='basic').length;
+    const actualR = plan.rows.filter(r=>!r.empty && r.kind==='contracted').length;
+    card.appendChild(el('p', {class:'card-summary'}, t('achievedMix')(actualM, actualR, actualM+actualR)));
+  }
   if(plan.genderDropped.length){
     card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold);margin-block-start:10px'}, t('genderDroppedNote')(plan.genderDropped.length)));
     const dropList = el('ul', {class:'gender-dropped-list'});
@@ -4245,7 +4465,13 @@ function renderReviewSection(root){
       for(const r of invalidRows) card.appendChild(el('div', {class:'history-row'}, [el('span',null,r.facility.name), el('span',{class:'field-hint'}, formatDateShort(r.date))]));
     }
   }
-  if(meta.weightOverrides.length) card.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('weightOverrideNote')(meta.weightOverrides.length)));
+  if(meta.weightOverrides.length){
+    const woHead = el('div', {class:'collapsible-head', style:'margin-block-start:10px'}, [el('h3',{style:'font-size:13px;color:var(--gold)'},t('weightOverrideNote')(meta.weightOverrides.length)), el('span',{class:'car',html:ICONS.chevronDown})]);
+    const woBody = el('div', {hidden:true, style:'margin-block-start:6px'});
+    woHead.addEventListener('click', ()=>{ woBody.hidden=!woBody.hidden; woHead.classList.toggle('open', !woBody.hidden); });
+    for(const w of meta.weightOverrides) woBody.appendChild(el('div', {class:'history-row'}, [el('span',null,w.person), el('span',{class:'field-hint'}, w.facility+' · '+formatDateShort(w.date))]));
+    card.appendChild(woHead); card.appendChild(woBody);
+  }
   if(plan.pinnedOverflow.length) card.appendChild(el('p', {class:'field-hint', style:'color:var(--danger)'}, t('pinnedOverflowWarning')(plan.pinnedOverflow.length)));
   const totalsHead = el('div', {class:'collapsible-head', style:'margin-block-start:14px'}, [el('h3',{style:'font-size:13px;color:var(--ink-500)'},t('totalsTitle')), el('span',{class:'car',html:ICONS.chevronDown})]);
   const totalsBody = el('div', {hidden:true, style:'margin-block-start:8px'});
@@ -4294,6 +4520,10 @@ function filteredFacilities(){
     const q = norm(state.facilitySearch);
     list = list.filter(f=>norm(f.name).indexOf(q)>=0);
   }
+  if(state.facilitySelected.size){
+    const visibleIds = new Set(list.map(f=>f.id));
+    for(const id of [...state.facilitySelected]) if(!visibleIds.has(id)) state.facilitySelected.delete(id);
+  }
   return list;
 }
 function facilityStatusLabel(f){
@@ -4314,6 +4544,7 @@ function openLocationsPanel(){
       row.appendChild(el('span', null, loc.name));
       row.appendChild(Stepper({value:loc.km, min:0, step:1, unit:t('kmUnit'), onChange:v=>{
         loc.km = v;
+        invalidateLocationKmCache();
         saveLocations(); rerender(); renderActiveTab();
       }}));
       panel.appendChild(row);
@@ -4404,6 +4635,7 @@ function openFacilityDrawer(facility){
       const histField = el('div', {class:'field'});
       histField.appendChild(el('label', {class:'field-label'}, t('last5')));
       for(const h of hist) histField.appendChild(el('div', {class:'history-row'}, [el('span',null,fmtISO(h.date)), el('span',null,(h.team||[]).join('، '))]));
+      histField.appendChild(el('p', {class:'field-hint'}, t('historyCapHint')(VISIT_HISTORY_CAP)));
       body.appendChild(histField);
     }
     return body;
@@ -4463,13 +4695,13 @@ function renderFacilityList(container){
     const row = el('div', {class:'fac-row', tabindex:'0', role:'button', onclick:()=>openFacilityDrawer(f)}, [
       check,
       el('span', {class:'fname'}, [f.name, f.reviewFlag ? el('span',{class:'review-dot', style:'margin-inline-start:6px'}) : null]),
-      el('span', {class:'fmeta'}, f.kind==='basic'?t('kindLabelBasic'):(f.kind==='contracted'?t('kindLabelContracted'):t('kindLabelExcluded'))),
-      el('span', {class:'fmeta'}, f.location||'—'),
-      el('span', {class:'fmeta'}, facilityKm(f)!=null?facilityKm(f)+' '+t('kmUnit'):'—'),
-      el('span', {class:'fmeta'}, String(f.weight)),
-      el('span', {class:'fstatus'}, [el('span',{class:'dot '+(f.manualExcluded?'dot-danger':f.pinned?'dot-gold':'dot-ok')}), facilityStatusLabel(f)]),
-      el('span', {class:'fmeta'}, facilityLastVisitLabel(f)),
-      el('span', {class:'fmeta'}, String(f.visitCount||0))
+      el('span', {class:'fmeta', 'data-label':t('colKind')}, f.kind==='basic'?t('kindLabelBasic'):(f.kind==='contracted'?t('kindLabelContracted'):t('kindLabelExcluded'))),
+      el('span', {class:'fmeta', 'data-label':t('colLocation')}, f.location||'—'),
+      el('span', {class:'fmeta', 'data-label':t('colDistance')}, facilityKm(f)!=null?facilityKm(f)+' '+t('kmUnit'):'—'),
+      el('span', {class:'fmeta', 'data-label':t('colWeight')}, String(f.weight)),
+      el('span', {class:'fstatus', 'data-label':t('colStatus')}, [el('span',{class:'dot '+(f.manualExcluded?'dot-danger':f.pinned?'dot-gold':'dot-ok')}), facilityStatusLabel(f)]),
+      el('span', {class:'fmeta', 'data-label':t('colLastVisit')}, facilityLastVisitLabel(f)),
+      el('span', {class:'fmeta', 'data-label':t('colVisits')}, String(f.visitCount||0))
     ]);
     row.addEventListener('keydown', e=>{ if(e.key==='Enter'){ openFacilityDrawer(f); } });
     listWrap.appendChild(row);
@@ -4497,7 +4729,7 @@ function renderSummaryTab(root){
   root.appendChild(buildSummarySettingsCard());
 }
 function buildSummaryPeriodCard(plan, meta, range){
-  const card = el('div', {class:'card'});
+  const card = el('div', {class:'card skin-stats'});
   card.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryPeriodTitle'))));
   const holidaysRemoved = range ? [...state.holidays].filter(iso=>iso>=fmtISO(range.start) && iso<=fmtISO(range.end)).length : 0;
   const total = plan.budget.M+plan.budget.R;
@@ -4515,7 +4747,7 @@ function buildSummaryPeriodCard(plan, meta, range){
   return card;
 }
 function buildSummaryGatesCard(meta){
-  const card = el('div', {class:'card'});
+  const card = el('div', {class:'card skin-stats'});
   card.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryGatesTitle'))));
   for(const g of meta.gates){
     card.appendChild(el('div', {class:'history-row'}, [
@@ -4557,7 +4789,7 @@ function buildSummaryPeopleCard(plan, meta, nonEmpty){
   return card;
 }
 function buildSummaryPlacesCard(plan, nonEmpty){
-  const card = el('div', {class:'card'});
+  const card = el('div', {class:'card skin-stats'});
   card.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summaryPlacesTitle'))));
   const byLoc = {};
   let totalKm = 0;
@@ -5024,6 +5256,7 @@ function renderCadenceGroup(){
     const strengthField = el('div', {class:'field'});
     strengthField.appendChild(el('label', {class:'field-label'}, t('cadenceStrengthLabel')));
     strengthField.appendChild(SliderField({min:0, max:1, step:0.05, value:cad.strength, onChange:(v,committed)=>{ state.cadence=Object.assign({},cad,{strength:v}); if(committed){ saveSettings(); renderActiveTab(); } }}));
+    if(cad.scope==='plan+person') strengthField.appendChild(el('p', {class:'field-hint'}, t('cadenceStrengthPersonScopeHint')));
     body.appendChild(strengthField);
     body.appendChild(settingsRow(t('cadenceWindowLabel'), null, Stepper({value:state.preferenceWindow||3, min:1, max:10, onChange:v=>{ state.preferenceWindow=v; saveSettings(); renderActiveTab(); }})));
     return body;
@@ -5167,14 +5400,16 @@ function renderSettingsTab(root){
       location.reload();
     }});
   }}, t('resetAction')));
-  dataRow.appendChild(el('button', {type:'button', class:'btn', onclick:async ()=>{
-    state.selfTestRunning = true; renderActiveTab();
-    const results = await runSelfTests();
-    state.selfTestResults = results; state.selfTestRunning = false;
-    renderActiveTab();
-  }}, state.selfTestRunning ? t('selfTestRunning') : t('selfTestAction')));
+  if(isDebugMode()){
+    dataRow.appendChild(el('button', {type:'button', class:'btn', onclick:async ()=>{
+      state.selfTestRunning = true; renderActiveTab();
+      const results = await runSelfTests();
+      state.selfTestResults = results; state.selfTestRunning = false;
+      renderActiveTab();
+    }}, state.selfTestRunning ? t('selfTestRunning') : t('selfTestAction')));
+  }
   dataSection.appendChild(dataRow);
-  if(state.selfTestResults){
+  if(isDebugMode() && state.selfTestResults){
     const pass = state.selfTestResults.filter(r=>r.status==='pass').length;
     const total = state.selfTestResults.length;
     dataSection.appendChild(el('p', {class:'card-summary'}, `${pass}/${total}`));
@@ -6525,6 +6760,12 @@ return results;
   applyStoreToRuntime();
   initShell();
   setupFavicon();
+  window.addEventListener('pagehide', persistStoreNow);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') persistStoreNow(); });
+  if(state.pendingCorruptStoreToast){
+    state.pendingCorruptStoreToast = false;
+    showToast(t('corruptStoreToast'));
+  }
   if(state.pendingCadenceIntroToast){
     state.pendingCadenceIntroToast = false;
     showToast(t('cadenceIntroToast'));
