@@ -323,13 +323,14 @@ a{color:inherit}
 .export-preview tr:last-child td{border-block-end:0}
 .export-actions-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-block-start:4px}
 .collapsed-section{border:1px solid var(--hairline); border-radius:var(--r-ctl); padding:12px 14px}
-.settings-layout{display:flex; gap:24px; align-items:flex-start}
-.settings-nav{position:sticky; top:calc(var(--tabbar-h, 52px) + 12px); display:flex; flex-direction:column; gap:2px; width:172px; flex-shrink:0}
-.settings-nav button{text-align:start; padding:8px 12px; border-radius:var(--r-ctl); border:none; background:none; font-size:13px; color:var(--ink-500); transition:background var(--motion), color var(--motion)}
+.settings-layout{display:flex; gap:0; align-items:flex-start}
+.settings-layout .card{flex:1; min-width:0}
+.settings-nav{position:sticky; top:calc(var(--tabbar-h, 52px) + 20px); display:flex; flex-direction:column; gap:1px; width:196px; flex-shrink:0; padding-block-start:20px; padding-inline-end:24px; margin-inline-end:24px; border-inline-end:1px solid var(--hairline)}
+.settings-nav button{text-align:start; padding:9px 14px; border-radius:var(--r-ctl); border:none; background:none; font-size:13px; font-weight:500; color:var(--ink-500); transition:background var(--motion), color var(--motion)}
 .settings-nav button:hover{background:var(--wash-hover); color:var(--ink-700)}
-.settings-nav button.active{background:var(--wash-selected); color:var(--primary); font-weight:600}
+.settings-nav button.active{background:var(--primary); color:var(--on-primary); font-weight:600}
 @media (max-width:640px){.settings-layout{flex-direction:column}
-.settings-nav{position:static; flex-direction:row; flex-wrap:wrap; width:auto}
+.settings-nav{position:static; flex-direction:row; flex-wrap:wrap; width:auto; padding-block-start:0; padding-inline-end:0; margin-inline-end:0; border-inline-end:0; border-block-end:1px solid var(--hairline); padding-block-end:12px; margin-block-end:12px}
 }
 .settings-section{padding-block:16px; border-block-start:1px solid var(--hairline); scroll-margin-top:calc(var(--tabbar-h, 52px) + 16px)}
 .settings-section:first-child{border-block-start:0; padding-block-start:0}
@@ -4344,7 +4345,7 @@ function TokenFieldInput(config){
   return wrap;
 }
 let activeDrawerClose = null;
-let settingsScrollObserver = null;
+let settingsScrollHandler = null;
 function openDrawer(title, bodyFn, footerFn, breadcrumb){
   if(activeDrawerClose) activeDrawerClose();
   const scrim = el('div', {class:'scrim'});
@@ -4532,6 +4533,7 @@ function switchTab(tab, pushHash){
 function renderActiveTab(){
   const root = document.getElementById('viewRoot');
   clear(root);
+  if(state.tab!=='settings' && settingsScrollHandler){ window.removeEventListener('scroll', settingsScrollHandler); settingsScrollHandler = null; }
   if(state.tab==='plan') renderPlanTab(root);
   else if(state.tab==='summary') renderSummaryTab(root);
   else if(state.tab==='facilities') renderFacilitiesTab(root);
@@ -7112,21 +7114,28 @@ function renderSettingsTab(root){
   layout.appendChild(nav);
   layout.appendChild(card);
   root.appendChild(layout);
-  if(settingsScrollObserver) settingsScrollObserver.disconnect();
-  if(typeof IntersectionObserver !== 'undefined'){
+  if(settingsScrollHandler) window.removeEventListener('scroll', settingsScrollHandler);
+  function updateActiveNav(){
     const tabbarH = parseFloat(document.documentElement.style.getPropertyValue('--tabbar-h')) || 52;
-    settingsScrollObserver = new IntersectionObserver(entries=>{
-      for(const entry of entries){
-        const btn = navButtons[entry.target.id];
-        if(!btn) continue;
-        btn.classList.toggle('active', entry.isIntersecting);
-      }
-    }, {rootMargin:(-(tabbarH+24))+'px 0px -70% 0px', threshold:0});
-    navSections.forEach(([id])=>{
+    const triggerY = tabbarH + 32;
+    let activeId = navSections[0][0];
+    for(const [id] of navSections){
       const target = document.getElementById(id);
-      if(target) settingsScrollObserver.observe(target);
-    });
+      if(target && target.getBoundingClientRect().top <= triggerY) activeId = id;
+    }
+    if(window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2){
+      activeId = navSections[navSections.length-1][0];
+    }
+    Object.keys(navButtons).forEach(id=>navButtons[id].classList.toggle('active', id===activeId));
   }
+  let scrollTicking = false;
+  settingsScrollHandler = ()=>{
+    if(scrollTicking) return;
+    scrollTicking = true;
+    requestAnimationFrame(()=>{ updateActiveNav(); scrollTicking = false; });
+  };
+  window.addEventListener('scroll', settingsScrollHandler, {passive:true});
+  updateActiveNav();
 }
 async function runSelfTests(){
   const results=[];
