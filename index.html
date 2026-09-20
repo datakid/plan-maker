@@ -204,6 +204,8 @@ a{color:inherit}
 .drawer.show{transform:translateX(0)}
 .drawer-head{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-block-end:1px solid var(--hairline); flex-shrink:0}
 .drawer-head h2{font-size:15px; font-weight:600}
+.drawer-back{display:flex; align-items:center; gap:4px; padding:0; margin-block-end:4px; border:none; background:none; font-size:12px; color:var(--ink-500)}
+.drawer-back:hover{color:var(--ink-700)}
 .drawer-body{flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px}
 .drawer-footer{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 20px; border-block-start:1px solid var(--hairline); flex-shrink:0}
 .drawer-footer .side{display:flex; gap:8px}
@@ -321,7 +323,15 @@ a{color:inherit}
 .export-preview tr:last-child td{border-block-end:0}
 .export-actions-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-block-start:4px}
 .collapsed-section{border:1px solid var(--hairline); border-radius:var(--r-ctl); padding:12px 14px}
-.settings-section{padding-block:16px; border-block-start:1px solid var(--hairline)}
+.settings-layout{display:flex; gap:24px; align-items:flex-start}
+.settings-nav{position:sticky; top:calc(var(--tabbar-h, 52px) + 12px); display:flex; flex-direction:column; gap:2px; width:172px; flex-shrink:0}
+.settings-nav button{text-align:start; padding:8px 12px; border-radius:var(--r-ctl); border:none; background:none; font-size:13px; color:var(--ink-500); transition:background var(--motion), color var(--motion)}
+.settings-nav button:hover{background:var(--wash-hover); color:var(--ink-700)}
+.settings-nav button.active{background:var(--wash-selected); color:var(--primary); font-weight:600}
+@media (max-width:640px){.settings-layout{flex-direction:column}
+.settings-nav{position:static; flex-direction:row; flex-wrap:wrap; width:auto}
+}
+.settings-section{padding-block:16px; border-block-start:1px solid var(--hairline); scroll-margin-top:calc(var(--tabbar-h, 52px) + 16px)}
 .settings-section:first-child{border-block-start:0; padding-block-start:0}
 .settings-section h3{font-size:13px; color:var(--ink-500); font-weight:600; margin-block-end:12px}
 .settings-row{display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:10px}
@@ -3215,6 +3225,7 @@ const state = {
   retiredExpanded:false,
   setupRowOpen:{period:true, weekdays:false, distribution:false, team:false},
   weekdaysRowOpen:{},
+  settingsAdvancedOpen:{fairness:false, distance:false, cadence:false},
   selfTestResults:null, selfTestRunning:false,
   unresolvedNamesQueue: [],
   facilityPersonVisits:{}, lastCycleNumber:0
@@ -4333,15 +4344,23 @@ function TokenFieldInput(config){
   return wrap;
 }
 let activeDrawerClose = null;
-function openDrawer(title, bodyFn, footerFn){
+let settingsScrollObserver = null;
+function openDrawer(title, bodyFn, footerFn, breadcrumb){
   if(activeDrawerClose) activeDrawerClose();
   const scrim = el('div', {class:'scrim'});
   const titleId = 'drawer-title-'+Math.random().toString(36).slice(2,8);
   const drawer = el('div', {class:'drawer', role:'dialog', 'aria-modal':'true', 'aria-labelledby':titleId});
-  const head = el('div', {class:'drawer-head'}, [
-    el('h2', {id:titleId}, title),
-    el('button', {type:'button', class:'icon-btn', html:ICONS.x, 'aria-label':t('close'), onclick:()=>close()})
-  ]);
+  const head = el('div', {class:'drawer-head'});
+  const titleWrap = el('div', {style:'min-width:0'});
+  if(breadcrumb){
+    titleWrap.appendChild(el('button', {type:'button', class:'drawer-back', 'aria-label':t('back'), onclick:()=>breadcrumb.onBack()}, [
+      el('span', {html:ICONS.chevronRight, 'aria-hidden':'true'}),
+      el('span', null, breadcrumb.label)
+    ]));
+  }
+  titleWrap.appendChild(el('h2', {id:titleId}, title));
+  head.appendChild(titleWrap);
+  head.appendChild(el('button', {type:'button', class:'icon-btn', html:ICONS.x, 'aria-label':t('close'), onclick:()=>close()}));
   const body = el('div', {class:'drawer-body'});
   drawer.appendChild(head); drawer.appendChild(body);
   const prevFocus = document.activeElement;
@@ -4508,6 +4527,7 @@ function switchTab(tab, pushHash){
   if(pushHash!==false) history.replaceState(null, '', '#'+tab);
   renderTabbar();
   renderActiveTab();
+  requestAnimationFrame(()=>window.scrollTo(0, tabScroll[tab]||0));
 }
 function renderActiveTab(){
   const root = document.getElementById('viewRoot');
@@ -4517,7 +4537,6 @@ function renderActiveTab(){
   else if(state.tab==='facilities') renderFacilitiesTab(root);
   else if(state.tab==='team') renderTeamTab(root);
   else renderSettingsTab(root);
-  requestAnimationFrame(()=>window.scrollTo(0, tabScroll[state.tab]||0));
 }
 function initShell(){
   document.title = t('appName');
@@ -6082,7 +6101,7 @@ function facilityStatusLabel(f){
 function facilityLastVisitLabel(f){
   return f.lastVisit ? t('daysAgo')(daysBetween(f.lastVisit, new Date())) : t('neverVisited');
 }
-function openLocationsPanel(){
+function openLocationsPanel(breadcrumb){
   openDrawer(t('locationsTitle'), (close, rerender)=>{
     const body = el('div', null);
     body.appendChild(el('p', {class:'field-hint'}, t('locationsHint')));
@@ -6098,7 +6117,7 @@ function openLocationsPanel(){
     }
     body.appendChild(panel);
     return body;
-  });
+  }, null, breadcrumb);
 }
 function openFacilityDrawer(facility){
   openDrawer(facility.name, (close, rerender)=>{
@@ -6132,7 +6151,7 @@ function openFacilityDrawer(facility){
     const kmNow = facilityKm(facility);
     const distRow = el('div', {class:'field-hint', style:'display:flex; align-items:center; gap:8px'});
     distRow.appendChild(el('span', null, kmNow!=null ? (kmNow+' '+t('kmUnit')) : '—'));
-    distRow.appendChild(el('button', {type:'button', class:'btn-link', onclick:()=>{ close(); openLocationsPanel(); }}, t('locationsTitle')));
+    distRow.appendChild(el('button', {type:'button', class:'btn-link', onclick:()=>openLocationsPanel({label:facility.name, onBack:()=>openFacilityDrawer(facility)})}, t('locationsTitle')));
     distField.appendChild(distRow);
     body.appendChild(distField);
     const weightField = el('div', {class:'field'});
@@ -6752,13 +6771,14 @@ function SegmentedField(options, value, onChange){
   }
   return seg;
 }
-function advancedDisclosure(bodyFn){
+function advancedDisclosure(key, bodyFn){
   const wrap = el('div', {class:'calendar-paste'});
   const panelId = 'adv-panel-'+(++advancedDisclosureSeq);
-  const toggleBtn = el('button', {type:'button', class:'btn-link', 'aria-expanded':'false', 'aria-controls':panelId}, t('advancedLabel'));
-  const panel = el('div', {class:'calendar-paste-panel', id:panelId, hidden:true});
+  const isOpen = !!state.settingsAdvancedOpen[key];
+  const toggleBtn = el('button', {type:'button', class:'btn-link', 'aria-expanded':isOpen?'true':'false', 'aria-controls':panelId}, t('advancedLabel'));
+  const panel = el('div', {class:'calendar-paste-panel', id:panelId, hidden:!isOpen});
   panel.appendChild(bodyFn());
-  toggleBtn.addEventListener('click', ()=>{ panel.hidden = !panel.hidden; toggleBtn.setAttribute('aria-expanded', panel.hidden?'false':'true'); });
+  toggleBtn.addEventListener('click', ()=>{ state.settingsAdvancedOpen[key] = !state.settingsAdvancedOpen[key]; renderActiveTab(); });
   wrap.appendChild(toggleBtn); wrap.appendChild(panel);
   return wrap;
 }
@@ -6861,7 +6881,7 @@ function renderFairnessGroup(){
   wrap.appendChild(SegmentedField([
     {value:'calm', label:t('fairnessCalm')}, {value:'balanced', label:t('fairnessBalanced')}, {value:'strict', label:t('fairnessStrict')}
   ], level, applyFairnessPreset));
-  wrap.appendChild(advancedDisclosure(()=>{
+  wrap.appendChild(advancedDisclosure('fairness', ()=>{
     const body = el('div', null);
     body.appendChild(settingsRow(t('minVisitsLabel'), t('overTieHint'), Stepper({value:state.overTieMinVisits, min:1, onChange:v=>{ state.overTieMinVisits=v; saveSettings(); renderActiveTab(); }})));
     body.appendChild(settingsRow(t('minRatioLabel'), null, Stepper({value:Math.round(state.overTieMinRatio*100), min:0, max:100, step:5, unit:'%', onChange:v=>{ state.overTieMinRatio=v/100; saveSettings(); renderActiveTab(); }})));
@@ -6897,7 +6917,7 @@ function renderDistanceGroup(){
   wrap.appendChild(SegmentedField([
     {value:'ignore', label:t('originIgnore')}, {value:'count', label:t('originCount')}, {value:'favor', label:t('originFavor')}
   ], state.originMode, v=>{ state.originMode=v; saveSettings(); renderActiveTab(); }));
-  wrap.appendChild(advancedDisclosure(()=>{
+  wrap.appendChild(advancedDisclosure('distance', ()=>{
     const body = el('div', null);
     const strengthField = el('div', {class:'field'});
     strengthField.appendChild(el('label', {class:'field-label'}, t('originStrengthLabel')));
@@ -6919,7 +6939,7 @@ function renderCadenceGroup(){
     {value:'off', label:t('cadenceOff')}, {value:'prefer', label:t('cadencePrefer')}, {value:'strict', label:t('cadenceStrict')}
   ], cad.mode, v=>{ state.cadence=Object.assign({},cad,{mode:v}); saveSettings(); renderActiveTab(); }));
   wrap.appendChild(settingsRow(t('cadenceGapLabel'), null, Stepper({value:cad.gapDays, min:1, onChange:v=>{ state.cadence=Object.assign({},cad,{gapDays:v}); saveSettings(); renderActiveTab(); }})));
-  wrap.appendChild(advancedDisclosure(()=>{
+  wrap.appendChild(advancedDisclosure('cadence', ()=>{
     const body = el('div', null);
     body.appendChild(settingsRow(t('cadenceScopeLabel'), null, SegmentedField([
       {value:'plan', label:t('cadenceScopePlan')}, {value:'plan+person', label:t('cadenceScopePlanPerson')}
@@ -6935,8 +6955,10 @@ function renderCadenceGroup(){
 }
 
 function renderSettingsTab(root){
+  const layout = el('div', {class:'settings-layout'});
+  const nav = el('div', {class:'settings-nav'});
   const card = el('div', {class:'card'});
-  const appearance = el('div', {class:'settings-section'});
+  const appearance = el('div', {class:'settings-section', id:'settings-appearance'});
   appearance.appendChild(el('h3', null, t('settingsAppearance')));
   appearance.appendChild(settingsRow(t('themeLabel'), null, SelectField({
     value:state.theme, matchWidth:false, blockWidth:false,
@@ -6949,7 +6971,7 @@ function renderSettingsTab(root){
     onChange:v=>{ if(v!==state.lang) toggleLang(); }
   })));
   card.appendChild(appearance);
-  const planDefaults = el('div', {class:'settings-section'});
+  const planDefaults = el('div', {class:'settings-section', id:'settings-defaults'});
   planDefaults.appendChild(el('h3', null, t('settingsPlanDefaults')));
   const wdWrap = el('div', {class:'field'});
   wdWrap.appendChild(el('label', {class:'field-label'}, t('defaultWeekdays')));
@@ -6969,11 +6991,11 @@ function renderSettingsTab(root){
   })));
   card.appendChild(planDefaults);
   card.appendChild(renderCurrentModeRow());
-  card.appendChild(renderFairnessGroup());
-  card.appendChild(renderDistanceGroup());
-  card.appendChild(renderCadenceGroup());
+  const fairnessEl = renderFairnessGroup(); fairnessEl.id = 'settings-fairness'; card.appendChild(fairnessEl);
+  const distanceEl = renderDistanceGroup(); distanceEl.id = 'settings-distance'; card.appendChild(distanceEl);
+  const cadenceEl = renderCadenceGroup(); cadenceEl.id = 'settings-cadence'; card.appendChild(cadenceEl);
   card.appendChild(settingsRow(t('weekdayGroupTitle'), null, el('button', {type:'button', class:'btn-link', onclick:()=>{ state.setupRowOpen.weekdays = true; switchTab('plan'); }}, t('teamEditLink'))));
-  const dataSection = el('div', {class:'settings-section'});
+  const dataSection = el('div', {class:'settings-section', id:'settings-data'});
   dataSection.appendChild(el('h3', null, t('settingsData')));
   const dataRow = el('div', {class:'export-actions-grid'});
   dataRow.appendChild(el('button', {type:'button', class:'btn', onclick:doExportBackup}, t('backupAction')));
@@ -7070,7 +7092,41 @@ function renderSettingsTab(root){
     }
   }
   card.appendChild(dataSection);
-  root.appendChild(card);
+  const navSections = [
+    ['settings-appearance', t('settingsAppearance')],
+    ['settings-defaults', t('settingsPlanDefaults')],
+    ['settings-fairness', t('fairnessGroupTitle')],
+    ['settings-distance', t('distanceGroupTitle')],
+    ['settings-cadence', t('cadenceGroupTitle')],
+    ['settings-data', t('settingsData')]
+  ];
+  const navButtons = {};
+  navSections.forEach(([id,label])=>{
+    const btn = el('button', {type:'button', onclick:()=>{
+      const target = document.getElementById(id);
+      if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+    }}, label);
+    navButtons[id] = btn;
+    nav.appendChild(btn);
+  });
+  layout.appendChild(nav);
+  layout.appendChild(card);
+  root.appendChild(layout);
+  if(settingsScrollObserver) settingsScrollObserver.disconnect();
+  if(typeof IntersectionObserver !== 'undefined'){
+    const tabbarH = parseFloat(document.documentElement.style.getPropertyValue('--tabbar-h')) || 52;
+    settingsScrollObserver = new IntersectionObserver(entries=>{
+      for(const entry of entries){
+        const btn = navButtons[entry.target.id];
+        if(!btn) continue;
+        btn.classList.toggle('active', entry.isIntersecting);
+      }
+    }, {rootMargin:(-(tabbarH+24))+'px 0px -70% 0px', threshold:0});
+    navSections.forEach(([id])=>{
+      const target = document.getElementById(id);
+      if(target) settingsScrollObserver.observe(target);
+    });
+  }
 }
 async function runSelfTests(){
   const results=[];
