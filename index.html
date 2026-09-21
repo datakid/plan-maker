@@ -7,8 +7,10 @@
 <script>
 (function(){
   try{
-    var lang = localStorage.getItem('alkhitta.lang') || 'ar';
-    var theme = localStorage.getItem('alkhitta.theme') || 'auto';
+    var lang = localStorage.getItem('alkhitta.lang');
+    if(lang!=='ar' && lang!=='en') lang = 'ar';
+    var theme = localStorage.getItem('alkhitta.theme');
+    if(theme!=='light' && theme!=='dark' && theme!=='auto') theme = 'auto';
     document.documentElement.lang = lang;
     document.documentElement.dir = lang==='ar' ? 'rtl' : 'ltr';
     if(theme!=='auto') document.documentElement.setAttribute('data-theme', theme);
@@ -411,6 +413,11 @@ body{background:#fff; color:#000}
 @media print{.card{box-shadow:none}
 .result-row{animation:none; transform:none; box-shadow:none}
 }
+.settings-nav button{display:flex; align-items:center; gap:9px}
+.settings-nav .nav-ico{display:flex; flex:0 0 auto; color:var(--ink-400); transition:color var(--motion)}
+.settings-nav button.active .nav-ico{color:var(--on-primary)}
+.settings-nav button:hover .nav-ico{color:var(--ink-700)}
+.settings-nav .nav-lbl{min-width:0}
 .disclosure{margin-block-start:8px; padding-block-start:8px; border-block-start:1px solid var(--hairline)}
 .disclosure-panel{margin-block-start:8px; display:flex; flex-direction:column; gap:10px}
 .export-actions-grid{grid-template-columns:repeat(auto-fit, minmax(150px, 1fr))}
@@ -3200,7 +3207,14 @@ const ICONS = {
   building: svgIcon('<rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8 12.5h2M14 12.5h2M8 16h2M14 16h2M4.5 9h15M12 9v11.5"/>'),
   users: svgIcon('<circle cx="9" cy="8.2" r="3.4"/><path d="M3.2 19.5c.5-3.2 2.8-5.1 5.8-5.1s5.3 1.9 5.8 5.1"/><circle cx="17" cy="9.2" r="2.7"/><path d="M15.9 14.4c2.5.4 4.3 2.3 4.7 4.9"/>'),
   chart: svgIcon('<path d="M4 4.5v15h16"/><path d="M8.5 16.5v-5M13 16.5v-9M17.5 16.5v-6.5"/>'),
-  sliders: svgIcon('<path d="M4 7h8.2M18.8 7H20M4 12h3.2M13.2 12H20M4 17h10.2"/><circle cx="15.5" cy="7" r="2.1"/><circle cx="10" cy="12" r="2.1"/><circle cx="17.8" cy="17" r="2.1"/>')
+  sliders: svgIcon('<path d="M4 7h8.2M18.8 7H20M4 12h3.2M13.2 12H20M4 17h10.2"/><circle cx="15.5" cy="7" r="2.1"/><circle cx="10" cy="12" r="2.1"/><circle cx="17.8" cy="17" r="2.1"/>'),
+  palette: svgIcon('<circle cx="12" cy="12" r="9"/><circle cx="9" cy="9.6" r="1.15"/><circle cx="14.6" cy="9.6" r="1.15"/><circle cx="12" cy="15.2" r="1.15"/>', 14),
+  gauge: svgIcon('<path d="M4 16a8 8 0 1116 0"/><path d="M12 16l4.2-4.2"/>', 14),
+  scale: svgIcon('<path d="M12 4.5v15M6.5 19.5h11M6 8.5h12"/><path d="M6 8.5L3.6 14h4.8L6 8.5zM18 8.5L15.6 14h4.8L18 8.5z"/>', 14),
+  mapPin: svgIcon('<path d="M12 21s6-5.3 6-10.2A6 6 0 106 10.8C6 15.7 12 21 12 21z"/><circle cx="12" cy="10.6" r="2.2"/>', 14),
+  repeat: svgIcon('<path d="M17 3.5l3 3-3 3"/><path d="M20 6.5H8.5A4.5 4.5 0 004 11v1"/><path d="M7 20.5l-3-3 3-3"/><path d="M4 17.5h11.5A4.5 4.5 0 0020 13v-1"/>', 14),
+  calendarDays: svgIcon('<rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 3v3M16 3v3M3.5 9.5h17M8 13h2M14 13h2M8 16.6h2M14 16.6h2"/>', 14),
+  database: svgIcon('<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/>', 14)
 };
 function isDebugMode(){
   try{ return new URLSearchParams(location.search).has('debug'); }catch(e){ return false; }
@@ -3853,6 +3867,9 @@ function Popover(anchor, buildContent, opts){
     if(activePopover) activePopover.close();
     prevFocus = document.activeElement;
     popEl = el('div', {class:'popover', role: opts.role||'dialog'});
+    popEl.id = 'pop-' + uid('p');
+    anchor.setAttribute('aria-expanded','true');
+    anchor.setAttribute('aria-controls', popEl.id);
     popEl.appendChild(buildContent(close));
     document.body.appendChild(popEl);
     position();
@@ -3880,6 +3897,8 @@ function Popover(anchor, buildContent, opts){
     popEl.remove();
     popEl = null;
     anchor.classList.remove('open');
+    anchor.setAttribute('aria-expanded','false');
+    anchor.removeAttribute('aria-controls');
     if(activePopover && activePopover.close===close) activePopover = null;
     if(opts.onClose) opts.onClose();
     if(prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus();
@@ -4454,8 +4473,10 @@ function showConfirmDialog(title, message, opts){
   scrim.addEventListener('click', close);
   function close(){
     document.removeEventListener('keydown', onKey, true); scrim.remove(); dialog.remove();
+    if(activeConfirmClose===close) activeConfirmClose = null;
     if(prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus();
   }
+  activeConfirmClose = close;
   okBtn.focus();
 }
 const WORDMARK_SVG = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 3a13 13 0 1 0 13 13"/><path d="M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6"/><circle cx="8.5" cy="21" r="2.1" fill="currentColor" stroke="none"/><circle cx="25.5" cy="14.6" r="2.1" fill="currentColor" stroke="none"/></svg>';
@@ -4470,6 +4491,7 @@ const TABS = ['plan','summary','facilities','team','settings'];
 if(!TABS.includes(state.tab)) state.tab = 'plan';
 const tabScroll = {};
 function applyTheme(){
+  if(state.theme!=='light' && state.theme!=='dark') state.theme = 'auto';
   if(state.theme==='auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', state.theme);
 }
@@ -4480,6 +4502,7 @@ function cycleTheme(){
   renderTopbar();
 }
 function toggleLang(){
+  closeTransientOverlays();
   state.lang = state.lang==='ar' ? 'en' : 'ar';
   localStorage.setItem('alkhitta.lang', state.lang);
   document.documentElement.lang = state.lang;
@@ -4530,18 +4553,26 @@ function updateTabbarHeightVar(){
   const bar = document.getElementById('tabbar');
   if(bar) document.documentElement.style.setProperty('--tabbar-h', bar.getBoundingClientRect().height+'px');
 }
+let activeConfirmClose = null;
+function closeTransientOverlays(){
+  if(activePopover) activePopover.close();
+  if(activeConfirmClose) activeConfirmClose();
+}
 function switchTab(tab, pushHash){
   if(activeDrawerClose) activeDrawerClose();
+  closeTransientOverlays();
   tabScroll[state.tab] = window.scrollY;
   state.tab = tab;
   if(pushHash!==false) history.replaceState(null, '', '#'+tab);
   renderTabbar();
+  restoreSuppressed = true;
   renderActiveTab();
+  restoreSuppressed = false;
   requestAnimationFrame(()=>window.scrollTo(0, tabScroll[tab]||0));
 }
 function renderActiveTab(){
   const root = document.getElementById('viewRoot');
-  if(state.tab==='settings') captureSettingsRestore();
+  captureSettingsRestore();
   clear(root);
   if(state.tab!=='settings' && settingsScrollHandler){ window.removeEventListener('scroll', settingsScrollHandler); settingsScrollHandler = null; }
   if(state.tab==='plan') renderPlanTab(root);
@@ -4549,8 +4580,10 @@ function renderActiveTab(){
   else if(state.tab==='facilities') renderFacilitiesTab(root);
   else if(state.tab==='team') renderTeamTab(root);
   else renderSettingsTab(root);
+  applySettingsRestore();
 }
 function initShell(){
+  if(state.lang!=='ar' && state.lang!=='en') state.lang = 'ar';
   document.title = t('appName');
   document.documentElement.lang = state.lang;
   document.documentElement.dir = state.lang==='ar' ? 'rtl' : 'ltr';
@@ -4565,9 +4598,11 @@ function initShell(){
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(updateTabbarHeightVar);
   window.addEventListener('hashchange', ()=>{
     const h = (location.hash||'#plan').replace('#','');
-    if(TABS.indexOf(h)>=0 && h!==state.tab) switchTab(h, false);
+    if(TABS.indexOf(h)<0){ history.replaceState(null, '', '#'+state.tab); return; }
+    if(h!==state.tab) switchTab(h, false);
   });
   renderActiveTab();
+  history.replaceState(null, '', '#'+state.tab);
 }
 const REGISTRY_HEADER_ALIASES = {
   'اسم الجهة':'name', 'الاسم':'name', 'التصنيف':'category', 'المنطقة':'category',
@@ -5618,9 +5653,9 @@ function dayFieldsGrid(cfg, patch){
   };
   grid.appendChild(field(t('kindLeanLabel'), StepField({values:LEAN_VALUES, labels:[t('kindLabelContracted'),t('distanceNeutral'),t('kindLabelBasic')], value:cfg.kindLean, onChange:v=>patch({kindLean:v})})));
   grid.appendChild(field(t('weekdayDistanceBiasLabel'), StepField({values:LEAN_VALUES, labels:[t('distanceNear'),t('distanceNeutral'),t('distanceFar')], value:cfg.distLean, onChange:v=>patch({distLean:v})})));
-  grid.appendChild(field(t('visitCapLabel'), Stepper({value:cfg.visitCap||0, min:0, step:1, onChange:v=>patch({visitCap: v>0?v:null})}), cfg.visitCap?String(cfg.visitCap):t('visitCapNone')));
-  grid.appendChild(field(t('visitMinLabel'), Stepper({value:cfg.visitMin||0, min:0, step:1, onChange:v=>patch({visitMin:v})})));
-  grid.appendChild(field(t('teamCapLabel'), Stepper({value:cfg.teamCap||0, min:0, step:1, onChange:v=>patch({teamCap: v>0?v:null})})));
+  grid.appendChild(field(t('visitCapLabel'), Stepper({value:cfg.visitCap||0, min:0, max:20, step:1, onChange:v=>patch({visitCap: v>0?v:null})}), cfg.visitCap?String(cfg.visitCap):t('visitCapNone')));
+  grid.appendChild(field(t('visitMinLabel'), Stepper({value:cfg.visitMin||0, min:0, max:20, step:1, onChange:v=>patch({visitMin:v})})));
+  grid.appendChild(field(t('teamCapLabel'), Stepper({value:cfg.teamCap||0, min:0, max:20, step:1, onChange:v=>patch({teamCap: v>0?v:null})})));
   grid.appendChild(field(t('favorCategoryLabel'), SelectField({value:cfg.favorCategory||'', matchWidth:false, blockWidth:false, options:catOptions, onChange:v=>patch({favorCategory:v||null})})));
   const restrictField = el('div', {class:'field', style:'grid-column:1 / -1'});
   restrictField.appendChild(el('label', {class:'field-label'}, t('restrictToLabel')));
@@ -5751,13 +5786,13 @@ function renderDistributionRowBody(){
       const resolved = previewVisitBudget();
       const totalField = el('div', {class:'field', style:'margin-block-start:12px'});
       totalField.appendChild(el('label', {class:'field-label'}, t('totalVisitsLabel')));
-      totalField.appendChild(Stepper({value: vb.total!=null?vb.total:resolved.V, min:0, onChange:v=>{
+      totalField.appendChild(Stepper({value: vb.total!=null?vb.total:resolved.V, min:0, max:999, onChange:v=>{
         state.visitBudget = Object.assign({}, vb, {total:v}); saveSettings(); renderActiveTab();
       }}));
       wrap.appendChild(totalField);
       const perWeekField = el('div', {class:'field', style:'margin-block-start:12px'});
       perWeekField.appendChild(el('label', {class:'field-label'}, t('perWeekLabel')));
-      perWeekField.appendChild(Stepper({value: vb.perWeek!=null?vb.perWeek:0, min:0, onChange:v=>{
+      perWeekField.appendChild(Stepper({value: vb.perWeek!=null?vb.perWeek:0, min:0, max:99, onChange:v=>{
         state.visitBudget = Object.assign({}, vb, {perWeek: v>0?v:null}); saveSettings(); renderActiveTab();
       }}));
       perWeekField.appendChild(el('span', {class:'field-hint'}, vb.perWeek?String(vb.perWeek):t('perWeekNone')));
@@ -5789,9 +5824,9 @@ function renderDistributionRowBody(){
       } else {
         const row = el('div', {class:'range-row', style:'margin-block-start:12px'}); const mWrap = el('div', {class:'field'});
         mWrap.appendChild(el('label', {class:'field-label'}, t('basicLabel')));
-        mWrap.appendChild(Stepper({value: state.countsM!=null?state.countsM:budget.M, min:0, onChange:v=>{ state.countsM=v; saveSettings(); renderActiveTab(); }}));
+        mWrap.appendChild(Stepper({value: state.countsM!=null?state.countsM:budget.M, min:0, max:999, onChange:v=>{ state.countsM=v; saveSettings(); renderActiveTab(); }}));
         const rWrap = el('div', {class:'field'}); rWrap.appendChild(el('label', {class:'field-label'}, t('contractedLabel')));
-        rWrap.appendChild(Stepper({value: state.countsR!=null?state.countsR:budget.R, min:0, onChange:v=>{ state.countsR=v; saveSettings(); renderActiveTab(); }}));
+        rWrap.appendChild(Stepper({value: state.countsR!=null?state.countsR:budget.R, min:0, max:999, onChange:v=>{ state.countsR=v; saveSettings(); renderActiveTab(); }}));
         row.appendChild(mWrap); row.appendChild(rWrap); wrap.appendChild(row);
       }
       wrap.appendChild(el('p', {class:'card-summary'}, t('distributionSummary')(budget.M, budget.R)));
@@ -5888,6 +5923,21 @@ function renderPlanTab(root){
   renderResultsSection(root); renderReviewSection(root);
 }
 function poolTone(id){ return id==='fin' ? 'fin' : (id==='clin' ? 'clin' : 'alt'); }
+function refreshPlanDerivedState(){
+  if(!state.plan || !state.planMeta) return;
+  const plan = state.plan;
+  const pools = livePools();
+  const retiredIds = new Set(state.retiredPool.map(p=>p.id));
+  const peopleCtx = {pools: livePoolMembers(), isUnavailable: makeUnavailableChecker(), maxVisitsPerDay: state.maxVisitsPerDay};
+  const nonEmpty = plan.rows.filter(r=>!r.empty);
+  const totals = computeTotals(plan.rows, state.pools.map(pl=>pl.id));
+  const unavailChecker = makeUnavailableChecker();
+  state.planMeta.totals = totals;
+  state.planMeta.thirds = computeThirds(nonEmpty);
+  state.planMeta.deviation = Object.fromEntries(pools.map(pl=>[pl.id, computeDeviation(pl.members, totals[pl.id], poolSeatTotal(plan, pl), plan.days, unavailChecker)]));
+  state.planMeta.gates = computeGates(plan, state.registry, retiredIds, peopleCtx);
+  state.planMeta.nearMisses = computeNearMisses(plan, 10);
+}
 function openRowDrawer(row, plan){
   const streamRows = plan.rows.filter(r=>!r.empty && r.kind===row.kind);
   openDrawer(row.facility.name, ()=>{
@@ -5956,6 +6006,7 @@ function openRowDrawer(row, plan){
             const item = el('button', {type:'button', class:'popover-item'+(reason?' ineligible':''), disabled:!!reason, onclick:()=>{
               const team = teamOf(row, poolId); const idx = team.indexOf(p); team[idx] = alt;
               setExplain(row, poolId, null);
+              refreshPlanDerivedState();
               swapPop.close(); activeDrawerClose && activeDrawerClose(); renderActiveTab();
             }}, reason ? `${alt.name} · ${reason}` : alt.name); list.appendChild(item);
           }); listKeyNav(list);
@@ -6084,6 +6135,9 @@ function renderReviewSection(root){
   if(state.planApproved) footer.appendChild(el('button', {type:'button', class:'btn', onclick:openExportDrawer}, t('exportTitle')));
   card.appendChild(footer); root.appendChild(card);
 }
+function clearFacilitySelectionOnFilterChange(){
+  if(state.facilitySelected.size) state.facilitySelected = new Set();
+}
 function filteredFacilities(){
   let list = state.registry.slice();
   if(state.facilityKindFilter!=='all'){
@@ -6121,7 +6175,7 @@ function openLocationsPanel(breadcrumb){
     for(const loc of [...state.locations].sort((a,b)=>a.name.localeCompare(b.name))){
       const row = el('div', {class:'location-row'});
       row.appendChild(el('span', null, loc.name));
-      row.appendChild(Stepper({value:loc.km, min:0, step:1, unit:t('kmUnit'), onChange:v=>{
+      row.appendChild(Stepper({value:loc.km, min:0, max:5000, step:1, unit:t('kmUnit'), onChange:v=>{
         loc.km = v;
         saveLocations(); rerender(); renderActiveTab();
       }}));
@@ -6243,6 +6297,10 @@ function removeFacilityFromRegistry(facility){
   saveRegistry();
   if(touchedPeople) savePeople();
 }
+function selectedVisibleFacilities(){
+  const visible = filteredFacilities();
+  return visible.filter(f=>state.facilitySelected.has(f.id));
+}
 function renderFacilityList(container){
   clear(container);
   const list = filteredFacilities();
@@ -6250,15 +6308,15 @@ function renderFacilityList(container){
     const bar = el('div', {class:'bulk-bar'});
     bar.appendChild(el('span', {class:'field-hint'}, String(state.facilitySelected.size)));
     bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
-      for(const f of state.registry) if(state.facilitySelected.has(f.id)) f.manualExcluded=true;
+      for(const f of selectedVisibleFacilities()) f.manualExcluded=true;
       saveRegistry(); state.facilitySelected=new Set(); renderFacilityList(container);
     }}, t('bulkExclude')));
     bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
-      for(const f of state.registry) if(state.facilitySelected.has(f.id)) f.manualExcluded=false;
+      for(const f of selectedVisibleFacilities()) f.manualExcluded=false;
       saveRegistry(); state.facilitySelected=new Set(); renderFacilityList(container);
     }}, t('bulkInclude')));
     bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
-      for(const f of state.registry) if(state.facilitySelected.has(f.id)) f.pinned=true;
+      for(const f of selectedVisibleFacilities()) f.pinned=true;
       saveRegistry(); state.facilitySelected=new Set(); renderFacilityList(container);
     }}, t('bulkPin')));
     let bulkCrit = 50;
@@ -6267,7 +6325,7 @@ function renderFacilityList(container){
     bulkCritWrap.appendChild(StepField({values:LEVEL_VALUES, labels:levelLabels(), value:bulkCrit, onChange:v=>{ bulkCrit=v; }}));
     bar.appendChild(bulkCritWrap);
     bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
-      for(const f of state.registry) if(state.facilitySelected.has(f.id)){ f.crit=bulkCrit; }
+      for(const f of selectedVisibleFacilities()){ f.crit=bulkCrit; }
       saveRegistry(); state.facilitySelected=new Set(); renderFacilityList(container);
     }}, t('bulkApply')));
     container.appendChild(bar);
@@ -6454,20 +6512,20 @@ function renderFilterBar(barEl, listContainer){
   while(barEl.children.length>1) barEl.removeChild(barEl.lastChild);
   const kindSeg = el('div', {class:'segmented'});
   [['all',t('kindLabelAll')],['basic',t('kindLabelBasic')],['contracted',t('kindLabelContracted')],['excluded',t('kindLabelExcluded')]].forEach(([val,label])=>{
-    kindSeg.appendChild(el('button', {type:'button', 'aria-pressed':state.facilityKindFilter===val?'true':'false', onclick:()=>{ state.facilityKindFilter=val; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }}, label));
+    kindSeg.appendChild(el('button', {type:'button', 'aria-pressed':state.facilityKindFilter===val?'true':'false', onclick:()=>{ clearFacilitySelectionOnFilterChange(); state.facilityKindFilter=val; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }}, label));
   });
   barEl.appendChild(kindSeg);
   const categories = [...new Set(state.registry.map(f=>f.category))].sort();
   barEl.appendChild(SelectField({
     options:[{value:'',label:t('allCategories')}, ...categories.map(c=>({value:c,label:c}))], value:state.facilityCategoryFilter,
-    blockWidth:false, matchWidth:false, onChange:v=>{ state.facilityCategoryFilter=v; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }
+    blockWidth:false, matchWidth:false, onChange:v=>{ clearFacilitySelectionOnFilterChange(); state.facilityCategoryFilter=v; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }
   }));
   const locationsAll = [...new Set(state.registry.map(f=>f.location).filter(Boolean))].sort();
   barEl.appendChild(SelectField({
     options:[{value:'',label:t('allLocations')}, ...locationsAll.map(l=>({value:l,label:l}))], value:state.facilityLocationFilter,
-    blockWidth:false, matchWidth:false, onChange:v=>{ state.facilityLocationFilter=v; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }
+    blockWidth:false, matchWidth:false, onChange:v=>{ clearFacilitySelectionOnFilterChange(); state.facilityLocationFilter=v; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }
   }));
-  barEl.appendChild(el('button', {type:'button', class:'chip review-toggle'+(state.facilityReviewOnly?' active':''), 'aria-pressed':state.facilityReviewOnly?'true':'false', onclick:()=>{ state.facilityReviewOnly=!state.facilityReviewOnly; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }}, t('needsReviewToggle')));
+  barEl.appendChild(el('button', {type:'button', class:'chip review-toggle'+(state.facilityReviewOnly?' active':''), 'aria-pressed':state.facilityReviewOnly?'true':'false', onclick:()=>{ clearFacilitySelectionOnFilterChange(); state.facilityReviewOnly=!state.facilityReviewOnly; renderFilterBar(barEl, listContainer); renderFacilityList(listContainer); }}, t('needsReviewToggle')));
 }
 function renderFacilitiesTab(root){
   const card = el('div', {class:'card'});
@@ -6486,7 +6544,7 @@ function renderFacilitiesTab(root){
   card.appendChild(filterBar);
   card.appendChild(listContainer);
   renderFacilityList(listContainer);
-  searchInput.addEventListener('input', debounce(()=>{ state.facilitySearch = searchInput.value; renderFacilityList(listContainer); }, 150));
+  searchInput.addEventListener('input', debounce(()=>{ clearFacilitySelectionOnFilterChange(); state.facilitySearch = searchInput.value; renderFacilityList(listContainer); }, 150));
   const addRow = el('div', {style:'display:flex;gap:8px;margin-block-start:14px'});
   const addInput = el('input', {type:'text', class:'text-input', placeholder:t('newFacilityName'), style:'flex:1'});
   addRow.appendChild(addInput);
@@ -6967,6 +7025,7 @@ function renderCadenceGroup(){
 }
 
 let settingsRestore = null;
+let restoreSuppressed = false;
 function settingsPathOf(node){
   const root = document.getElementById('viewRoot');
   if(!node || !root || !root.contains(node)) return null;
@@ -6991,6 +7050,7 @@ function settingsNodeAt(path){
   return cur;
 }
 function captureSettingsRestore(){
+  if(restoreSuppressed){ settingsRestore = null; return; }
   const active = document.activeElement;
   settingsRestore = {
     y: window.scrollY,
@@ -7003,7 +7063,10 @@ function applySettingsRestore(){
   if(!r) return;
   if(r.y) window.scrollTo(0, r.y);
   const node = settingsNodeAt(r.path);
-  if(node && typeof node.focus==='function') node.focus({preventScroll:true});
+  if(!node || typeof node.focus!=='function') return;
+  const tag = node.tagName;
+  const focusable = tag==='BUTTON' || tag==='INPUT' || tag==='SELECT' || tag==='TEXTAREA' || tag==='A' || node.hasAttribute('tabindex');
+  if(focusable && !node.disabled) node.focus({preventScroll:true});
 }
 function renderSettingsTab(root){
   const layout = el('div', {class:'settings-layout'});
@@ -7041,7 +7104,9 @@ function renderSettingsTab(root){
     onChange:v=>{ state.range=v; saveSettings(); renderActiveTab(); }
   })));
   card.appendChild(planDefaults);
-  card.appendChild(renderCurrentModeRow());
+  const modeSection = renderCurrentModeRow();
+  modeSection.id = 'settings-mode';
+  card.appendChild(modeSection);
   const fairnessEl = renderFairnessGroup(); fairnessEl.id = 'settings-fairness'; card.appendChild(fairnessEl);
   const distanceEl = renderDistanceGroup(); distanceEl.id = 'settings-distance'; card.appendChild(distanceEl);
   const cadenceEl = renderCadenceGroup(); cadenceEl.id = 'settings-cadence'; card.appendChild(cadenceEl);
@@ -7154,12 +7219,19 @@ function renderSettingsTab(root){
     sections.push([node.id, h && h.textContent ? h.textContent : node.id]);
   });
   const navButtons = {};
+  const SECTION_ICONS = {'settings-appearance':ICONS.palette, 'settings-defaults':ICONS.calendar, 'settings-mode':ICONS.gauge, 'settings-fairness':ICONS.scale, 'settings-distance':ICONS.mapPin, 'settings-cadence':ICONS.repeat, 'settings-weekdays':ICONS.calendarDays, 'settings-data':ICONS.database};
   let spyLock = 0;
   function setActiveNav(id){
     Object.keys(navButtons).forEach(key=>{
       const on = key===id;
       navButtons[key].classList.toggle('active', on);
-      if(on) navButtons[key].setAttribute('aria-current','true');
+      if(on){
+        navButtons[key].setAttribute('aria-current','true');
+        if(nav.scrollWidth > nav.clientWidth + 4){
+          const b = navButtons[key], want = b.offsetLeft - (nav.clientWidth - b.offsetWidth)/2;
+          if(Math.abs(nav.scrollLeft - want) > 8) nav.scrollLeft = want;
+        }
+      }
       else navButtons[key].removeAttribute('aria-current');
     });
   }
@@ -7172,7 +7244,7 @@ function renderSettingsTab(root){
       target.scrollIntoView({behavior:'smooth', block:'start'});
       const h = target.querySelector('h3');
       if(h){ h.setAttribute('tabindex','-1'); h.focus({preventScroll:true}); }
-    }}, label);
+    }}, [SECTION_ICONS[id] ? el('span', {class:'nav-ico', html:SECTION_ICONS[id], 'aria-hidden':'true'}) : null, el('span', {class:'nav-lbl'}, label)]);
     btn.addEventListener('keydown', e=>{
       let next = null;
       if(e.key==='ArrowDown') next = sections[(i+1)%sections.length][0];
@@ -7215,7 +7287,6 @@ function renderSettingsTab(root){
   };
   window.addEventListener('scroll', settingsScrollHandler, {passive:true});
   updateActiveNav();
-  applySettingsRestore();
 }
 async function runSelfTests(){
   const results=[];
