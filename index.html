@@ -411,6 +411,15 @@ body{background:#fff; color:#000}
 @media print{.card{box-shadow:none}
 .result-row{animation:none; transform:none; box-shadow:none}
 }
+.disclosure{margin-block-start:8px; padding-block-start:8px; border-block-start:1px solid var(--hairline)}
+.disclosure-panel{margin-block-start:8px; display:flex; flex-direction:column; gap:10px}
+.export-actions-grid{grid-template-columns:repeat(auto-fit, minmax(150px, 1fr))}
+@media (max-width:640px){
+.settings-nav{position:sticky; top:var(--tabbar-h, 52px); z-index:6; align-self:stretch; flex-wrap:nowrap; overflow-x:auto; background:var(--bg-page); padding-block:8px; margin-block-end:8px; border-block-end:1px solid var(--hairline); scrollbar-width:none}
+.settings-nav button{flex-shrink:0; white-space:nowrap}
+.settings-nav::-webkit-scrollbar{display:none}
+.settings-layout .settings-section{scroll-margin-top:calc(var(--tabbar-h, 52px) + 64px)}
+}
 </style>
 </head>
 <body>
@@ -2801,7 +2810,7 @@ originStrengthLabel:'قوة تفضيل القرب من نقطة الانطلاق
 cadenceGroupTitle:'الإيقاع', cadenceOff:'بدون', cadencePrefer:'يفضّل', cadenceStrict:'إلزامي',
 cadenceGapLabel:'أقل فاصل بالأيام', cadenceScopeLabel:'نطاق الإيقاع', cadenceScopePlan:'الخطة ككل', cadenceScopePlanPerson:'الخطة + الفرد',
 cadenceStrengthLabel:'قوة التفضيل', cadenceWindowLabel:'مدى البحث عن يوم أفضل', cadenceCurrentChip:'الإيقاع',
-weekdayGroupTitle:'أيام الأسبوع', weekdayProfilesCurrentChip:n=>`أيام مخصصة (${n})`,
+weekdayGroupTitle:'أيام الأسبوع', settingsNavLabel:'أقسام الإعدادات', weekdayProfilesRow:'تفضيلات أيام الأسبوع', weekdayProfilesCurrentChip:n=>`أيام مخصصة (${n})`,
 weekdayProfilePopoverTitle:d=>`تفضيلات ${d}`,
 kindPrefLabel:'تفضيل النوع', kindPrefNone:'بدون تفضيل', kindPrefBasic:'أساسي', kindPrefContracted:'متعاقد',
 kindStrengthLabel:'قوة تفضيل النوع', weekdayDistanceBiasLabel:'ميل المسافة لهذا اليوم', useDefaultLabel:'استخدام الافتراضي',
@@ -3007,7 +3016,7 @@ originStrengthLabel:'Strength of preference for the origin location', distanceCu
 cadenceGroupTitle:'Cadence', cadenceOff:'Off', cadencePrefer:'Prefer', cadenceStrict:'Strict',
 cadenceGapLabel:'Minimum gap in days', cadenceScopeLabel:'Cadence scope', cadenceScopePlan:'Whole plan', cadenceScopePlanPerson:'Plan + person',
 cadenceStrengthLabel:'Preference strength', cadenceWindowLabel:'Look-ahead window', cadenceCurrentChip:'Cadence',
-weekdayGroupTitle:'Weekdays', weekdayProfilesCurrentChip:n=>`Custom weekdays (${n})`,
+weekdayGroupTitle:'Weekdays', settingsNavLabel:'Settings sections', weekdayProfilesRow:'Weekday preferences', weekdayProfilesCurrentChip:n=>`Custom weekdays (${n})`,
 weekdayProfilePopoverTitle:d=>`${d} preferences`,
 kindPrefLabel:'Kind preference', kindPrefNone:'No preference', kindPrefBasic:'Basic', kindPrefContracted:'Contracted',
 kindStrengthLabel:'Kind preference strength', weekdayDistanceBiasLabel:'Distance bias for this day', useDefaultLabel:'Use default',
@@ -3939,7 +3948,7 @@ function Stepper(config){
   const dec = el('button', {type:'button', 'aria-label':'−', html:ICONS.minus, disabled: config.value<=min, onclick:()=>config.onChange(clamp(config.value-step))});
   const input = el('input', {
     type:'text', inputmode:'numeric', value:String(config.value), 'aria-label':config.ariaLabel||'',
-    onchange:e=>{ const v = parseFloat(e.target.value.replace(/[^\d.-]/g,'')); config.onChange(clamp(isNaN(v)?config.value:v)); }
+    onchange:e=>{ const v = parseFloat(toAsciiDigits(e.target.value).replace(/[^\d.-]/g,'')); config.onChange(clamp(isNaN(v)?config.value:v)); }
   });
   const inc = el('button', {type:'button', 'aria-label':'+', html:ICONS.plus, disabled: config.value>=max, onclick:()=>config.onChange(clamp(config.value+step))});
   wrap.appendChild(dec); wrap.appendChild(input); wrap.appendChild(inc);
@@ -4532,6 +4541,7 @@ function switchTab(tab, pushHash){
 }
 function renderActiveTab(){
   const root = document.getElementById('viewRoot');
+  if(state.tab==='settings') captureSettingsRestore();
   clear(root);
   if(state.tab!=='settings' && settingsScrollHandler){ window.removeEventListener('scroll', settingsScrollHandler); settingsScrollHandler = null; }
   if(state.tab==='plan') renderPlanTab(root);
@@ -6774,12 +6784,12 @@ function SegmentedField(options, value, onChange){
   return seg;
 }
 function advancedDisclosure(key, bodyFn){
-  const wrap = el('div', {class:'calendar-paste'});
+  const wrap = el('div', {class:'disclosure'});
   const panelId = 'adv-panel-'+(++advancedDisclosureSeq);
   const isOpen = !!state.settingsAdvancedOpen[key];
   const toggleBtn = el('button', {type:'button', class:'btn-link', 'aria-expanded':isOpen?'true':'false', 'aria-controls':panelId}, t('advancedLabel'));
-  const panel = el('div', {class:'calendar-paste-panel', id:panelId, hidden:!isOpen});
-  panel.appendChild(bodyFn());
+  const panel = el('div', {class:'disclosure-panel', id:panelId, hidden:!isOpen});
+  if(isOpen) panel.appendChild(bodyFn());
   toggleBtn.addEventListener('click', ()=>{ state.settingsAdvancedOpen[key] = !state.settingsAdvancedOpen[key]; renderActiveTab(); });
   wrap.appendChild(toggleBtn); wrap.appendChild(panel);
   return wrap;
@@ -6885,7 +6895,7 @@ function renderFairnessGroup(){
   ], level, applyFairnessPreset));
   wrap.appendChild(advancedDisclosure('fairness', ()=>{
     const body = el('div', null);
-    body.appendChild(settingsRow(t('minVisitsLabel'), t('overTieHint'), Stepper({value:state.overTieMinVisits, min:1, onChange:v=>{ state.overTieMinVisits=v; saveSettings(); renderActiveTab(); }})));
+    body.appendChild(settingsRow(t('minVisitsLabel'), t('overTieHint'), Stepper({value:state.overTieMinVisits, min:1, max:50, onChange:v=>{ state.overTieMinVisits=v; saveSettings(); renderActiveTab(); }})));
     body.appendChild(settingsRow(t('minRatioLabel'), null, Stepper({value:Math.round(state.overTieMinRatio*100), min:0, max:100, step:5, unit:'%', onChange:v=>{ state.overTieMinRatio=v/100; saveSettings(); renderActiveTab(); }})));
     const gammaField = el('div', {class:'field'});
     gammaField.appendChild(el('label', {class:'field-label'}, t('familiarityGammaLabel')));
@@ -6894,7 +6904,7 @@ function renderFairnessGroup(){
     body.appendChild(settingsRow(t('hardBlockLabel'), null, settingsSwitch(state.hardBlockOverTied, ()=>{ state.hardBlockOverTied=!state.hardBlockOverTied; saveSettings(); renderActiveTab(); })));
     const genderRuleLabelFor = v=>v==='31'?t('genderRule31'):(v==='mixed'?t('genderRuleMixed'):t('genderRuleOff'));
     const genderMirror = el('span', null, `${t('basicLabel')}: ${genderRuleLabelFor(state.genderRule&&state.genderRule.basic)} — ${t('contractedLabel')}: ${genderRuleLabelFor(state.genderRule&&state.genderRule.contracted)}`);
-    const genderEditLink = el('button', {type:'button', class:'btn-link', onclick:()=>switchTab('plan')}, t('teamEditLink'));
+    const genderEditLink = el('button', {type:'button', class:'btn-link', onclick:()=>{ state.setupRowOpen.team = true; switchTab('plan'); }}, t('teamEditLink'));
     body.appendChild(settingsRow(t('genderPassLabel'), null, [genderMirror, genderEditLink]));
     const ceilingField = el('div', {class:'field'});
     ceilingField.appendChild(el('label', {class:'field-label'}, t('preferenceCeilingLabel')));
@@ -6940,7 +6950,7 @@ function renderCadenceGroup(){
   wrap.appendChild(SegmentedField([
     {value:'off', label:t('cadenceOff')}, {value:'prefer', label:t('cadencePrefer')}, {value:'strict', label:t('cadenceStrict')}
   ], cad.mode, v=>{ state.cadence=Object.assign({},cad,{mode:v}); saveSettings(); renderActiveTab(); }));
-  wrap.appendChild(settingsRow(t('cadenceGapLabel'), null, Stepper({value:cad.gapDays, min:1, onChange:v=>{ state.cadence=Object.assign({},cad,{gapDays:v}); saveSettings(); renderActiveTab(); }})));
+  wrap.appendChild(settingsRow(t('cadenceGapLabel'), null, Stepper({value:cad.gapDays, min:1, max:60, onChange:v=>{ state.cadence=Object.assign({},cad,{gapDays:v}); saveSettings(); renderActiveTab(); }})));
   wrap.appendChild(advancedDisclosure('cadence', ()=>{
     const body = el('div', null);
     body.appendChild(settingsRow(t('cadenceScopeLabel'), null, SegmentedField([
@@ -6956,9 +6966,48 @@ function renderCadenceGroup(){
   return wrap;
 }
 
+let settingsRestore = null;
+function settingsPathOf(node){
+  const root = document.getElementById('viewRoot');
+  if(!node || !root || !root.contains(node)) return null;
+  const path = [];
+  let cur = node;
+  while(cur && cur!==root){
+    const parent = cur.parentNode;
+    if(!parent) return null;
+    path.push(Array.prototype.indexOf.call(parent.children, cur));
+    cur = parent;
+  }
+  return path.reverse();
+}
+function settingsNodeAt(path){
+  if(!path) return null;
+  let cur = document.getElementById('viewRoot');
+  if(!cur) return null;
+  for(const i of path){
+    if(!cur.children || !cur.children[i]) return null;
+    cur = cur.children[i];
+  }
+  return cur;
+}
+function captureSettingsRestore(){
+  const active = document.activeElement;
+  settingsRestore = {
+    y: window.scrollY,
+    path: settingsPathOf(active && active!==document.body ? active : null)
+  };
+}
+function applySettingsRestore(){
+  const r = settingsRestore;
+  settingsRestore = null;
+  if(!r) return;
+  if(r.y) window.scrollTo(0, r.y);
+  const node = settingsNodeAt(r.path);
+  if(node && typeof node.focus==='function') node.focus({preventScroll:true});
+}
 function renderSettingsTab(root){
   const layout = el('div', {class:'settings-layout'});
-  const nav = el('div', {class:'settings-nav'});
+  const nav = el('nav', {class:'settings-nav', 'aria-label':t('settingsNavLabel')});
   const card = el('div', {class:'card'});
   const appearance = el('div', {class:'settings-section', id:'settings-appearance'});
   appearance.appendChild(el('h3', null, t('settingsAppearance')));
@@ -6996,7 +7045,10 @@ function renderSettingsTab(root){
   const fairnessEl = renderFairnessGroup(); fairnessEl.id = 'settings-fairness'; card.appendChild(fairnessEl);
   const distanceEl = renderDistanceGroup(); distanceEl.id = 'settings-distance'; card.appendChild(distanceEl);
   const cadenceEl = renderCadenceGroup(); cadenceEl.id = 'settings-cadence'; card.appendChild(cadenceEl);
-  card.appendChild(settingsRow(t('weekdayGroupTitle'), null, el('button', {type:'button', class:'btn-link', onclick:()=>{ state.setupRowOpen.weekdays = true; switchTab('plan'); }}, t('teamEditLink'))));
+  const weekdaySection = el('div', {class:'settings-section', id:'settings-weekdays'});
+  weekdaySection.appendChild(el('h3', null, t('weekdayGroupTitle')));
+  weekdaySection.appendChild(settingsRow(t('weekdayProfilesRow'), null, el('button', {type:'button', class:'btn-link', onclick:()=>{ state.setupRowOpen.weekdays = true; switchTab('plan'); }}, t('teamEditLink'))));
+  card.appendChild(weekdaySection);
   const dataSection = el('div', {class:'settings-section', id:'settings-data'});
   dataSection.appendChild(el('h3', null, t('settingsData')));
   const dataRow = el('div', {class:'export-actions-grid'});
@@ -7040,9 +7092,9 @@ function renderSettingsTab(root){
     });
   }});
   const restoreBtn = el('button', {type:'button', class:'btn'}, t('restoreAction2'));
-  restoreBtn.appendChild(restoreInput);
   restoreBtn.addEventListener('click', ()=>restoreInput.click());
   dataRow.appendChild(restoreBtn);
+  dataRow.appendChild(restoreInput);
   dataRow.appendChild(el('button', {type:'button', class:'btn btn-danger', onclick:()=>{
     showConfirmDialog(t('resetAction'), t('confirmReset'), {danger:true, confirmLabel:t('resetAction'), onConfirm:()=>{
       resetAppStorage();
@@ -7094,20 +7146,43 @@ function renderSettingsTab(root){
     }
   }
   card.appendChild(dataSection);
-  const navSections = [
-    ['settings-appearance', t('settingsAppearance')],
-    ['settings-defaults', t('settingsPlanDefaults')],
-    ['settings-fairness', t('fairnessGroupTitle')],
-    ['settings-distance', t('distanceGroupTitle')],
-    ['settings-cadence', t('cadenceGroupTitle')],
-    ['settings-data', t('settingsData')]
-  ];
+  const sections = [];
+  Array.prototype.forEach.call(card.children, (node, i)=>{
+    if(!node.classList || !node.classList.contains('settings-section')) return;
+    if(!node.id) node.id = 'settings-auto-'+i;
+    const h = node.querySelector('h3');
+    sections.push([node.id, h && h.textContent ? h.textContent : node.id]);
+  });
   const navButtons = {};
-  navSections.forEach(([id,label])=>{
-    const btn = el('button', {type:'button', onclick:()=>{
+  let spyLock = 0;
+  function setActiveNav(id){
+    Object.keys(navButtons).forEach(key=>{
+      const on = key===id;
+      navButtons[key].classList.toggle('active', on);
+      if(on) navButtons[key].setAttribute('aria-current','true');
+      else navButtons[key].removeAttribute('aria-current');
+    });
+  }
+  sections.forEach(([id,label], i)=>{
+    const btn = el('button', {type:'button', 'data-target':id, onclick:()=>{
       const target = document.getElementById(id);
-      if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+      if(!target) return;
+      spyLock = Date.now()+700;
+      setActiveNav(id);
+      target.scrollIntoView({behavior:'smooth', block:'start'});
+      const h = target.querySelector('h3');
+      if(h){ h.setAttribute('tabindex','-1'); h.focus({preventScroll:true}); }
     }}, label);
+    btn.addEventListener('keydown', e=>{
+      let next = null;
+      if(e.key==='ArrowDown') next = sections[(i+1)%sections.length][0];
+      else if(e.key==='ArrowUp') next = sections[(i-1+sections.length)%sections.length][0];
+      else if(e.key==='Home') next = sections[0][0];
+      else if(e.key==='End') next = sections[sections.length-1][0];
+      if(!next) return;
+      e.preventDefault();
+      navButtons[next].focus();
+    });
     navButtons[id] = btn;
     nav.appendChild(btn);
   });
@@ -7116,17 +7191,21 @@ function renderSettingsTab(root){
   root.appendChild(layout);
   if(settingsScrollHandler) window.removeEventListener('scroll', settingsScrollHandler);
   function updateActiveNav(){
-    const tabbarH = parseFloat(document.documentElement.style.getPropertyValue('--tabbar-h')) || 52;
-    const triggerY = tabbarH + 32;
-    let activeId = navSections[0][0];
-    for(const [id] of navSections){
+    if(!sections.length) return;
+    if(Date.now() < spyLock) return;
+    const rawH = document.documentElement.style.getPropertyValue('--tabbar-h') || getComputedStyle(document.documentElement).getPropertyValue('--tabbar-h');
+    const tabbarH = parseFloat(rawH) || 52;
+    const navH = window.innerWidth<=640 ? nav.offsetHeight : 0;
+    const triggerY = tabbarH + navH + 32;
+    let activeId = sections[0][0];
+    for(const [id] of sections){
       const target = document.getElementById(id);
       if(target && target.getBoundingClientRect().top <= triggerY) activeId = id;
     }
     if(window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2){
-      activeId = navSections[navSections.length-1][0];
+      activeId = sections[sections.length-1][0];
     }
-    Object.keys(navButtons).forEach(id=>navButtons[id].classList.toggle('active', id===activeId));
+    setActiveNav(activeId);
   }
   let scrollTicking = false;
   settingsScrollHandler = ()=>{
@@ -7136,6 +7215,7 @@ function renderSettingsTab(root){
   };
   window.addEventListener('scroll', settingsScrollHandler, {passive:true});
   updateActiveNav();
+  applySettingsRestore();
 }
 async function runSelfTests(){
   const results=[];
