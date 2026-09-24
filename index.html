@@ -2224,24 +2224,24 @@ const REGISTRY_SEED = [
 ['نيابة كوم حمادة','نيابة','كوم حمادة']
 ];
 const FIN_ADMIN_SEED = [
-  {id:'p_abaza', name:'أباظة', gender:'m', rank:75},
-  {id:'p_amani', name:'أماني', gender:'f'},
-  {id:'p_shaltoot', name:'شلتوت', gender:'m', originLocationId:locationIdFor('ايتاي')},
-  {id:'p_ghada', name:'غادة', gender:'f'},
-  {id:'p_lobna', name:'لبنى', gender:'f'}
+  {id:'p_abaza', name:'أباظة', gender:'m', rank:75, rankBasic:75, rankContracted:75},
+  {id:'p_amani', name:'أماني', gender:'f', rankBasic:50, rankContracted:75},
+  {id:'p_shaltoot', name:'شلتوت', gender:'m', originLocationId:locationIdFor('ايتاي'), rankBasic:50, rankContracted:50},
+  {id:'p_ghada', name:'غادة', gender:'f', rankBasic:50, rankContracted:50},
+  {id:'p_lobna', name:'لبنى', gender:'f', rankBasic:50, rankContracted:75}
 ];
 const CLINICAL_SEED = [
-  {id:'p_hamoudein', name:'حمودين', gender:'m'},
-  {id:'p_sharnouby', name:'شرنوبي', gender:'m'},
-  {id:'p_maysara', name:'ميسرة', gender:'m', rank:75},
-  {id:'p_shawky', name:'شوقي', gender:'m'},
-  {id:'p_mariam', name:'مريم', gender:'f', originLocationId:locationIdFor('كفر الدوار'), rank:75},
-  {id:'p_asmaa', name:'أسماء', gender:'f', originLocationId:locationIdFor('النفرة')}
+  {id:'p_hamoudein', name:'حمودين', gender:'m', rankBasic:50, rankContracted:50},
+  {id:'p_sharnouby', name:'شرنوبي', gender:'m', rankBasic:50, rankContracted:50},
+  {id:'p_maysara', name:'ميسرة', gender:'m', rank:75, rankBasic:75, rankContracted:75},
+  {id:'p_shawky', name:'شوقي', gender:'m', rankBasic:50, rankContracted:50},
+  {id:'p_mariam', name:'مريم', gender:'f', originLocationId:locationIdFor('كفر الدوار'), rank:75, rankBasic:50, rankContracted:100},
+  {id:'p_asmaa', name:'أسماء', gender:'f', originLocationId:locationIdFor('النفرة'), rankBasic:50, rankContracted:75}
 ];
 const RETIRED_SEED = [
-  {id:'p_adib', name:'اديب', gender:'m', title:'مالي واداري'},
-  {id:'p_hindawy', name:'هنداوي', gender:'m', title:'حاسب الي'},
-  {id:'p_sobhy', name:'صبحي', gender:'m', title:'فني'}
+  {id:'p_adib', name:'اديب', gender:'m', title:'مالي واداري', rankBasic:75, rankContracted:75},
+  {id:'p_hindawy', name:'هنداوي', gender:'m', title:'حاسب الي', rankBasic:75, rankContracted:75},
+  {id:'p_sobhy', name:'صبحي', gender:'m', title:'فني', rankBasic:50, rankContracted:50}
 ];
 const PERSON_ORIGIN_SEED = {p_shaltoot:'ايتاي', p_mariam:'كفر الدوار', p_asmaa:'النفرة'};
 const PHASE2_BASELINE_DIGEST = 1086481512;
