@@ -427,6 +427,7 @@ body{background:#fff; color:#000}
 .settings-nav::-webkit-scrollbar{display:none}
 .settings-layout .settings-section{scroll-margin-top:calc(var(--tabbar-h, 52px) + 64px)}
 }
+.segmented.wrap{flex-wrap:wrap; border-radius:var(--r-ctl)}
 </style>
 </head>
 <body>
@@ -744,6 +745,18 @@ function rankStream(facilities, planStart, NEVER, dctx, bias){
   });
   return pinned.concat(scored.map(s=>s.f));
 }
+function pickByQuota(registry, quotas, planStart, NEVER, dctx, bias, diags){
+  const out = [];
+  for(const cat of Object.keys(quotas||{})){
+    const q = Math.max(0, Math.floor(quotas[cat]||0));
+    if(!q) continue;
+    const pool = registry.filter(f=>(f.kind==='basic'||f.kind==='contracted') && !f.manualExcluded && f.category===cat);
+    const ranked = rankStream(pool, planStart, NEVER, dctx, bias);
+    if(ranked.length<q) diags.push({severity:'warn', code:'quota-short', ar:`التصنيف «${cat}»: طُلبت ${q} زيارة والمتاح ${ranked.length} جهة فقط`, en:`Category "${cat}": ${q} visits requested but only ${ranked.length} facilities available`});
+    out.push(...ranked.slice(0,q));
+  }
+  return out;
+}
 function splitMix(V, mode, opts){
   let M,R;
   if(mode==='ratio'){
@@ -1008,9 +1021,9 @@ function sainteLagueAssign(pool, count, day, ctx){
       continue;
     }
     let guardRank = null;
-    if(floor!=null && slot===count-1 && !chosen.some(p=>rankOf(p)>=floor)){
+    if(floor!=null && slot===count-1 && !chosen.some(p=>rankOf(p, ctx.facility.kind)>=floor)){
       let top = -Infinity;
-      for(const p of candidates) if(passesFilters(p) && baseWeightOf(p)>0) top = Math.max(top, rankOf(p));
+      for(const p of candidates) if(passesFilters(p) && baseWeightOf(p)>0) top = Math.max(top, rankOf(p, ctx.facility.kind));
       if(top>-Infinity) guardRank = Math.min(floor, top);
     }
     let best=null, bestKey=Infinity;
@@ -1022,11 +1035,11 @@ function sainteLagueAssign(pool, count, day, ctx){
       const assignedCount = ctx.assignedCount[p.id]||0;
       const baseWeight = baseWeightOf(p);
       if(baseWeight<=0) continue;
-      if(guardRank!=null && rankOf(p)<guardRank) continue;
+      if(guardRank!=null && rankOf(p, ctx.facility.kind)<guardRank) continue;
       if(pairs && pairBlocked(p, slot)) continue;
       const vpf = ctx.facilityPersonVisits ? Math.min(ctx.facilityPersonVisits[ctx.facility.id+'|'+p.id]||0, 6) : 0;
       const familiarity = 1/(1+gamma*vpf);
-      const critMatch = (1 + kappa*4*(critNorm-0.5)*(rankOf(p)/100-0.5)) * (pairs ? pairTerm(p) : 1);
+      const critMatch = (1 + kappa*4*(critNorm-0.5)*(rankOf(p, ctx.facility.kind)/100-0.5)) * (pairs ? pairTerm(p) : 1);
       let travelTerm, effWeight;
       if(ctx.tctx){
         travelTerm = personTravelTerm(p, ctx.facility, ctx.tctx, ctx.prefSettings||{});
@@ -1091,7 +1104,12 @@ function nearestIndex(values, v){
   return best;
 }
 function snapLevel(v){ return LEVEL_VALUES[nearestIndex(LEVEL_VALUES, v)]; }
-function rankOf(p){ return p.rank==null ? 50 : p.rank; }
+function rankOf(p, kind){
+  const v = kind==='contracted' ? p.rankContracted : (kind==='basic' ? p.rankBasic : null);
+  if(v!=null) return v;
+  return p.rank==null ? 50 : p.rank;
+}
+function rankStep(p, kind){ return Math.round(rankOf(p, kind)/25)+1; }
 function rankFloorOf(facility){
   const crit = facility.crit==null ? 50 : facility.crit;
   return crit>50 ? crit : null;
@@ -1233,8 +1251,8 @@ function rankFloorNotes(plan, pools){
     if(floor==null) continue;
     for(const pl of pools){
       const team = teamOf(row, pl.id);
-      if(!team.length || team.some(p=>rankOf(p)>=floor)) continue;
-      if(!pl.members.some(p=>rankOf(p)>=floor)) continue;
+      if(!team.length || team.some(p=>rankOf(p, row.facility.kind)>=floor)) continue;
+      if(!pl.members.some(p=>rankOf(p, row.facility.kind)>=floor)) continue;
       notes.push({date:row.date, facility:row.facility.name, pool:poolLabelOf(pl.id)});
     }
   }
@@ -1803,17 +1821,25 @@ function planShared(opts){
   const effectiveWeekdays2 = weekdays2 || (weekdayProfiles ? migrateWeekdayProfiles(weekdayProfiles) : {});
   const caps = dayCaps(days, effectiveWeekdays2, k);
   const inScope = f=>!coverage || matchesScope(f, goal.scope);
-  const basicFac = registry.filter(f=>f.kind==='basic' && !f.manualExcluded && inScope(f));
-  const contractedFac = registry.filter(f=>f.kind==='contracted' && !f.manualExcluded && inScope(f));
+  let basicFac = registry.filter(f=>f.kind==='basic' && !f.manualExcluded && inScope(f));
+  let contractedFac = registry.filter(f=>f.kind==='contracted' && !f.manualExcluded && inScope(f));
+  const quotaMode = !coverage && !!visitBudget && visitBudget.kind==='quota';
+  const quotaDiags = [];
+  if(quotaMode){
+    const picked = pickByQuota(registry, visitBudget.quotas||{}, days[0]||startDate, computeNever(registry), distanceContext(registry), globalDistanceBias||0, quotaDiags);
+    basicFac = picked.filter(f=>f.kind==='basic');
+    contractedFac = picked.filter(f=>f.kind==='contracted');
+  }
   const B = basicFac.length*times, Cc = contractedFac.length*times;
   const pools = poolSpecsFrom(opts);
   const {avail, poolLoad} = buildPoolAvailability(pools, days, isUnavailable, effectiveWeekdays2);
   const vb = Object.assign({kind:'auto', total:null, perWeek:null, spread:'even'}, visitBudget, coverage ? {kind:'all'} : {});
   const resolved = resolveVisitBudget({
-    kind:vb.kind, total:vb.total, perWeek:vb.perWeek, days, caps, B, Cc,
-    mode, ratioP, countsM, countsR, poolLoad, rho, k,
+    kind:quotaMode?'total':vb.kind, total:quotaMode?(B+Cc):vb.total, perWeek:vb.perWeek, days, caps, B, Cc,
+    mode:quotaMode?'counts':mode, ratioP, countsM:quotaMode?B:countsM, countsR:quotaMode?Cc:countsR, poolLoad, rho, k,
     weekdays, holidays, exceptions, weekdayCfg:effectiveWeekdays2
   });
+  if(quotaMode) resolved.diagnostics.push(...quotaDiags);
   const sharedNotes = [];
   const budget = {M:resolved.M, R:resolved.R, requestedV:resolved.requestedV, resolvedV:resolved.V};
   const NEVER = computeNever(registry);
@@ -2776,7 +2802,7 @@ monthJumpPlaceholder:'مثال: سبتمبر ٢٠٢٦',
 pasteDatesLabel:'الصق تواريخ', pasteDatesPlaceholder:'2026-09-10, 2026-09-12..2026-09-14',
 pasteDatesApply:'إضافة التواريخ',
 pasteDatesReport:(a,r)=>r? `أُضيف ${a}، تعذّر فهم ${r}`: `أُضيف ${a}`,
-distributionTitle:'التوزيع', basicLabel:'أساسي', contractedLabel:'متعاقد',
+distributionTitle:'الزيارات', basicLabel:'أساسي', contractedLabel:'متعاقد',
 distributionSummary:(m,r)=>`${m} أساسي / ${r} متعاقد`,
 visitBudgetKindLabel:'عدد الزيارات', visitBudgetKindAuto:'تلقائي', visitBudgetKindTotal:'عدد محدد', 
 totalVisitsLabel:'إجمالي الزيارات', perWeekLabel:'أقصى عدد أسبوعيًا', perWeekNone:'بلا حد',
@@ -2956,7 +2982,57 @@ timesLabel:'عدد الزيارات لكل جهة', goalStartLabel:'تاريخ �
 coverageEndLine:(date,n)=>`تنتهي في ${date} · ${n} يوم عمل`, coverageSummary:(date,n)=>`حتى ${date} · ${n} يوم عمل`,
 spreadLabel:'توزيع الزيارات', spreadEven:'على كامل المدة', spreadFront:'أيام متتالية', spreadHint:'عندما تزيد الأيام على الزيارات: توزيعها على المدة بأيام فارغة، أو زيارات متتالية من البداية.',
 weekdaysRowTitle:'أيام العمل والإجازات', dayDefaultsTitle:'كل الأيام', dayOverridesTitle:'أيام تختلف', dayOverridesNone:'كل الأيام تتبع الإعداد العام', customizeDayLabel:'تخصيص يوم',
-gateFailedShort:'فشلت إحدى البوابات', teamBlockedTag:'جهتان محظورتان'
+gateFailedShort:'فشلت إحدى البوابات', teamBlockedTag:'جهتان محظورتان',
+tabWeekdays:'أيام الأسبوع',
+wd_title:'تفضيلات أيام الأسبوع',
+wd_intro:'يمكن لكل يوم عمل أن يوجّه نوع الجهات التي تُزار فيه. «بدون تفضيل» يعني أن اليوم يتبع الترتيب العادي: الأكثر تأخراً أولاً.',
+wd_offDay:'إجازة',
+wd_offHint:'أيام العمل تُحدَّد في تبويب الخطة، في «أيام العمل والإجازات».',
+wd_kind:'نوع الزيارة في هذا اليوم', wd_kindMain:'تفضيل الأساسية', wd_kindNone:'بدون تفضيل', wd_kindContracted:'تفضيل المتعاقدة',
+wd_dist:'المسافة في هذا اليوم', wd_distNear:'تفضيل القريب', wd_distFar:'تفضيل البعيد',
+wd_cat:'تفضيل تصنيف واحد', wd_catNone:'لا يوجد',
+wd_only:'هذه التصنيفات فقط (عدم الاختيار = الكل مسموح)',
+wd_cap:'أقصى عدد جهات في هذا اليوم',
+wd_capHint:'أقل من «أقصى عدد جهات في اليوم» لجعل هذا اليوم أخف.',
+wd_copyAll:'نسخ هذا اليوم إلى كل أيام العمل', wd_reset:'مسح هذا اليوم',
+wd_planLink:'تفضيلات كل يوم (قريب/بعيد، أساسية/متعاقدة، التصنيفات) في تبويب أيام الأسبوع.',
+wd_openTab:'فتح تبويب أيام الأسبوع',
+v_howMany:'كم عدد الزيارات؟',
+v_auto:'ملء المدة', v_exact:'عدد محدد', v_quota:'حسب التصنيف',
+v_autoHint:'جهة واحدة لكل يوم عمل (أو أكثر إذا كان «أقصى عدد جهات في اليوم» أكبر من ١). اختر نسبة الأساسية.',
+v_exactHint:'اكتب عدد الزيارات الأساسية وعدد الزيارات المتعاقدة التي تريدها في هذه المدة.',
+v_main:'أساسية', v_contracted:'متعاقدة',
+q_hint:'اكتب عدد زيارات كل تصنيف. كل جهة تُزار مرة واحدة على الأكثر، وتُختار الجهات الأكثر تأخراً في كل تصنيف.',
+q_available:n=>`من ${n} جهة`,
+q_total:n=>`الإجمالي: ${n} زيارة`,
+s_secPeople:'اختيار الأشخاص', s_secDays:'الأيام والتباعد',
+s_on:'تشغيل', s_off:'إيقاف', s_normal:'عادي', s_strong:'قوي',
+s_genderHint:'٣-١: فريق من ٤ يكون ٣ من نوع و١ من الآخر (ليس ٢+٢ وليس كله من نوع واحد). مختلط: واحد على الأقل من كل نوع.',
+s_rotate:'تنويع الأشخاص بين الجهات',
+s_rotateHint:'كلما ارتفع، قلّ احتمال إرسال من زار الجهة سابقاً إليها مرة أخرى.',
+s_repeatBlock:'لا يُرسل الشخص إلى جهة زارها هذا العدد من المرات',
+s_repeatBlockHint:'يحسب الزيارات السابقة من السجل. إيقاف = لا يوجد حد صارم.',
+s_repeatTimes:'مرات',
+s_home:'تُحسب رحلة كل شخص من',
+s_homeIgnore:'المقر', s_homeCount:'موقع انطلاقه', s_homeFavor:'موقع انطلاقه مع تفضيل الرحلات القصيرة',
+s_homeHint:'يؤثر فقط في اختيار الأشخاص وليس الجهات. «موقع انطلاقه» لا يغيّر شيئاً إلا لمن لديه تفضيل قريب/بعيد في بطاقته. الخيار الثالث يفضّل الرحلات القصيرة للجميع.',
+s_crit:'ضمان شخص برتبة عالية في الجهات المهمة',
+s_critHint:'تشغيل: في الجهات ذات الأهمية ٤ أو ٥ تضم كل مجموعة في الفريق شخصاً رتبته لا تقل عن أهمية الجهة إن كان متاحاً. إيقاف: الرتبة الأعلى مفضّلة قليلاً فقط.',
+s_spacing:'أيام الزيارات',
+s_spacingHint:'يؤثر فقط عندما تكون أيام العمل أكثر من الزيارات.',
+s_packStart:'متتالية من البداية', s_spreadEven:'موزعة على المدة', s_spreadGap:'موزعة مع حد أدنى للفاصل',
+s_gapDays:'أقل عدد أيام عمل من يوم زيارة إلى الذي يليه',
+s_gapDaysHint:'٢ = يوم عمل فارغ واحد بين أيام الزيارات.',
+s_perWeek:'أقصى عدد زيارات في الأسبوع', s_perWeekHint:'صفر = بلا حد.',
+s_distPick:'المسافة عند اختيار الجهات التي تدخل الخطة',
+s_distNear:'تفضيل القريب', s_distNone:'تجاهل المسافة', s_distFar:'تفضيل البعيد',
+s_distHint:'الجهات الأكثر تأخراً تأتي أولاً دائماً؛ هذا يرجّح فقط عند التقارب.',
+s_summaryTitle:'الإعدادات المستخدمة',
+p_rankMain:'الرتبة في الزيارات الأساسية', p_rankContracted:'الرتبة في الزيارات المتعاقدة',
+p_rankHint:'١ = الأدنى، ٥ = الأعلى. الرتبة الأعلى توضع في الجهات المهمة أولاً. الرتبة لا تغيّر عدد زيارات الشخص.',
+p_rankChip:(m,c)=>`الرتبة: أساسية ${m} · متعاقدة ${c}`,
+f_importance:'الأهمية',
+f_importanceHint:'١ = الأدنى، ٥ = الأعلى. عند ٤ أو ٥ يضم الفريق شخصاً برتبة لا تقل عنها (انظر الإعدادات). لا تغيّر عدد مرات زيارة الجهة.'
 }
 };
 I18N.en = {
@@ -2982,7 +3058,7 @@ monthJumpPlaceholder:'e.g. Sep 2026',
 pasteDatesLabel:'Paste dates', pasteDatesPlaceholder:'2026-09-10, 2026-09-12..2026-09-14',
 pasteDatesApply:'Add dates',
 pasteDatesReport:(a,r)=>r? `Added ${a}, could not read ${r}`: `Added ${a}`,
-distributionTitle:'Distribution', basicLabel:'Basic', contractedLabel:'Contracted',
+distributionTitle:'Visits', basicLabel:'Basic', contractedLabel:'Contracted',
 distributionSummary:(m,r)=>`${m} basic / ${r} contracted`,
 visitBudgetKindLabel:'Visit count', visitBudgetKindAuto:'Auto', visitBudgetKindTotal:'Specific count', 
 totalVisitsLabel:'Total visits', perWeekLabel:'Max per week', perWeekNone:'No cap',
@@ -3162,7 +3238,57 @@ timesLabel:'Visits per facility', goalStartLabel:'Start date', goalStartToday:'T
 coverageEndLine:(date,n)=>`Ends ${date} · ${n} working days`, coverageSummary:(date,n)=>`Until ${date} · ${n} working days`,
 spreadLabel:'Visit spacing', spreadEven:'Across the whole period', spreadFront:'Consecutive days', spreadHint:'When there are more days than visits: spread them across the period with empty days, or visit on consecutive days from the start.',
 weekdaysRowTitle:'Working days and holidays', dayDefaultsTitle:'All days', dayOverridesTitle:'Days that differ', dayOverridesNone:'Every day follows the shared settings', customizeDayLabel:'Customize a day',
-gateFailedShort:'A gate failed', teamBlockedTag:'Facilities blocked'
+gateFailedShort:'A gate failed', teamBlockedTag:'Facilities blocked',
+tabWeekdays:'Weekdays',
+wd_title:'Weekday preferences',
+wd_intro:'Each working day can steer which facilities are visited on it. "No preference" means the day follows the normal order: most overdue first.',
+wd_offDay:'Day off',
+wd_offHint:'Working days are set in the Plan tab, under "Working days and holidays".',
+wd_kind:'Visit type on this day', wd_kindMain:'Prefer main', wd_kindNone:'No preference', wd_kindContracted:'Prefer contracted',
+wd_dist:'Distance on this day', wd_distNear:'Prefer near', wd_distFar:'Prefer far',
+wd_cat:'Prefer one category', wd_catNone:'None',
+wd_only:'Only these categories (none selected = all allowed)',
+wd_cap:'Max facilities on this day',
+wd_capHint:'Lower than "Max facilities per day" to make this day lighter.',
+wd_copyAll:'Copy this day to all working days', wd_reset:'Clear this day',
+wd_planLink:'Per-day preferences (near/far, main/contracted, categories) are in the Weekdays tab.',
+wd_openTab:'Open Weekdays tab',
+v_howMany:'How many visits?',
+v_auto:'Fill the period', v_exact:'Exact number', v_quota:'Per category',
+v_autoHint:'One facility per working day (more if "Max facilities per day" is above 1). Choose what share is main.',
+v_exactHint:'Type how many main and how many contracted visits you want in this period.',
+v_main:'Main', v_contracted:'Contracted',
+q_hint:'Type how many visits each category gets. Each facility is visited at most once; the most overdue facilities in each category are chosen.',
+q_available:n=>`of ${n} facilities`,
+q_total:n=>`Total: ${n} visits`,
+s_secPeople:'Choosing people', s_secDays:'Days and spacing',
+s_on:'On', s_off:'Off', s_normal:'Normal', s_strong:'Strong',
+s_genderHint:'3-1: a team of 4 is 3 of one gender and 1 of the other (never 2+2, never all the same). Mixed: at least one of each.',
+s_rotate:'Rotate people between facilities',
+s_rotateHint:'Higher = someone who visited a facility before is less likely to be sent there again.',
+s_repeatBlock:'Never send a person to a facility they have visited this many times',
+s_repeatBlockHint:'Counts past visits from history. Off = no hard limit.',
+s_repeatTimes:'times',
+s_home:'Measure each person\'s trip from',
+s_homeIgnore:'The office', s_homeCount:'Their home location', s_homeFavor:'Home, prefer short trips',
+s_homeHint:'Only changes who is picked, not which facilities. "Their home location" only matters for people with a Near/Far preference on their card. The third option prefers short trips for everyone.',
+s_crit:'Guarantee a high-rank person at important facilities',
+s_critHint:'On: at facilities with importance 4 or 5, each group in the team includes someone whose rank is at least the facility\'s importance, if such a person is free. Off: higher rank is only slightly preferred.',
+s_spacing:'Visit days',
+s_spacingHint:'Only matters when there are more working days than visits.',
+s_packStart:'Back-to-back from the start', s_spreadEven:'Spread over the period', s_spreadGap:'Spread, with a minimum gap',
+s_gapDays:'Minimum working days from one visit day to the next',
+s_gapDaysHint:'2 = one empty working day between visit days.',
+s_perWeek:'Max visits per week', s_perWeekHint:'0 = no limit.',
+s_distPick:'Distance when choosing which facilities enter the plan',
+s_distNear:'Prefer near', s_distNone:'Ignore distance', s_distFar:'Prefer far',
+s_distHint:'The most overdue facilities still come first; this only tips close calls.',
+s_summaryTitle:'Settings used',
+p_rankMain:'Rank in main visits', p_rankContracted:'Rank in contracted visits',
+p_rankHint:'1 = lowest, 5 = highest. Higher rank is placed at important facilities first. Rank does not change how many visits a person gets.',
+p_rankChip:(m,c)=>`Rank: main ${m} · contracted ${c}`,
+f_importance:'Importance',
+f_importanceHint:'1 = lowest, 5 = highest. At 4 or 5, the team includes someone with at least this rank (see Settings). Does not change how often the facility is visited.'
 };
 function t(key){
   const dict = I18N[state.lang] || I18N.ar;
@@ -3214,6 +3340,7 @@ const ICONS = {
   mapPin: svgIcon('<path d="M12 21s6-5.3 6-10.2A6 6 0 106 10.8C6 15.7 12 21 12 21z"/><circle cx="12" cy="10.6" r="2.2"/>', 14),
   repeat: svgIcon('<path d="M17 3.5l3 3-3 3"/><path d="M20 6.5H8.5A4.5 4.5 0 004 11v1"/><path d="M7 20.5l-3-3 3-3"/><path d="M4 17.5h11.5A4.5 4.5 0 0020 13v-1"/>', 14),
   calendarDays: svgIcon('<rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 3v3M16 3v3M3.5 9.5h17M8 13h2M14 13h2M8 16.6h2M14 16.6h2"/>', 14),
+  weekGrid: svgIcon('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18"/><path d="M7 14h.01M11 14h.01M15 14h.01M7 18h.01M11 18h.01"/>'),
   database: svgIcon('<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/>', 14)
 };
 function isDebugMode(){
@@ -3468,6 +3595,8 @@ function validateBackupStore(raw){
     if(p.gender!=null && !VALID_GENDERS.has(p.gender)) errors.push(M(`الشخص ${n}: النوع غير صالح`, `person ${n}: invalid gender`));
     if(p.weight!=null && !isFiniteNum(p.weight)) errors.push(M(`الشخص ${n}: الوزن ليس رقماً صالحاً`, `person ${n}: weight must be a finite number`));
     if(p.rank!=null && !isFiniteNum(p.rank)) errors.push(M(`الشخص ${n}: الترتيب ليس رقماً صالحاً`, `person ${n}: rank must be a finite number`));
+    if(p.rankBasic!=null && !isFiniteNum(p.rankBasic)) errors.push(M(`الشخص ${n}: الترتيب ليس رقماً صالحاً`, `person ${n}: rankBasic must be a finite number`));
+    if(p.rankContracted!=null && !isFiniteNum(p.rankContracted)) errors.push(M(`الشخص ${n}: الترتيب ليس رقماً صالحاً`, `person ${n}: rankContracted must be a finite number`));
     if(p.fixedCount!=null && !isFiniteNum(p.fixedCount)) errors.push(M(`الشخص ${n}: الحصة الثابتة ليست رقماً صالحاً`, `person ${n}: fixedCount must be a finite number`));
     if(p.distanceAffinity!=null && !isFiniteNum(p.distanceAffinity)) errors.push(M(`الشخص ${n}: تفضيل المسافة ليس رقماً صالحاً`, `person ${n}: distanceAffinity must be a finite number`));
     if(p.originLocationId!=null && !locationIds.has(p.originLocationId)) errors.push(M(`الشخص ${n}: نقطة الانطلاق غير موجودة`, `person ${n}: originLocationId does not reference a known location`));
@@ -3614,6 +3743,38 @@ function loadSettings(){
   if(Array.isArray(s.pools) && s.pools.length) state.pools = normalizePools(s.pools);
   if(Array.isArray(s.pairRules)) state.pairRules = normalizePairRules(s.pairRules);
   if(isUpgrade) state.pendingCadenceIntroToast = true;
+  if(state.dayDefaults && !dayConfigNeutral(state.dayDefaults)){
+    const folded = {};
+    for(let d=0; d<7; d++) folded[d] = Object.assign({}, state.dayDefaults, (state.dayOverrides||{})[d]||{});
+    state.dayOverrides = folded;
+    state.dayDefaults = defaultDayConfig();
+  }
+  state.dayOverrides = state.dayOverrides || {};
+  for(const d of Object.keys(state.dayOverrides)){
+    const o = Object.assign({}, state.dayOverrides[d]); delete o.visitMin; delete o.teamCap;
+    if(dayConfigNeutral(o)) delete state.dayOverrides[d]; else state.dayOverrides[d] = o;
+  }
+  state.poolUtilizationCap = 0.85;
+  state.preferenceCeiling = 2.5;
+  state.critMatchStrength = 0.3;
+  state.originStrength = 0.5;
+  state.preferenceWindow = 3;
+  state.overTieMinRatio = 0;
+  state.cadence = Object.assign({mode:'prefer', gapDays:2}, state.cadence||{}, {strength:0.7, scope:'plan'});
+  if(state.cadence.mode==='strict') state.cadence.mode = 'prefer';
+  state.visitBudget = Object.assign({kind:'auto', total:null, perWeek:null, spread:'even', quotas:{}}, state.visitBudget||{});
+  if(!state.visitBudget.quotas) state.visitBudget.quotas = {};
+  if(state.visitBudget.spread==='front') state.cadence.mode = 'off';
+  if(state.visitBudget.kind==='auto') state.mode = 'ratio';
+  if(state.visitBudget.kind==='total'){
+    if(state.countsM==null || state.countsR==null){
+      const tot = state.visitBudget.total||0;
+      state.countsM = Math.round((state.ratioP==null?0.25:state.ratioP)*tot);
+      state.countsR = tot-state.countsM;
+    }
+    state.mode = 'counts';
+    state.visitBudget.total = state.countsM+state.countsR;
+  }
 }
 function saveSettings(){
   store.settings = {
@@ -3643,7 +3804,7 @@ function savePersonAliases(){
   persistStore();
 }
 function serializePersonOverride(p){
-  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, rank:p.rank, fixedCount:p.fixedCount, off:p.off, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity, workWeekdays:p.workWeekdays, originLocationId:p.originLocationId, title:p.title};
+  return {id:p.id, name:p.name, pool:p.pool, gender:p.gender, active:p.active, weight:p.weight, rank:p.rank, rankBasic:p.rankBasic, rankContracted:p.rankContracted, fixedCount:p.fixedCount, off:p.off, blockedFacilities:p.blockedFacilities, distanceAffinity:p.distanceAffinity, workWeekdays:p.workWeekdays, originLocationId:p.originLocationId, title:p.title};
 }
 function loadPeople(){
   let flat = Array.isArray(store.people) ? store.people : [];
@@ -4487,7 +4648,7 @@ function setupFavicon(){
   link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
   document.head.appendChild(link);
 }
-const TABS = ['plan','summary','facilities','team','settings'];
+const TABS = ['plan','weekdays','summary','facilities','team','settings'];
 if(!TABS.includes(state.tab)) state.tab = 'plan';
 const tabScroll = {};
 function applyTheme(){
@@ -4524,8 +4685,8 @@ function renderTopbar(){
 function renderTabbar(){
   const root = document.getElementById('tabbarInner');
   clear(root);
-  const labels = {plan:t('tabPlan'), summary:t('tabSummary'), facilities:t('tabFacilities'), team:t('tabTeam'), settings:t('tabSettings')};
-  const tabIcons = {plan:ICONS.calendar, summary:ICONS.chart, facilities:ICONS.building, team:ICONS.users, settings:ICONS.sliders};
+  const labels = {plan:t('tabPlan'), weekdays:t('tabWeekdays'), summary:t('tabSummary'), facilities:t('tabFacilities'), team:t('tabTeam'), settings:t('tabSettings')};
+  const tabIcons = {plan:ICONS.calendar, weekdays:ICONS.weekGrid, summary:ICONS.chart, facilities:ICONS.building, team:ICONS.users, settings:ICONS.sliders};
   TABS.forEach((tab,i)=>{
     const selected = state.tab===tab;
     const btn = el('button', {
@@ -4576,6 +4737,7 @@ function renderActiveTab(){
   clear(root);
   if(state.tab!=='settings' && settingsScrollHandler){ window.removeEventListener('scroll', settingsScrollHandler); settingsScrollHandler = null; }
   if(state.tab==='plan') renderPlanTab(root);
+  else if(state.tab==='weekdays') renderWeekdaysTab(root);
   else if(state.tab==='summary') renderSummaryTab(root);
   else if(state.tab==='facilities') renderFacilitiesTab(root);
   else if(state.tab==='team') renderTeamTab(root);
@@ -5405,6 +5567,16 @@ function previewSlotBudget(){
   const contractedFac = state.registry.filter(f=>f.kind==='contracted' && !f.manualExcluded);
   return slotBudget(N, state.mode, {p:state.ratioP, M:state.countsM, R:state.countsR, basicPoolLen:basicFac.length, contractedPoolLen:contractedFac.length});
 }
+function quotaPickCounts(quotas){
+  let B=0, Cc=0;
+  for(const cat of Object.keys(quotas||{})){
+    const fac = state.registry.filter(f=>(f.kind==='basic'||f.kind==='contracted') && !f.manualExcluded && f.category===cat);
+    const n = Math.min(Math.max(0, Math.floor(quotas[cat]||0)), fac.length);
+    const nb = Math.min(n, fac.filter(f=>f.kind==='basic').length);
+    B += nb; Cc += n-nb;
+  }
+  return {B, Cc};
+}
 function previewVisitBudget(){
   const days = computeWorkingDaysListState();
   const coverage = state.goal.mode==='coverage';
@@ -5417,6 +5589,14 @@ function previewVisitBudget(){
   const {poolLoad} = buildPoolAvailability(livePools(), days, makeUnavailableChecker(), effectiveWeekdays2);
   const rho = state.poolUtilizationCap==null?0.85:state.poolUtilizationCap;
   const vb = state.visitBudget || {kind:'auto', total:null, perWeek:null, spread:'even'};
+  if(!coverage && vb.kind==='quota'){
+    const qc = quotaPickCounts(vb.quotas);
+    return resolveVisitBudget({
+      kind:'total', total:qc.B+qc.Cc, perWeek:vb.perWeek, days, caps, B:qc.B, Cc:qc.Cc,
+      mode:'counts', ratioP:state.ratioP, countsM:qc.B, countsR:qc.Cc, poolLoad, rho, k,
+      weekdays:state.weekdays, holidays:state.holidays, exceptions:state.exceptions || new Set(), weekdayCfg:effectiveWeekdays2
+    });
+  }
   return resolveVisitBudget({
     kind:coverage ? 'all' : vb.kind, total:vb.total, perWeek:vb.perWeek, days, caps,
     B:counts.B, Cc:counts.Cc,
@@ -5556,6 +5736,23 @@ function bindDisclosureHead(head, isOpen, bodyId, focusKey, toggle){
     if(again) again.focus();
   });
 }
+function planCategories(){
+  const s = new Set();
+  for(const f of state.registry) if((f.kind==='basic'||f.kind==='contracted') && !f.manualExcluded && f.category) s.add(f.category);
+  return [...s].sort();
+}
+function labeledField(label, hint, control){
+  const f = el('div', {class:'field', style:'padding-block:8px'});
+  f.appendChild(el('label', {class:'field-label'}, label));
+  f.appendChild(control);
+  if(hint) f.appendChild(el('span', {class:'field-hint'}, hint));
+  return f;
+}
+function wrapSeg(options, value, onChange){
+  const s = SegmentedField(options, value, onChange);
+  s.classList.add('wrap');
+  return s;
+}
 function renderSetupRow(key, titleKey, summaryFn, bodyFn){
   const row = el('div', {class:'setup-row'}); const open = !!state.setupRowOpen[key];
   const bodyId = 'setup-body-'+key;
@@ -5640,53 +5837,6 @@ function summarizeWeekdayConfig(cfg, isOn){
   }
   return parts.join(' · ');
 }
-function dayFieldsGrid(cfg, patch){
-  const allCats = knownCategories();
-  const catOptions = [{value:'', label:t('favorCategoryNone')}].concat(allCats.map(c=>({value:c, label:c})));
-  const grid = el('div', {style:'display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-block-start:10px'});
-  const field = (label, control, hint)=>{
-    const f = el('div', {class:'field'});
-    f.appendChild(el('label', {class:'field-label'}, label));
-    f.appendChild(control);
-    if(hint) f.appendChild(el('span', {class:'field-hint'}, hint));
-    return f;
-  };
-  grid.appendChild(field(t('kindLeanLabel'), StepField({values:LEAN_VALUES, labels:[t('kindLabelContracted'),t('distanceNeutral'),t('kindLabelBasic')], value:cfg.kindLean, onChange:v=>patch({kindLean:v})})));
-  grid.appendChild(field(t('weekdayDistanceBiasLabel'), StepField({values:LEAN_VALUES, labels:[t('distanceNear'),t('distanceNeutral'),t('distanceFar')], value:cfg.distLean, onChange:v=>patch({distLean:v})})));
-  grid.appendChild(field(t('visitCapLabel'), Stepper({value:cfg.visitCap||0, min:0, max:20, step:1, onChange:v=>patch({visitCap: v>0?v:null})}), cfg.visitCap?String(cfg.visitCap):t('visitCapNone')));
-  grid.appendChild(field(t('visitMinLabel'), Stepper({value:cfg.visitMin||0, min:0, max:20, step:1, onChange:v=>patch({visitMin:v})})));
-  grid.appendChild(field(t('teamCapLabel'), Stepper({value:cfg.teamCap||0, min:0, max:20, step:1, onChange:v=>patch({teamCap: v>0?v:null})})));
-  grid.appendChild(field(t('favorCategoryLabel'), SelectField({value:cfg.favorCategory||'', matchWidth:false, blockWidth:false, options:catOptions, onChange:v=>patch({favorCategory:v||null})})));
-  const restrictField = el('div', {class:'field', style:'grid-column:1 / -1'});
-  restrictField.appendChild(el('label', {class:'field-label'}, t('restrictToLabel')));
-  const restrictRow = el('div', {class:'chip-row'});
-  const currentRestrict = cfg.restrictTo || [];
-  allCats.forEach(c=>{
-    const active = currentRestrict.includes(c);
-    restrictRow.appendChild(el('button', {type:'button', class:'chip'+(active?' active':''), onclick:()=>{
-      const nextList = active ? currentRestrict.filter(x=>x!==c) : currentRestrict.concat([c]);
-      patch({restrictTo: nextList.length?nextList:null});
-    }}, c));
-  });
-  restrictField.appendChild(restrictRow);
-  grid.appendChild(restrictField);
-  return grid;
-}
-function patchDayDefaults(patch){
-  state.dayDefaults = Object.assign({}, state.dayDefaults, patch);
-  for(const dow in state.dayOverrides){
-    const rest = Object.assign({}, state.dayOverrides[dow]);
-    for(const key in patch) if(JSON.stringify(rest[key])===JSON.stringify(state.dayDefaults[key])) delete rest[key];
-    state.dayOverrides[dow] = rest;
-  }
-  saveSettings(); renderActiveTab();
-}
-function patchDayOverride(dow, patch){
-  const next = Object.assign({}, state.dayOverrides[dow], patch);
-  for(const key in patch) if(JSON.stringify(patch[key])===JSON.stringify(state.dayDefaults[key])) delete next[key];
-  state.dayOverrides = Object.assign({}, state.dayOverrides, {[dow]:next});
-  saveSettings(); renderActiveTab();
-}
 function renderWeekdaysRowBody(){
   const wrap = el('div', null);
   const strip = el('div', {class:'weekday-strip', style:'flex-wrap:wrap'});
@@ -5716,126 +5866,78 @@ function renderWeekdaysRowBody(){
   exceptionsField.style.marginBlockStart='12px';
   wrap.appendChild(exceptionsField);
   wrap.appendChild(el('p', {class:'field-hint'}, t('exceptionsHint')));
-  const defaults = el('div', {class:'settings-section'});
-  defaults.appendChild(el('h3', null, t('dayDefaultsTitle')));
-  defaults.appendChild(dayFieldsGrid(effectiveDayConfig(-1), patchDayDefaults));
-  wrap.appendChild(defaults);
-  const differing = [...state.weekdays].sort().filter(d=>state.dayOverrides[d]);
-  const overrides = el('div', {class:'settings-section'});
-  overrides.appendChild(el('h3', null, t('dayOverridesTitle')));
-  if(!differing.length) overrides.appendChild(el('p', {class:'field-hint'}, t('dayOverridesNone')));
-  for(const idx of differing){
-    const cfg = effectiveDayConfig(idx);
-    const open = !!state.weekdaysRowOpen[idx];
-    const row = el('div', {class:'setup-row'});
-    const head = el('div', {class:'setup-row-head'}, [
-      el('h3', null, t('weekdaysFull')[idx]),
-      open ? null : el('span', {class:'setup-row-summary'}, summarizeWeekdayConfig(cfg, true))
-    ]);
-    bindDisclosureHead(head, open, 'weekday-body-'+idx, 'weekday-'+idx, ()=>{ state.weekdaysRowOpen[idx] = !state.weekdaysRowOpen[idx]; renderActiveTab(); });
-    row.appendChild(head);
-    if(open){
-      const body = el('div', {class:'setup-row-body', id:'weekday-body-'+idx});
-      body.appendChild(dayFieldsGrid(cfg, patch=>patchDayOverride(idx, patch)));
-      body.appendChild(el('button', {type:'button', class:'btn-link', style:'margin-block-start:10px', onclick:()=>{
-        const next = Object.assign({}, state.dayOverrides); delete next[idx]; state.dayOverrides = next;
-        state.weekdaysRowOpen[idx] = false; saveSettings(); renderActiveTab();
-      }}, t('resetRowAction')));
-      row.appendChild(body);
-    }
-    overrides.appendChild(row);
-  }
-  const free = [...state.weekdays].sort().filter(d=>!state.dayOverrides[d]);
-  if(free.length){
-    overrides.appendChild(SelectField({
-      value:'', matchWidth:false, blockWidth:false, placeholder:t('customizeDayLabel'),
-      options:free.map(d=>({value:String(d), label:t('weekdaysFull')[d]})),
-      onChange:v=>{
-        if(v==='') return;
-        state.dayOverrides = Object.assign({}, state.dayOverrides, {[Number(v)]:{}});
-        state.weekdaysRowOpen[Number(v)] = true;
-        saveSettings(); renderActiveTab();
-      }
-    }));
-  }
-  wrap.appendChild(overrides);
+  wrap.appendChild(el('p', {class:'field-hint', style:'margin-block-start:12px'}, t('wd_planLink')));
+  wrap.appendChild(el('button', {type:'button', class:'btn-link', onclick:()=>switchTab('weekdays')}, t('wd_openTab')));
   return wrap;
 }
 function renderDistributionRowBody(){
   const wrap = el('div', null);
-  const vb = state.visitBudget || {kind:'auto', total:null, perWeek:null, spread:'even'};
-  const coverageMode = state.goal.mode==='coverage';
-  if(coverageMode){
+  const vb = Object.assign({kind:'auto', total:null, perWeek:null, spread:'even', quotas:{}}, state.visitBudget||{});
+  const saveVB = patch=>{ state.visitBudget = Object.assign({}, vb, patch); saveSettings(); renderActiveTab(); };
+  if(state.goal.mode==='coverage'){
     const resolved = previewVisitBudget();
     wrap.appendChild(el('p', {class:'card-summary'}, t('mixFixedByCoverageNote')(resolved.M, resolved.R)));
     const diagList = renderDiagnosticsList(resolved.diagnostics.filter(d=>d.severity==='error'));
     if(diagList) wrap.appendChild(diagList);
   } else {
-    const kindField = el('div', {class:'field'});
-    kindField.appendChild(el('label', {class:'field-label'}, t('visitBudgetKindLabel')));
-    const kindSeg = el('div', {class:'segmented'});
-    [['auto',t('visitBudgetKindAuto')],['total',t('visitBudgetKindTotal')]].forEach(([val,label])=>{
-      kindSeg.appendChild(el('button', {type:'button', 'aria-pressed': vb.kind===val?'true':'false', onclick:()=>{
-        state.visitBudget = Object.assign({}, vb, {kind:val});
-        saveSettings(); renderActiveTab();
-      }}, label));
-    });
-    kindField.appendChild(kindSeg);
-    wrap.appendChild(kindField);
+    wrap.appendChild(labeledField(t('v_howMany'), null, wrapSeg(
+      [{value:'auto', label:t('v_auto')}, {value:'total', label:t('v_exact')}, {value:'quota', label:t('v_quota')}],
+      vb.kind,
+      v=>{
+        if(v===vb.kind) return;
+        if(v==='total'){
+          const b = previewVisitBudget();
+          if(state.countsM==null) state.countsM = b.M;
+          if(state.countsR==null) state.countsR = b.R;
+          state.mode = 'counts';
+          saveVB({kind:'total', total:state.countsM+state.countsR});
+        } else if(v==='auto'){
+          state.mode = 'ratio';
+          saveVB({kind:'auto'});
+        } else {
+          saveVB({kind:'quota'});
+        }
+      })));
     if(vb.kind==='total'){
+      wrap.appendChild(el('p', {class:'field-hint'}, t('v_exactHint')));
+      const cm = state.countsM||0, cr = state.countsR||0;
+      const setCounts = (m, r)=>{ state.countsM = m; state.countsR = r; state.mode = 'counts'; saveVB({total:m+r}); };
+      const row = el('div', {class:'range-row', style:'margin-block-start:8px'});
+      row.appendChild(labeledField(t('v_main'), null, Stepper({value:cm, min:0, max:999, ariaLabel:t('v_main'), onChange:v=>setCounts(v, cr)})));
+      row.appendChild(labeledField(t('v_contracted'), null, Stepper({value:cr, min:0, max:999, ariaLabel:t('v_contracted'), onChange:v=>setCounts(cm, v)})));
+      wrap.appendChild(row);
       const resolved = previewVisitBudget();
-      const totalField = el('div', {class:'field', style:'margin-block-start:12px'});
-      totalField.appendChild(el('label', {class:'field-label'}, t('totalVisitsLabel')));
-      totalField.appendChild(Stepper({value: vb.total!=null?vb.total:resolved.V, min:0, max:999, onChange:v=>{
-        state.visitBudget = Object.assign({}, vb, {total:v}); saveSettings(); renderActiveTab();
-      }}));
-      wrap.appendChild(totalField);
-      const perWeekField = el('div', {class:'field', style:'margin-block-start:12px'});
-      perWeekField.appendChild(el('label', {class:'field-label'}, t('perWeekLabel')));
-      perWeekField.appendChild(Stepper({value: vb.perWeek!=null?vb.perWeek:0, min:0, max:99, onChange:v=>{
-        state.visitBudget = Object.assign({}, vb, {perWeek: v>0?v:null}); saveSettings(); renderActiveTab();
-      }}));
-      perWeekField.appendChild(el('span', {class:'field-hint'}, vb.perWeek?String(vb.perWeek):t('perWeekNone')));
-      wrap.appendChild(perWeekField);
       const rangeDays = computeWorkingDaysListState().length;
       const feasible = resolved.V >= resolved.requestedV;
-      const lineText = feasible ? t('totalFeasibleLine')(resolved.V, resolved.minDays, rangeDays) : t('totalInfeasibleLine')(resolved.V, resolved.minDays, rangeDays);
-      wrap.appendChild(el('p', {class:'card-summary', style: feasible?'':'color:var(--danger)'}, lineText));
+      wrap.appendChild(el('p', {class:'card-summary', style: feasible?'':'color:var(--danger)'}, feasible ? t('totalFeasibleLine')(resolved.V, resolved.minDays, rangeDays) : t('totalInfeasibleLine')(resolved.V, resolved.minDays, rangeDays)));
       const diagList = renderDiagnosticsList(resolved.diagnostics);
       if(diagList) wrap.appendChild(diagList);
+    } else if(vb.kind==='quota'){
+      const quotas = vb.quotas || {};
+      wrap.appendChild(el('p', {class:'field-hint'}, t('q_hint')));
+      let sum = 0;
+      for(const cat of planCategories()){
+        const avail = state.registry.filter(f=>(f.kind==='basic'||f.kind==='contracted') && !f.manualExcluded && f.category===cat).length;
+        const q = Math.min(quotas[cat]||0, avail); sum += q;
+        const row = el('div', {class:'override-row', style:'margin-block-start:8px'});
+        row.appendChild(el('span', {style:'min-width:140px'}, cat));
+        row.appendChild(Stepper({min:0, max:avail, step:1, value:q, ariaLabel:cat, onChange:v=>saveVB({quotas:Object.assign({}, quotas, {[cat]:v})})}));
+        row.appendChild(el('span', {class:'field-hint'}, t('q_available')(avail)));
+        wrap.appendChild(row);
+      }
+      wrap.appendChild(el('p', {class:'card-summary'}, t('q_total')(sum)));
+      const qResolved = previewVisitBudget();
+      const qDiag = renderDiagnosticsList(qResolved.diagnostics.filter(d=>d.severity!=='info'));
+      if(qDiag) wrap.appendChild(qDiag);
     } else {
-      const seg = el('div', {class:'segmented', style:'margin-block-start:12px'});
-      [['ratio', t('percentToggle')], ['counts', '#']].forEach(([val,label])=>{
-        seg.appendChild(el('button', {type:'button', 'aria-pressed': state.mode===val?'true':'false', onclick:()=>{
-          if(val==='counts' && state.mode!=='counts' && state.countsM==null && state.countsR==null){
-            const preview = previewSlotBudget();
-            state.countsM = preview.M; state.countsR = preview.R;
-          }
-          state.mode=val; saveSettings(); renderActiveTab();
-        }}, label));
-      }); wrap.appendChild(seg);
-      const budget = previewSlotBudget();
-      if(state.mode==='ratio'){
-        const ratioField = RatioField({
-          value:state.ratioP, labels:[t('basicLabel'), t('contractedLabel')],
-          onChange:v=>{ state.ratioP = v; saveSettings(); renderActiveTab(); }
-        }); ratioField.style.marginBlockStart='14px';
-        wrap.appendChild(ratioField);
-      } else {
-        const row = el('div', {class:'range-row', style:'margin-block-start:12px'}); const mWrap = el('div', {class:'field'});
-        mWrap.appendChild(el('label', {class:'field-label'}, t('basicLabel')));
-        mWrap.appendChild(Stepper({value: state.countsM!=null?state.countsM:budget.M, min:0, max:999, onChange:v=>{ state.countsM=v; saveSettings(); renderActiveTab(); }}));
-        const rWrap = el('div', {class:'field'}); rWrap.appendChild(el('label', {class:'field-label'}, t('contractedLabel')));
-        rWrap.appendChild(Stepper({value: state.countsR!=null?state.countsR:budget.R, min:0, max:999, onChange:v=>{ state.countsR=v; saveSettings(); renderActiveTab(); }}));
-        row.appendChild(mWrap); row.appendChild(rWrap); wrap.appendChild(row);
-      }
-      wrap.appendChild(el('p', {class:'card-summary'}, t('distributionSummary')(budget.M, budget.R)));
-      for(const note of budget.notes||[]){
-        let mb = /basic pool short by (\d+)/.exec(note);
-        if(mb) wrap.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('poolShiftedFromBasic')(+mb[1])));
-        let mc = /contracted pool short by (\d+)/.exec(note);
-        if(mc) wrap.appendChild(el('p', {class:'field-hint', style:'color:var(--gold)'}, t('poolShiftedFromContracted')(+mc[1])));
-      }
+      wrap.appendChild(el('p', {class:'field-hint'}, t('v_autoHint')));
+      const ratioField = RatioField({value:state.ratioP, labels:[t('v_main'), t('v_contracted')], onChange:v=>{ state.ratioP = v; state.mode = 'ratio'; saveSettings(); renderActiveTab(); }});
+      ratioField.style.marginBlockStart = '10px';
+      wrap.appendChild(ratioField);
+      const b = previewVisitBudget();
+      wrap.appendChild(el('p', {class:'card-summary'}, t('distributionSummary')(b.M, b.R)));
+      const diagList = renderDiagnosticsList(b.diagnostics.filter(d=>d.severity!=='info'));
+      if(diagList) wrap.appendChild(diagList);
     }
   }
   const mvpField = el('div', {class:'field', style:'margin-block-start:14px'});
@@ -5849,31 +5951,6 @@ function renderDistributionRowBody(){
   mvpField.appendChild(mvpSeg);
   if(state.maxVisitsPerDay>1) mvpField.appendChild(el('span', {class:'field-hint'}, t('maxVisitsPerDayHint')));
   wrap.appendChild(mvpField);
-  if(!coverageMode){
-    const spreadField = el('div', {class:'field', style:'margin-block-start:14px'});
-    spreadField.appendChild(el('label', {class:'field-label'}, t('spreadLabel')));
-    spreadField.appendChild(SegmentedField([{value:'even', label:t('spreadEven')}, {value:'front', label:t('spreadFront')}], vb.spread||'even', v=>{ state.visitBudget = Object.assign({}, vb, {spread:v}); saveSettings(); renderActiveTab(); }));
-    spreadField.appendChild(el('span', {class:'field-hint'}, t('spreadHint')));
-    wrap.appendChild(spreadField);
-  }
-  const genderRow = el('div', {style:'display:flex; gap:12px; flex-wrap:wrap; margin-block-start:14px'});
-  const basicGenderField = el('div', {class:'field'});
-  basicGenderField.appendChild(el('label', {class:'field-label'}, t('genderRuleBasicLabel')));
-  basicGenderField.appendChild(SelectField({
-    options:[{value:'off',label:t('genderRuleOff')},{value:'mixed',label:t('genderRuleMixed')},{value:'31',label:t('genderRule31')}],
-    value:(state.genderRule&&state.genderRule.basic)||'31', blockWidth:false, matchWidth:false,
-    onChange:v=>{ state.genderRule = Object.assign({}, state.genderRule, {basic:v}); saveSettings(); renderActiveTab(); }
-  }));
-  genderRow.appendChild(basicGenderField);
-  const contractedGenderField = el('div', {class:'field'});
-  contractedGenderField.appendChild(el('label', {class:'field-label'}, t('genderRuleContractedLabel')));
-  contractedGenderField.appendChild(SelectField({
-    options:[{value:'off',label:t('genderRuleOff')},{value:'mixed',label:t('genderRuleMixed')}],
-    value:(state.genderRule&&state.genderRule.contracted)||'off', blockWidth:false, matchWidth:false,
-    onChange:v=>{ state.genderRule = Object.assign({}, state.genderRule, {contracted:v}); saveSettings(); renderActiveTab(); }
-  }));
-  genderRow.appendChild(contractedGenderField);
-  wrap.appendChild(genderRow);
   return wrap;
 }
 function activeCountOf(id){ return poolMembersOf(id).filter(p=>p.active!==false).length; }
@@ -5909,7 +5986,7 @@ function renderPlanTab(root){
     return t('workingDaysSummary')(computeWorkingDaysListState().length, names) + (customized ? ' · '+t('weekdayProfilesCurrentChip')(customized) : '');
   }, renderWeekdaysRowBody));
   setupCard.appendChild(renderSetupRow('distribution','distributionTitle', ()=>{
-    const b = state.goal.mode==='coverage' ? previewVisitBudget() : previewSlotBudget(); return t('distributionSummary')(b.M,b.R);
+    const b = previewVisitBudget(); return t('distributionSummary')(b.M,b.R);
   }, renderDistributionRowBody));
   setupCard.appendChild(renderSetupRow('team','teamRowTitle', ()=>{
     return `${activePoolPeople().filter(p=>p.active!==false).length}`;
@@ -6221,8 +6298,8 @@ function openFacilityDrawer(facility){
     distField.appendChild(distRow);
     body.appendChild(distField);
     const weightField = el('div', {class:'field'});
-    weightField.appendChild(el('label', {class:'field-label'}, t('critLabel')));
-    weightField.appendChild(StepField({values:LEVEL_VALUES, labels:levelLabels(), value:facility.crit==null?50:facility.crit, hint:t('critHint'), onChange:v=>{
+    weightField.appendChild(el('label', {class:'field-label'}, t('f_importance')));
+    weightField.appendChild(StepField({values:LEVEL_VALUES, labels:['1','2','3','4','5'], value:facility.crit==null?50:facility.crit, hint:t('f_importanceHint'), onChange:v=>{
       facility.crit=v;
       saveRegistry(); rerender();
     }}));
@@ -6321,8 +6398,8 @@ function renderFacilityList(container){
     }}, t('bulkPin')));
     let bulkCrit = 50;
     const bulkCritWrap = el('div', null);
-    bulkCritWrap.appendChild(el('span', {class:'field-hint'}, t('bulkWeightLabel')));
-    bulkCritWrap.appendChild(StepField({values:LEVEL_VALUES, labels:levelLabels(), value:bulkCrit, onChange:v=>{ bulkCrit=v; }}));
+    bulkCritWrap.appendChild(el('span', {class:'field-hint'}, t('f_importance')));
+    bulkCritWrap.appendChild(StepField({values:LEVEL_VALUES, labels:['1','2','3','4','5'], value:bulkCrit, onChange:v=>{ bulkCrit=v; }}));
     bar.appendChild(bulkCritWrap);
     bar.appendChild(el('button', {type:'button', class:'chip', onclick:()=>{
       for(const f of selectedVisibleFacilities()){ f.crit=bulkCrit; }
@@ -6494,18 +6571,26 @@ function buildSummaryCoverageCard(plan){
 }
 function buildSummarySettingsCard(){
   const card = el('div', {class:'card'});
-  card.appendChild(el('div', {class:'card-head'}, el('h2', null, t('summarySettingsTitle'))));
-  const wdOverrides = Object.keys(state.dayOverrides).length + (dayConfigNeutral(state.dayDefaults) ? 0 : 1);
+  card.appendChild(el('div', {class:'card-head'}, el('h2', null, t('s_summaryTitle'))));
+  const g = state.familiarityGamma||0;
+  const cad = state.cadence||{mode:'prefer', gapDays:2};
+  const vb = state.visitBudget||{};
+  const dist = state.globalDistanceBias||0;
+  const gr = state.genderRule||{};
+  const spacing = vb.spread==='front' ? t('s_packStart') : (cad.mode==='off' ? t('s_spreadEven') : t('s_spreadGap')+' · '+cad.gapDays);
   const rows = [
-    ['ratioP', state.ratioP], ['genderRule.basic', state.genderRule&&state.genderRule.basic], ['genderRule.contracted', state.genderRule&&state.genderRule.contracted],
-    ['overTieMinVisits', state.overTieMinVisits], ['overTieMinRatio', state.overTieMinRatio],
-    ['familiarityGamma', state.familiarityGamma], ['globalDistanceBias', state.globalDistanceBias],
-    ['originMode', state.originMode], ['maxVisitsPerDay', state.maxVisitsPerDay],
-    ['poolUtilizationCap', state.poolUtilizationCap],
-    ['cadence', state.cadence ? `${state.cadence.mode} (${state.cadence.gapDays}d, ${state.cadence.strength})` : '—'],
-    ['dayOverrides', wdOverrides], ['exceptions', (state.exceptions||new Set()).size]
+    [t('genderRuleBasicLabel'), gr.basic==='mixed'?t('genderRuleMixed'):(gr.basic==='off'?t('genderRuleOff'):t('genderRule31'))],
+    [t('genderRuleContractedLabel'), gr.contracted==='mixed'?t('genderRuleMixed'):t('genderRuleOff')],
+    [t('s_rotate'), g===0 ? t('s_off') : (g>=0.6 ? t('s_strong') : t('s_normal'))],
+    [t('s_repeatBlock'), state.hardBlockOverTied ? String(state.overTieMinVisits) : t('s_off')],
+    [t('s_home'), state.originMode==='ignore' ? t('s_homeIgnore') : (state.originMode==='favor' ? t('s_homeFavor') : t('s_homeCount'))],
+    [t('s_crit'), state.critMode==='require' ? t('s_on') : t('s_off')],
+    [t('s_spacing'), spacing],
+    [t('s_perWeek'), vb.perWeek ? String(vb.perWeek) : '—'],
+    [t('s_distPick'), dist<0 ? t('s_distNear') : (dist>0 ? t('s_distFar') : t('s_distNone'))],
+    [t('wd_title'), String(Object.keys(state.dayOverrides||{}).length)]
   ];
-  for(const [k,v] of rows) card.appendChild(el('div', {class:'history-row'}, [el('span',null,k), el('span',null,String(v))]));
+  for(const [k,v] of rows) card.appendChild(el('div', {class:'history-row'}, [el('span',null,k), el('span',null,v)]));
   return card;
 }
 function renderFilterBar(barEl, listContainer){
@@ -6622,13 +6707,13 @@ function openPersonDrawer(p){
     activeRow.appendChild(el('span', {class:'settings-row-label'}, [el('span',{class:'name'},t('activeLabel'))]));
     activeRow.appendChild(el('button', {type:'button', class:'switch', role:'switch', 'aria-checked':p.active!==false?'true':'false', onclick:()=>{ p.active = p.active===false; savePeople(); rerender(); renderActiveTab(); }}));
     body.appendChild(activeRow);
-    const weightField = el('div', {class:'field'});
-    weightField.appendChild(el('label', {class:'field-label'}, t('weightLabel')));
-    weightField.appendChild(StepField({values:LEVEL_VALUES, labels:levelLabels(), value:p.rank==null?50:p.rank, hint:t('weightHint'), onChange:v=>{
-      p.rank=v;
-      savePeople(); rerender();
-    }}));
-    body.appendChild(weightField);
+    [['p_rankMain','rankBasic','basic'],['p_rankContracted','rankContracted','contracted']].forEach(([key, prop, kind])=>{
+      const f = el('div', {class:'field'});
+      f.appendChild(el('label', {class:'field-label'}, t(key)));
+      f.appendChild(StepField({values:LEVEL_VALUES, labels:['1','2','3','4','5'], value:rankOf(p, kind), onChange:v=>{ p[prop]=v; savePeople(); rerender(); }}));
+      body.appendChild(f);
+    });
+    body.appendChild(el('span', {class:'field-hint'}, t('p_rankHint')));
     const workloadField = el('div', {class:'field'});
     workloadField.appendChild(el('label', {class:'field-label'}, t('workloadLabel')));
     workloadField.appendChild(Stepper({min:0, max:300, step:5, unit:'%', value:Math.round((p.weight==null?1:p.weight)*100), ariaLabel:t('workloadLabel'), onChange:v=>{ p.weight = v/100; savePeople(); rerender(); }}));
@@ -6687,7 +6772,7 @@ function personCard(p){
       el('span', {class:'team-card-name'}, p.name),
       el('span', {class:'pool-badge'+(p.pool==='fin'?'':(p.pool==='clin'?' clin':' alt'))}, poolLabelOf(p.pool))
     ]),
-    el('div', {class:'team-card-status'}, personStatusChips(p).map(c=>el('span',{class:'status-chip'},c)))
+    el('div', {class:'team-card-status'}, [t('p_rankChip')(rankStep(p,'basic'), rankStep(p,'contracted'))].concat(personStatusChips(p)).map(c=>el('span',{class:'status-chip'},c)))
   ]);
 }
 function knownCategories(){
@@ -6841,17 +6926,6 @@ function SegmentedField(options, value, onChange){
   }
   return seg;
 }
-function advancedDisclosure(key, bodyFn){
-  const wrap = el('div', {class:'disclosure'});
-  const panelId = 'adv-panel-'+(++advancedDisclosureSeq);
-  const isOpen = !!state.settingsAdvancedOpen[key];
-  const toggleBtn = el('button', {type:'button', class:'btn-link', 'aria-expanded':isOpen?'true':'false', 'aria-controls':panelId}, t('advancedLabel'));
-  const panel = el('div', {class:'disclosure-panel', id:panelId, hidden:!isOpen});
-  if(isOpen) panel.appendChild(bodyFn());
-  toggleBtn.addEventListener('click', ()=>{ state.settingsAdvancedOpen[key] = !state.settingsAdvancedOpen[key]; renderActiveTab(); });
-  wrap.appendChild(toggleBtn); wrap.appendChild(panel);
-  return wrap;
-}
 function settingsRow(name, hint, ctl){
   return el('div', {class:'settings-row'}, [
     el('div', {class:'settings-row-label'}, [el('span',{class:'name'},name), hint?el('span',{class:'hint'},hint):null]),
@@ -6878,152 +6952,6 @@ function resolveUnknownLinkExisting(entry, rerender){
   btn.addEventListener('click', ()=>{});
   return btn;
 }
-const FAIRNESS_PRESETS = {
-  calm:{familiarityGamma:0.2, overTieMinVisits:5, overTieMinRatio:0.75},
-  balanced:{familiarityGamma:0.35, overTieMinVisits:3, overTieMinRatio:0.6},
-  strict:{familiarityGamma:0.6, overTieMinVisits:2, overTieMinRatio:0.45}
-};
-function currentFairnessLevel(){
-  for(const k in FAIRNESS_PRESETS){
-    const p = FAIRNESS_PRESETS[k];
-    if(state.familiarityGamma===p.familiarityGamma && state.overTieMinVisits===p.overTieMinVisits && state.overTieMinRatio===p.overTieMinRatio) return k;
-  }
-  return null;
-}
-function applyFairnessPreset(level){
-  const p = FAIRNESS_PRESETS[level];
-  state.familiarityGamma = p.familiarityGamma; state.overTieMinVisits = p.overTieMinVisits; state.overTieMinRatio = p.overTieMinRatio;
-  saveSettings(); renderActiveTab();
-}
-const BUNDLE_PRESETS = {
-  balanced:{fairness:'balanced', originMode:'count', originStrength:0.5, cadence:{mode:'prefer',gapDays:2,strength:0.7,scope:'plan'}},
-  widerCoverage:{fairness:'calm', originMode:'ignore', originStrength:0.5, cadence:{mode:'off',gapDays:2,strength:0.7,scope:'plan'}},
-  teamComfort:{fairness:'calm', originMode:'favor', originStrength:0.6, cadence:{mode:'strict',gapDays:3,strength:0.7,scope:'plan'}}
-};
-function applyBundlePreset(name){
-  const b = BUNDLE_PRESETS[name];
-  applyFairnessPreset(b.fairness);
-  state.originMode = b.originMode; state.originStrength = b.originStrength;
-  state.cadence = Object.assign({}, b.cadence);
-  saveSettings(); renderActiveTab();
-}
-function currentModeChips(){
-  const chips = [];
-  const level = currentFairnessLevel();
-  if(level!=='balanced') chips.push({label:t('fairnessCurrentChip'), reset:()=>applyFairnessPreset('balanced')});
-  const defCadence = {mode:'prefer',gapDays:2,strength:0.7,scope:'plan'};
-  const cad = state.cadence||defCadence;
-  if(cad.mode!==defCadence.mode || cad.gapDays!==defCadence.gapDays || cad.strength!==defCadence.strength || cad.scope!==defCadence.scope){
-    chips.push({label:t('cadenceCurrentChip'), reset:()=>{ state.cadence=Object.assign({},defCadence); saveSettings(); renderActiveTab(); }});
-  }
-  if(state.originMode!=='count' || state.originStrength!==0.5 || state.globalDistanceBias!==0){
-    chips.push({label:t('distanceCurrentChip'), reset:()=>{ state.originMode='count'; state.originStrength=0.5; state.globalDistanceBias=0; saveSettings(); renderActiveTab(); }});
-  }
-  const wpCount = Object.keys(state.dayOverrides).length + (dayConfigNeutral(state.dayDefaults) ? 0 : 1);
-  if(wpCount) chips.push({label:t('weekdayProfilesCurrentChip')(wpCount), reset:()=>{ state.dayDefaults=defaultDayConfig(); state.dayOverrides={}; saveSettings(); renderActiveTab(); }});
-  if(state.maxVisitsPerDay!==1) chips.push({label:t('maxVisitsCurrentChip'), reset:()=>{ state.maxVisitsPerDay=1; saveSettings(); renderActiveTab(); }});
-  if(state.poolUtilizationCap!==0.85) chips.push({label:t('poolCapCurrentChip'), reset:()=>{ state.poolUtilizationCap=0.85; saveSettings(); renderActiveTab(); }});
-  if((state.genderRule&&state.genderRule.basic)!=='31' || (state.genderRule&&state.genderRule.contracted)!=='off') chips.push({label:t('genderPassCurrentChip'), reset:()=>{ state.genderRule={basic:'31',contracted:'off'}; saveSettings(); renderActiveTab(); }});
-  if(state.hardBlockOverTied!==false) chips.push({label:t('hardBlockCurrentChip'), reset:()=>{ state.hardBlockOverTied=false; saveSettings(); renderActiveTab(); }});
-  if(state.preferenceCeiling!==2.5) chips.push({label:t('ceilingCurrentChip'), reset:()=>{ state.preferenceCeiling=2.5; saveSettings(); renderActiveTab(); }});
-  return chips;
-}
-function renderCurrentModeRow(){
-  const wrap = el('div', {class:'settings-section'});
-  wrap.appendChild(el('h3', null, t('currentModeTitle')));
-  const chips = currentModeChips();
-  const row = el('div', {class:'chip-row'});
-  if(!chips.length) row.appendChild(el('span', {class:'field-hint'}, t('currentModeEmpty')));
-  else for(const c of chips) row.appendChild(el('button', {type:'button', class:'chip'}, [c.label, ' ×'])).addEventListener('click', c.reset);
-  wrap.appendChild(row);
-  const presetsRow = el('div', {class:'chip-row', style:'margin-block-start:8px'});
-  presetsRow.appendChild(el('span', {class:'field-hint', style:'align-self:center'}, t('presetsLabel')+':'));
-  presetsRow.appendChild(el('button', {type:'button', class:'chip', onclick:()=>applyBundlePreset('balanced')}, t('presetBalanced')));
-  presetsRow.appendChild(el('button', {type:'button', class:'chip', onclick:()=>applyBundlePreset('widerCoverage')}, t('presetWiderCoverage')));
-  presetsRow.appendChild(el('button', {type:'button', class:'chip', onclick:()=>applyBundlePreset('teamComfort')}, t('presetTeamComfort')));
-  wrap.appendChild(presetsRow);
-  return wrap;
-}
-function renderFairnessGroup(){
-  const wrap = el('div', {class:'settings-section'});
-  wrap.appendChild(el('h3', null, t('fairnessGroupTitle')));
-  const level = currentFairnessLevel();
-  wrap.appendChild(SegmentedField([
-    {value:'calm', label:t('fairnessCalm')}, {value:'balanced', label:t('fairnessBalanced')}, {value:'strict', label:t('fairnessStrict')}
-  ], level, applyFairnessPreset));
-  wrap.appendChild(advancedDisclosure('fairness', ()=>{
-    const body = el('div', null);
-    body.appendChild(settingsRow(t('minVisitsLabel'), t('overTieHint'), Stepper({value:state.overTieMinVisits, min:1, max:50, onChange:v=>{ state.overTieMinVisits=v; saveSettings(); renderActiveTab(); }})));
-    body.appendChild(settingsRow(t('minRatioLabel'), null, Stepper({value:Math.round(state.overTieMinRatio*100), min:0, max:100, step:5, unit:'%', onChange:v=>{ state.overTieMinRatio=v/100; saveSettings(); renderActiveTab(); }})));
-    const gammaField = el('div', {class:'field'});
-    gammaField.appendChild(el('label', {class:'field-label'}, t('familiarityGammaLabel')));
-    gammaField.appendChild(StepField({values:GAMMA_VALUES, labels:strengthLabels(), value:state.familiarityGamma, hint:t('familiarityGammaHint'), onChange:v=>{ state.familiarityGamma=v; saveSettings(); renderActiveTab(); }}));
-    body.appendChild(gammaField);
-    body.appendChild(settingsRow(t('hardBlockLabel'), null, settingsSwitch(state.hardBlockOverTied, ()=>{ state.hardBlockOverTied=!state.hardBlockOverTied; saveSettings(); renderActiveTab(); })));
-    const genderRuleLabelFor = v=>v==='31'?t('genderRule31'):(v==='mixed'?t('genderRuleMixed'):t('genderRuleOff'));
-    const genderMirror = el('span', null, `${t('basicLabel')}: ${genderRuleLabelFor(state.genderRule&&state.genderRule.basic)} — ${t('contractedLabel')}: ${genderRuleLabelFor(state.genderRule&&state.genderRule.contracted)}`);
-    const genderEditLink = el('button', {type:'button', class:'btn-link', onclick:()=>{ state.setupRowOpen.team = true; switchTab('plan'); }}, t('teamEditLink'));
-    body.appendChild(settingsRow(t('genderPassLabel'), null, [genderMirror, genderEditLink]));
-    const ceilingField = el('div', {class:'field'});
-    ceilingField.appendChild(el('label', {class:'field-label'}, t('preferenceCeilingLabel')));
-    ceilingField.appendChild(StepField({values:CEILING_VALUES, labels:strengthLabels(), value:state.preferenceCeiling, hint:t('preferenceCeilingHint'), onChange:v=>{ state.preferenceCeiling=v; saveSettings(); renderActiveTab(); }}));
-    body.appendChild(ceilingField);
-    const critMatchField = el('div', {class:'field'});
-    critMatchField.appendChild(el('label', {class:'field-label'}, t('critMatchStrengthLabel')));
-    critMatchField.appendChild(StepField({values:STRENGTH_VALUES, labels:strengthLabels(), value:state.critMatchStrength==null?0.3:state.critMatchStrength, hint:t('critMatchStrengthHint'), onChange:v=>{ state.critMatchStrength=v; saveSettings(); renderActiveTab(); }}));
-    body.appendChild(critMatchField);
-    const critModeField = el('div', {class:'field'});
-    critModeField.appendChild(el('label', {class:'field-label'}, t('critModeLabel')));
-    critModeField.appendChild(SegmentedField([{value:'require', label:t('critModeRequire')}, {value:'prefer', label:t('critModePrefer')}], state.critMode, v=>{ state.critMode=v; saveSettings(); renderActiveTab(); }));
-    critModeField.appendChild(el('span', {class:'field-hint'}, t('critModeHint')));
-    body.appendChild(critModeField);
-    return body;
-  }));
-  return wrap;
-}
-function renderDistanceGroup(){
-  const wrap = el('div', {class:'settings-section'});
-  wrap.appendChild(el('h3', null, t('distanceGroupTitle')));
-  wrap.appendChild(SegmentedField([
-    {value:'ignore', label:t('originIgnore')}, {value:'count', label:t('originCount')}, {value:'favor', label:t('originFavor')}
-  ], state.originMode, v=>{ state.originMode=v; saveSettings(); renderActiveTab(); }));
-  wrap.appendChild(advancedDisclosure('distance', ()=>{
-    const body = el('div', null);
-    const strengthField = el('div', {class:'field'});
-    strengthField.appendChild(el('label', {class:'field-label'}, t('originStrengthLabel')));
-    strengthField.appendChild(StepField({values:ORIGIN_VALUES, labels:strengthLabels(), value:state.originStrength, onChange:v=>{ state.originStrength=v; saveSettings(); renderActiveTab(); }}));
-    if(state.originMode==='favor') body.appendChild(strengthField);
-    const biasField = el('div', {class:'field'});
-    biasField.appendChild(el('label', {class:'field-label'}, t('distanceBiasLabel')));
-    biasField.appendChild(StepField({values:LEAN_VALUES, labels:[t('distanceNear'),t('distanceNeutral'),t('distanceFar')], value:state.globalDistanceBias, onChange:v=>{ state.globalDistanceBias=v; saveSettings(); renderActiveTab(); }}));
-    body.appendChild(biasField);
-    return body;
-  }));
-  return wrap;
-}
-function renderCadenceGroup(){
-  const wrap = el('div', {class:'settings-section'});
-  wrap.appendChild(el('h3', null, t('cadenceGroupTitle')));
-  const cad = state.cadence||{mode:'prefer',gapDays:2,strength:0.7,scope:'plan'};
-  wrap.appendChild(SegmentedField([
-    {value:'off', label:t('cadenceOff')}, {value:'prefer', label:t('cadencePrefer')}, {value:'strict', label:t('cadenceStrict')}
-  ], cad.mode, v=>{ state.cadence=Object.assign({},cad,{mode:v}); saveSettings(); renderActiveTab(); }));
-  wrap.appendChild(settingsRow(t('cadenceGapLabel'), null, Stepper({value:cad.gapDays, min:1, max:60, onChange:v=>{ state.cadence=Object.assign({},cad,{gapDays:v}); saveSettings(); renderActiveTab(); }})));
-  wrap.appendChild(advancedDisclosure('cadence', ()=>{
-    const body = el('div', null);
-    body.appendChild(settingsRow(t('cadenceScopeLabel'), null, SegmentedField([
-      {value:'plan', label:t('cadenceScopePlan')}, {value:'plan+person', label:t('cadenceScopePlanPerson')}
-    ], cad.scope, v=>{ state.cadence=Object.assign({},cad,{scope:v}); saveSettings(); renderActiveTab(); })));
-    const strengthField = el('div', {class:'field'});
-    strengthField.appendChild(el('label', {class:'field-label'}, t('cadenceStrengthLabel')));
-    strengthField.appendChild(StepField({values:STRENGTH_VALUES, labels:strengthLabels(), value:cad.strength, onChange:v=>{ state.cadence=Object.assign({},cad,{strength:v}); saveSettings(); renderActiveTab(); }}));
-    body.appendChild(strengthField);
-    body.appendChild(settingsRow(t('cadenceWindowLabel'), null, Stepper({value:state.preferenceWindow||3, min:1, max:10, onChange:v=>{ state.preferenceWindow=v; saveSettings(); renderActiveTab(); }})));
-    return body;
-  }));
-  return wrap;
-}
-
 let settingsRestore = null;
 let restoreSuppressed = false;
 function settingsPathOf(node){
@@ -7068,6 +6996,73 @@ function applySettingsRestore(){
   const focusable = tag==='BUTTON' || tag==='INPUT' || tag==='SELECT' || tag==='TEXTAREA' || tag==='A' || node.hasAttribute('tabindex');
   if(focusable && !node.disabled) node.focus({preventScroll:true});
 }
+const WD_LEAN = 1;
+function leanKey(v, neg, pos){ return v<0 ? neg : (v>0 ? pos : 'none'); }
+function setDayPref(d, patch){
+  const next = Object.assign({}, state.dayOverrides);
+  const merged = Object.assign({}, next[d]||{}, patch);
+  if(dayConfigNeutral(merged)) delete next[d]; else next[d] = merged;
+  state.dayOverrides = next;
+  saveSettings(); renderActiveTab();
+}
+function copyDayToAll(d){
+  const src = state.dayOverrides[d] ? Object.assign({}, state.dayOverrides[d]) : null;
+  const next = Object.assign({}, state.dayOverrides);
+  for(const x of state.weekdays){ if(x===d) continue; if(src) next[x] = Object.assign({}, src); else delete next[x]; }
+  state.dayOverrides = next; saveSettings(); renderActiveTab();
+}
+function renderWeekdaysTab(root){
+  const card = el('div', {class:'card'});
+  card.appendChild(el('div', {class:'card-head'}, el('h2', null, t('wd_title'))));
+  card.appendChild(el('p', {class:'card-summary', style:'margin-block-end:14px'}, t('wd_intro')));
+  const cats = planCategories();
+  const k = state.maxVisitsPerDay||1;
+  for(let d=0; d<7; d++){
+    const box = el('div', {class:'setup-row'});
+    box.appendChild(el('div', {class:'setup-row-head', style:'cursor:default'}, [el('h3', null, t('weekdaysFull')[d])]));
+    if(!state.weekdays.has(d)){
+      box.appendChild(el('p', {class:'field-hint'}, t('wd_offDay')+' — '+t('wd_offHint')));
+      card.appendChild(box);
+      continue;
+    }
+    const cfg = effectiveDayConfig(d);
+    const body = el('div', {class:'setup-row-body'});
+    body.appendChild(labeledField(t('wd_kind'), null, wrapSeg(
+      [{value:'contracted',label:t('wd_kindContracted')},{value:'none',label:t('wd_kindNone')},{value:'main',label:t('wd_kindMain')}],
+      leanKey(cfg.kindLean,'contracted','main'),
+      v=>setDayPref(d, {kindLean: v==='main'?WD_LEAN:(v==='contracted'?-WD_LEAN:0)}))));
+    body.appendChild(labeledField(t('wd_dist'), null, wrapSeg(
+      [{value:'near',label:t('wd_distNear')},{value:'none',label:t('wd_kindNone')},{value:'far',label:t('wd_distFar')}],
+      leanKey(cfg.distLean,'near','far'),
+      v=>setDayPref(d, {distLean: v==='far'?WD_LEAN:(v==='near'?-WD_LEAN:0)}))));
+    body.appendChild(labeledField(t('wd_cat'), null, SelectField({
+      value:cfg.favorCategory||'', matchWidth:false, blockWidth:false,
+      options:[{value:'',label:t('wd_catNone')}].concat(cats.map(c=>({value:c,label:c}))),
+      onChange:v=>setDayPref(d, {favorCategory:v||null})})));
+    const only = cfg.restrictTo||[];
+    const chips = el('div', {class:'chip-row'});
+    for(const c of cats){
+      const on = only.includes(c);
+      chips.appendChild(el('button', {type:'button', class:'chip'+(on?' active':''), 'aria-pressed':on?'true':'false', onclick:()=>{
+        const next = on ? only.filter(x=>x!==c) : only.concat([c]);
+        setDayPref(d, {restrictTo: next.length?next:null});
+      }}, c));
+    }
+    body.appendChild(labeledField(t('wd_only'), null, chips));
+    if(k>1){
+      body.appendChild(labeledField(t('wd_cap'), t('wd_capHint'), Stepper({min:1, max:k, step:1, value:cfg.visitCap!=null?Math.min(cfg.visitCap,k):k, ariaLabel:t('wd_cap'), onChange:v=>setDayPref(d, {visitCap: v>=k?null:v})})));
+    }
+    const actions = el('div', {class:'chip-row', style:'margin-block-start:6px'});
+    actions.appendChild(el('button', {type:'button', class:'chip', onclick:()=>copyDayToAll(d)}, t('wd_copyAll')));
+    if(state.dayOverrides[d]) actions.appendChild(el('button', {type:'button', class:'btn-link', onclick:()=>{
+      const next = Object.assign({}, state.dayOverrides); delete next[d]; state.dayOverrides = next; saveSettings(); renderActiveTab();
+    }}, t('wd_reset')));
+    body.appendChild(actions);
+    box.appendChild(body);
+    card.appendChild(box);
+  }
+  root.appendChild(card);
+}
 function renderSettingsTab(root){
   const layout = el('div', {class:'settings-layout'});
   const nav = el('nav', {class:'settings-nav', 'aria-label':t('settingsNavLabel')});
@@ -7085,35 +7080,59 @@ function renderSettingsTab(root){
     onChange:v=>{ if(v!==state.lang) toggleLang(); }
   })));
   card.appendChild(appearance);
-  const planDefaults = el('div', {class:'settings-section', id:'settings-defaults'});
-  planDefaults.appendChild(el('h3', null, t('settingsPlanDefaults')));
-  const wdWrap = el('div', {class:'field'});
-  wdWrap.appendChild(el('label', {class:'field-label'}, t('defaultWeekdays')));
-  const strip = el('div', {class:'weekday-strip'});
-  t('weekdaysShort').forEach((label,idx)=>{
-    strip.appendChild(el('button', {type:'button', 'aria-pressed':state.weekdays.has(idx)?'true':'false', onclick:()=>{
-      if(state.weekdays.has(idx)) state.weekdays.delete(idx); else state.weekdays.add(idx);
+  const peopleSec = el('div', {class:'settings-section', id:'settings-people'});
+  peopleSec.appendChild(el('h3', null, t('s_secPeople')));
+  const genderRow = el('div', {style:'display:flex; gap:12px; flex-wrap:wrap'});
+  genderRow.appendChild(SelectField({
+    label:t('genderRuleBasicLabel'),
+    options:[{value:'off',label:t('genderRuleOff')},{value:'mixed',label:t('genderRuleMixed')},{value:'31',label:t('genderRule31')}],
+    value:(state.genderRule&&state.genderRule.basic)||'31', blockWidth:false, matchWidth:false,
+    onChange:v=>{ state.genderRule = Object.assign({}, state.genderRule, {basic:v}); saveSettings(); renderActiveTab(); }
+  }));
+  genderRow.appendChild(SelectField({
+    label:t('genderRuleContractedLabel'),
+    options:[{value:'off',label:t('genderRuleOff')},{value:'mixed',label:t('genderRuleMixed')}],
+    value:(state.genderRule&&state.genderRule.contracted)||'off', blockWidth:false, matchWidth:false,
+    onChange:v=>{ state.genderRule = Object.assign({}, state.genderRule, {contracted:v}); saveSettings(); renderActiveTab(); }
+  }));
+  peopleSec.appendChild(genderRow);
+  peopleSec.appendChild(el('span', {class:'field-hint'}, t('s_genderHint')));
+  const g = state.familiarityGamma||0;
+  peopleSec.appendChild(labeledField(t('s_rotate'), t('s_rotateHint'), wrapSeg(
+    [{value:'off',label:t('s_off')},{value:'normal',label:t('s_normal')},{value:'strong',label:t('s_strong')}],
+    g===0 ? 'off' : (g>=0.6 ? 'strong' : 'normal'),
+    v=>{ state.familiarityGamma = v==='off'?0:(v==='strong'?0.7:0.35); saveSettings(); renderActiveTab(); })));
+  const repeatRow = el('div', {style:'display:flex;align-items:center;gap:12px;flex-wrap:wrap'});
+  repeatRow.appendChild(settingsSwitch(state.hardBlockOverTied, ()=>{ state.hardBlockOverTied=!state.hardBlockOverTied; saveSettings(); renderActiveTab(); }));
+  if(state.hardBlockOverTied) repeatRow.appendChild(Stepper({min:1, max:50, step:1, value:state.overTieMinVisits||1, unit:t('s_repeatTimes'), ariaLabel:t('s_repeatBlock'), onChange:v=>{ state.overTieMinVisits=v; saveSettings(); renderActiveTab(); }}));
+  peopleSec.appendChild(labeledField(t('s_repeatBlock'), t('s_repeatBlockHint'), repeatRow));
+  peopleSec.appendChild(labeledField(t('s_home'), t('s_homeHint'), wrapSeg(
+    [{value:'ignore',label:t('s_homeIgnore')},{value:'count',label:t('s_homeCount')},{value:'favor',label:t('s_homeFavor')}],
+    state.originMode||'count',
+    v=>{ state.originMode=v; saveSettings(); renderActiveTab(); })));
+  peopleSec.appendChild(labeledField(t('s_crit'), t('s_critHint'), settingsSwitch(state.critMode==='require', ()=>{ state.critMode = state.critMode==='require'?'prefer':'require'; saveSettings(); renderActiveTab(); })));
+  card.appendChild(peopleSec);
+
+  const daysSec = el('div', {class:'settings-section', id:'settings-days'});
+  daysSec.appendChild(el('h3', null, t('s_secDays')));
+  const vbS = Object.assign({kind:'auto', total:null, perWeek:null, spread:'even', quotas:{}}, state.visitBudget||{});
+  const cad = Object.assign({mode:'prefer', gapDays:2, strength:0.7, scope:'plan'}, state.cadence||{});
+  const spacingNow = vbS.spread==='front' ? 'pack' : (cad.mode==='off' ? 'even' : 'gap');
+  daysSec.appendChild(labeledField(t('s_spacing'), t('s_spacingHint'), wrapSeg(
+    [{value:'pack',label:t('s_packStart')},{value:'even',label:t('s_spreadEven')},{value:'gap',label:t('s_spreadGap')}],
+    spacingNow,
+    v=>{
+      state.visitBudget = Object.assign({}, vbS, {spread: v==='pack'?'front':'even'});
+      state.cadence = Object.assign({}, cad, {mode: v==='gap'?'prefer':'off'});
       saveSettings(); renderActiveTab();
-    }}, label));
-  });
-  wdWrap.appendChild(strip);
-  planDefaults.appendChild(wdWrap);
-  planDefaults.appendChild(settingsRow(t('defaultRange'), null, SelectField({
-    value:state.range, matchWidth:false, blockWidth:false,
-    options:[{value:'week',label:t('rangeWeek')},{value:'month',label:t('rangeMonth')},{value:'quarter',label:t('rangeQuarter')},{value:'custom',label:t('rangeCustom')}],
-    onChange:v=>{ state.range=v; saveSettings(); renderActiveTab(); }
-  })));
-  card.appendChild(planDefaults);
-  const modeSection = renderCurrentModeRow();
-  modeSection.id = 'settings-mode';
-  card.appendChild(modeSection);
-  const fairnessEl = renderFairnessGroup(); fairnessEl.id = 'settings-fairness'; card.appendChild(fairnessEl);
-  const distanceEl = renderDistanceGroup(); distanceEl.id = 'settings-distance'; card.appendChild(distanceEl);
-  const cadenceEl = renderCadenceGroup(); cadenceEl.id = 'settings-cadence'; card.appendChild(cadenceEl);
-  const weekdaySection = el('div', {class:'settings-section', id:'settings-weekdays'});
-  weekdaySection.appendChild(el('h3', null, t('weekdayGroupTitle')));
-  weekdaySection.appendChild(settingsRow(t('weekdayProfilesRow'), null, el('button', {type:'button', class:'btn-link', onclick:()=>{ state.setupRowOpen.weekdays = true; switchTab('plan'); }}, t('teamEditLink'))));
-  card.appendChild(weekdaySection);
+    })));
+  if(spacingNow==='gap') daysSec.appendChild(labeledField(t('s_gapDays'), t('s_gapDaysHint'), Stepper({min:2, max:14, step:1, value:Math.max(2, cad.gapDays||2), ariaLabel:t('s_gapDays'), onChange:v=>{ state.cadence = Object.assign({}, cad, {gapDays:v}); saveSettings(); renderActiveTab(); }})));
+  daysSec.appendChild(labeledField(t('s_perWeek'), t('s_perWeekHint'), Stepper({min:0, max:99, step:1, value:vbS.perWeek||0, ariaLabel:t('s_perWeek'), onChange:v=>{ state.visitBudget = Object.assign({}, vbS, {perWeek: v>0?v:null}); saveSettings(); renderActiveTab(); }})));
+  daysSec.appendChild(labeledField(t('s_distPick'), t('s_distHint'), wrapSeg(
+    [{value:'near',label:t('s_distNear')},{value:'none',label:t('s_distNone')},{value:'far',label:t('s_distFar')}],
+    leanKey(state.globalDistanceBias||0,'near','far'),
+    v=>{ state.globalDistanceBias = v==='far'?0.5:(v==='near'?-0.5:0); saveSettings(); renderActiveTab(); })));
+  card.appendChild(daysSec);
   const dataSection = el('div', {class:'settings-section', id:'settings-data'});
   dataSection.appendChild(el('h3', null, t('settingsData')));
   const dataRow = el('div', {class:'export-actions-grid'});
@@ -7219,7 +7238,7 @@ function renderSettingsTab(root){
     sections.push([node.id, h && h.textContent ? h.textContent : node.id]);
   });
   const navButtons = {};
-  const SECTION_ICONS = {'settings-appearance':ICONS.palette, 'settings-defaults':ICONS.calendar, 'settings-mode':ICONS.gauge, 'settings-fairness':ICONS.scale, 'settings-distance':ICONS.mapPin, 'settings-cadence':ICONS.repeat, 'settings-weekdays':ICONS.calendarDays, 'settings-data':ICONS.database};
+  const SECTION_ICONS = {'settings-appearance':ICONS.palette, 'settings-people':ICONS.users, 'settings-days':ICONS.calendarDays, 'settings-data':ICONS.database};
   let spyLock = 0;
   function setActiveNav(id){
     Object.keys(navButtons).forEach(key=>{
