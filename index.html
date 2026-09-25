@@ -23,9 +23,9 @@
 <style>
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none !important}
-:root{--bg-page:#F5F1F4; --bg-card:#FBF9FA; --bg-raised:#FFFFFF; --wash-hover:#F3ECF1; --wash-selected:#EDE3EA; --ink-900:#322230; --ink-700:#52414C; --ink-500:#806C7A; --ink-400:#A1909C; --ink-300:#C4B6C0; --hairline:#E9E1E7; --hairline-strong:#DDCFDA; --primary:#6D4461; --primary-hover:#5E3A53; --primary-active:#4F3046; --on-primary:#F9F4F7; --accent-soft:#9A6B8C; --focus-ring:rgba(154,107,140,.45); --shadow-tint:rgba(70,36,64,.07); --ease:cubic-bezier(.2,0,0,1); --gold:#8A6E3C; --gold-soft:#F2ECE0; --danger:#8E4652; --danger-soft:#F6E8EA; --ok:#4F6B57; --ok-soft:#EAF0EB; --r-card:20px; --r-ctl:12px; --r-cta:14px; --r-chip:999px; --shadow-float:0 1px 2px var(--shadow-tint), 0 8px 24px var(--shadow-tint); --motion:160ms var(--ease); --ctl-h:40px; --row-h:48px; --unit:8px}
-:root[data-theme="dark"]{--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#6E606A; --ink-300:#544750; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#6E606A; --ink-300:#544750; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
+:root{--bg-page:#F5F1F4; --bg-card:#FBF9FA; --bg-raised:#FFFFFF; --wash-hover:#F3ECF1; --wash-selected:#EDE3EA; --ink-900:#322230; --ink-700:#52414C; --ink-500:#806C7A; --ink-400:#8E7C89; --ink-300:#C4B6C0; --hairline:#E9E1E7; --hairline-strong:#DDCFDA; --primary:#6D4461; --primary-hover:#5E3A53; --primary-active:#4F3046; --on-primary:#F9F4F7; --accent-soft:#9A6B8C; --focus-ring:rgba(154,107,140,.45); --shadow-tint:rgba(70,36,64,.07); --ease:cubic-bezier(.2,0,0,1); --gold:#7A5F2E; --gold-soft:#F2ECE0; --danger:#8E4652; --danger-soft:#F6E8EA; --ok:#4F6B57; --ok-soft:#EAF0EB; --r-card:20px; --r-ctl:12px; --r-cta:14px; --r-chip:999px; --shadow-float:0 1px 2px var(--shadow-tint), 0 8px 24px var(--shadow-tint); --motion:160ms var(--ease); --ctl-h:40px; --row-h:48px; --unit:8px}
+:root[data-theme="dark"]{--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#857682; --ink-300:#5E515A; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--bg-page:#191419; --bg-card:#211B20; --bg-raised:#282029; --wash-hover:#2C2430; --wash-selected:#33262F; --ink-900:#EDE4EA; --ink-700:#C0B2BB; --ink-500:#8E7F89; --ink-400:#857682; --ink-300:#5E515A; --hairline:#332B32; --hairline-strong:#453A43; --primary:#C79BB8; --primary-hover:#D2ACC2; --primary-active:#B98CA9; --on-primary:#241A21; --accent-soft:#A78CA0; --focus-ring:rgba(199,155,184,.45); --shadow-tint:rgba(10,6,12,.45); --ease:cubic-bezier(.2,0,0,1); --gold:#C9AD7C; --gold-soft:#332C21; --danger:#D18E89; --danger-soft:#332423; --ok:#8FB79A; --ok-soft:#1F2A21}
 }
 html{color-scheme:light dark}
 :root[data-theme="light"]{color-scheme:light}
@@ -48,7 +48,7 @@ button{cursor:pointer}
 a{color:inherit}
 ::selection{background:var(--wash-selected); color:var(--ink-900)}
 :focus{outline:none}
-:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px; border-radius:4px}
+:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
 @media (prefers-reduced-motion: reduce){*{transition:none !important; animation:none !important}
 }
 .app-topbar{max-width:1040px; margin-inline:auto; padding-inline:20px; padding-block:20px 10px; display:flex; align-items:center; justify-content:space-between; gap:16px}
@@ -369,8 +369,6 @@ body{background:#fff; color:#000}
 .fac-row .fmeta::before, .fac-row .fstatus::before{content:attr(data-label) ": "; color:var(--ink-500); font-size:11px; font-weight:600}
 .team-grid{grid-template-columns:1fr 1fr}
 .drawer{width:100vw; max-width:100vw}
-.result-row{grid-template-columns:60px 1fr auto}
-.result-row .rteam{display:none}
 .range-row > *{min-width:100%}
 }
 @media (max-width:420px){.team-grid{grid-template-columns:1fr}
@@ -390,7 +388,7 @@ body{background:#fff; color:#000}
 .result-row{border-radius:var(--r-ctl); transition:background var(--motion), transform var(--motion), box-shadow var(--motion)}
 .result-row:hover{transform:translateY(-1px); box-shadow:var(--skin-lift-hover)}
 .result-row:active{transform:translateY(0)}
-@media (prefers-reduced-motion: no-preference){.result-row{animation:skin-rise .34s var(--ease) both; animation-delay:calc(var(--i, 0) * var(--skin-stagger))}
+@media (prefers-reduced-motion: no-preference){.animate-rows .result-row{animation:skin-rise .34s var(--ease) both; animation-delay:calc(var(--i, 0) * var(--skin-stagger))}
 }
 @keyframes skin-rise{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 .result-row .rteam{max-width:320px}
@@ -428,6 +426,46 @@ body{background:#fff; color:#000}
 .settings-layout .settings-section{scroll-margin-top:calc(var(--tabbar-h, 52px) + 64px)}
 }
 .segmented.wrap{flex-wrap:wrap; border-radius:var(--r-ctl)}
+html{scrollbar-gutter:stable}
+.footer-note{color:var(--ink-400)}
+:root[lang="en"] .settings-section h3, :root[lang="en"] .setup-row-head h3{color:var(--ink-500); font-size:11px}
+.skin-stats .history-row > span:first-child{color:var(--ink-500)}
+.result-row, .results-sticky-head{grid-template-columns:78px minmax(0,1fr) 132px minmax(0,300px)}
+.result-row .rcat{justify-self:start; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.result-row .rcat.rcat-empty{background:none; padding:0}
+.result-row .rteam{max-width:none; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; white-space:normal; overflow:visible}
+.rteam .pill{margin-inline-end:0; cursor:pointer}
+.results-sticky-head{box-shadow:0 1px 0 var(--hairline)}
+.results-sticky-head > span:last-child{text-align:end}
+.result-row.same-date:hover, .result-row.has-following-same-date:hover{transform:none}
+.result-row.dim{opacity:.38}
+.result-row.dim:hover{opacity:.75}
+.result-row.flash{background:var(--wash-selected); box-shadow:0 0 0 2px var(--focus-ring)}
+.totals-bar-name{width:112px}
+.gate-jump{margin-inline-start:auto; font-size:12.5px; color:inherit; flex-shrink:0}
+.plan-actionbar{position:sticky; bottom:16px; z-index:15; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-block:10px; padding-inline:16px 10px; background:color-mix(in srgb, var(--bg-raised) 90%, transparent); -webkit-backdrop-filter:blur(12px) saturate(1.2); backdrop-filter:blur(12px) saturate(1.2); border:1px solid var(--hairline); border-radius:var(--r-cta); box-shadow:var(--shadow-float)}
+.plan-actionbar-status{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--ink-700); min-width:0}
+.plan-actionbar-actions{display:flex; gap:8px; margin-inline-start:auto}
+body:has(.plan-actionbar) .toast-region{bottom:88px}
+.external-bar{position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:95; width:min(640px, calc(100vw - 24px)); box-shadow:var(--shadow-float)}
+@media (prefers-reduced-motion: no-preference){
+  .confirm-dialog{animation:dlg-in .18s var(--ease) both}
+}
+@keyframes dlg-in{from{opacity:0; transform:translate(-50%,-48%) scale(.98)} to{opacity:1; transform:translate(-50%,-50%)}}
+@media (max-width:640px){
+  .results-sticky-head{display:none}
+  .result-row{grid-template-columns:56px minmax(0,1fr) auto; grid-template-areas:"date fac cat" "date team team"; row-gap:6px}
+  .result-row .rdate{grid-area:date} .result-row .rfac{grid-area:fac} .result-row .rcat{grid-area:cat}
+  .result-row .rteam{grid-area:team; justify-content:flex-start}
+  .plan-actionbar{bottom:10px}
+}
+@page{size:A4 landscape; margin:12mm}
+@media print{
+  .plan-actionbar, .external-bar{display:none !important}
+  #printSurface thead{display:table-header-group}
+  #printSurface tr{break-inside:avoid}
+  #printSurface h1{font-size:16px; margin:0 0 8px}
+}
 </style>
 </head>
 <body>
@@ -481,6 +519,17 @@ const MONTHS_EN = {
   jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11
 };
 const WEEKDAY_NAMES_STRIP = /^(sun|mon|tue|wed|thu|fri|sat)\w*\.?\s+/i;
+const MONTHS_AR_NORM = (()=>{
+  const m = new Map();
+  for(const k in MONTHS_AR) m.set(norm(k), MONTHS_AR[k]);
+  [['إبريل',3],['يونيه',5],['يوليه',6]].forEach(([k,v])=>m.set(norm(k), v));
+  return m;
+})();
+function monthIndexFrom(key){
+  const a = MONTHS_AR_NORM.get(norm(key));
+  return a!==undefined ? a : MONTHS_EN[String(key).slice(0,3).toLowerCase()];
+}
+const WEEKDAY_NAMES_STRIP_AR = /^(?:يوم\s+)?(?:ال)?(?:احد|أحد|اثنين|إثنين|ثلاثاء|اربعاء|أربعاء|خميس|جمعة|جمعه|سبت)\s+/;
 function toAsciiDigits(s){
   return s.replace(/[\u0660-\u0669]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x0660+48))
           .replace(/[\u06F0-\u06F9]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x06F0+48));
@@ -490,12 +539,13 @@ function parseDateFlexible(raw){
   let s = toAsciiDigits(String(raw)).trim();
   if(!s) return null;
   s = s.replace(WEEKDAY_NAMES_STRIP,'').trim();
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  s = s.replace(WEEKDAY_NAMES_STRIP_AR,'').trim();
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
   if(m){
     const y=+m[1], mo=+m[2]-1, d=+m[3];
     return validYMD(y,mo,d);
   }
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
   if(m){
     const d=+m[1], mo=+m[2]-1, y=+m[3];
     return validYMD(y,mo,d);
@@ -504,8 +554,7 @@ function parseDateFlexible(raw){
   if(m){
     const d=+m[1], y=+m[3];
     const monKey = m[2].trim();
-    let mo = MONTHS_AR[monKey];
-    if(mo===undefined) mo = MONTHS_EN[monKey.slice(0,3).toLowerCase()];
+    const mo = monthIndexFrom(monKey);
     if(mo===undefined) return null;
     return validYMD(y,mo,d);
   }
@@ -533,15 +582,13 @@ function parseMonthYear(raw){
   m = s.match(/^([A-Za-z\u0600-\u06FF]+)\.?\s+(\d{4})$/);
   if(m){
     const y=+m[2], monKey=m[1].trim();
-    let mo = MONTHS_AR[monKey];
-    if(mo===undefined) mo = MONTHS_EN[monKey.slice(0,3).toLowerCase()];
+    const mo = monthIndexFrom(monKey);
     return (mo!==undefined&&y>=1900&&y<=2200) ? {year:y,month:mo} : null;
   }
   m = s.match(/^(\d{4})\s+([A-Za-z\u0600-\u06FF]+)\.?$/);
   if(m){
     const y=+m[1], monKey=m[2].trim();
-    let mo = MONTHS_AR[monKey];
-    if(mo===undefined) mo = MONTHS_EN[monKey.slice(0,3).toLowerCase()];
+    const mo = monthIndexFrom(monKey);
     return (mo!==undefined&&y>=1900&&y<=2200) ? {year:y,month:mo} : null;
   }
   return null;
@@ -1039,7 +1086,7 @@ function sainteLagueAssign(pool, count, day, ctx){
       if(pairs && pairBlocked(p, slot)) continue;
       const vpf = ctx.facilityPersonVisits ? Math.min(ctx.facilityPersonVisits[ctx.facility.id+'|'+p.id]||0, 6) : 0;
       const familiarity = 1/(1+gamma*vpf);
-      const critMatch = (1 + kappa*4*(critNorm-0.5)*(rankOf(p, ctx.facility.kind)/100-0.5)) * (pairs ? pairTerm(p) : 1);
+      const critMatch = Math.max(0.05, 1 + kappa*4*(critNorm-0.5)*(rankOf(p, ctx.facility.kind)/100-0.5)) * (pairs ? pairTerm(p) : 1);
       let travelTerm, effWeight;
       if(ctx.tctx){
         travelTerm = personTravelTerm(p, ctx.facility, ctx.tctx, ctx.prefSettings||{});
@@ -1072,7 +1119,8 @@ function sainteLagueAssign(pool, count, day, ctx){
         const p = candidates[idx];
         if(!passesFilters(p)) continue;
         if(respectPairs && pairs && pairBlocked(p, slot)) continue;
-        best = p; break;
+        if(!respectPairs && pairs && partnersOf(p.id).some(e=>e.mode==='rigid' && e.type==='avoid' && seated(e.other))) continue;
+        best = p; bestAssignedCount = ctx.assignedCount[p.id]||0; break;
       }
     }
     if(best){
@@ -1135,15 +1183,25 @@ function buildRegistry(seedRows){
   });
 }
 function teamGenderCounts(row){
-  const team = rowTeam(row);
-  const m = team.filter(p=>p.gender==='m').length;
-  return {m, f:team.length-m};
+  let m = 0, f = 0, u = 0;
+  for(const p of rowTeam(row)){
+    if(p.gender==='m') m++;
+    else if(p.gender==='f') f++;
+    else u++;
+  }
+  return {m, f, u};
 }
 function violatesGenderRule(row, rule){
   if(!rule || rule==='off') return false;
-  const {m,f} = teamGenderCounts(row);
+  const {m, f, u} = teamGenderCounts(row);
+  if(u>0) return false;
+  const n = m+f;
   if(rule==='mixed') return m===0 || f===0;
-  if(rule==='31') return (m===2&&f===2)||(m===4&&f===0)||(m===0&&f===4);
+  if(rule==='31'){
+    if(n>=3) return m===0 || f===0 || m===f;
+    if(n===2) return m===0 || f===0;
+    return false;
+  }
   return false;
 }
 function swapPersonBetweenRows(rowA, poolA, personA, rowB, poolB, personB){
@@ -1192,8 +1250,8 @@ function tryFixGenderPair(rowA, rowB, allRows, rule, isUnavailable, isBlocked, p
 function applyGenderBalance(rows, genderRule, isUnavailable, isBlocked, pairs){
   const rule = genderRule || {basic:'31', contracted:'off'};
   const dropped=[];
-  let attempts=0;
   for(const kind of ['basic','contracted']){
+    let attempts=0;
     const kindRule = rule[kind]||'off';
     if(kindRule==='off') continue;
     const kindRows = rows.filter(r=>!r.empty && r.kind===kind);
@@ -1284,7 +1342,7 @@ function dedupeSortDiagnostics(diags){
 function dayCaps(days, weekdayCfg, kDefault){
   return days.map(d => {
     const w = weekdayCfg && weekdayCfg[d.getDay()];
-    return (w && w.visitCap != null) ? w.visitCap : kDefault;
+    return (w && w.visitCap != null) ? Math.min(w.visitCap, kDefault) : kDefault;
   });
 }
 function defaultDayConfig(){
@@ -1846,8 +1904,9 @@ function planShared(opts){
   const dctx = distanceContext(registry);
   const bias = globalDistanceBias||0;
   const repeated = list=>Array.from({length:times}, ()=>list).flat();
-  const rankedBasic = repeated(rankStream(basicFac, days[0]||startDate, NEVER, dctx, bias));
-  const rankedContracted = repeated(rankStream(contractedFac, days[0]||startDate, NEVER, dctx, bias));
+  const uniqBasic = rankStream(basicFac, days[0]||startDate, NEVER, dctx, bias);
+  const uniqContracted = rankStream(contractedFac, days[0]||startDate, NEVER, dctx, bias);
+  const rankedBasic = repeated(uniqBasic), rankedContracted = repeated(uniqContracted);
   const pattern = interleave(resolved.V, resolved.M);
   let bi=0, ci=0;
   const sequence = [];
@@ -1920,11 +1979,18 @@ function planShared(opts){
       }
     }
   }
+  let leftoverBasic = rankedBasic.slice(resolved.M), leftoverContracted = rankedContracted.slice(resolved.R);
+  if(times>1){
+    const placedCount = new Map();
+    for(const r of relocatedRows) placedCount.set(r.facility.id, (placedCount.get(r.facility.id)||0)+1);
+    leftoverBasic = uniqBasic.filter(f=>(placedCount.get(f.id)||0)<times);
+    leftoverContracted = uniqContracted.filter(f=>(placedCount.get(f.id)||0)<times);
+  }
   const planOut = {
     rows, budget, N, days, genderDropped, dctx, globalDistanceBias: bias, pools: poolConfigs(pools),
     planStart: days[0]||startDate, NEVER, times,
-    leftoverBasic: rankedBasic.slice(resolved.M), leftoverContracted: rankedContracted.slice(resolved.R),
-    pinnedOverflow: [...rankedBasic.slice(resolved.M), ...rankedContracted.slice(resolved.R)].filter(f=>f.pinned),
+    leftoverBasic, leftoverContracted,
+    pinnedOverflow: [...leftoverBasic, ...leftoverContracted].filter(f=>f.pinned),
     sharedDrops, sharedNotes, budgetDiagnostics: resolved.diagnostics.concat(weekdayDiagnostics), minDays: resolved.minDays, isShared:true, maxVisitsPerDay:k, sequence
   };
   planOut.diagnostics = buildDiagnostics(planOut);
@@ -1952,21 +2018,24 @@ function computeThirds(nonEmptyRows){
   return thirds.map(t=>({basic:t.filter(r=>r.kind==='basic').length, contracted:t.filter(r=>r.kind==='contracted').length, total:t.length}));
 }
 function computeDeviation(pool, totals, seats, days, isUnavailableFn){
+  totals = totals || {};
   const avail = {};
   for(const p of pool) avail[p.id] = days.filter(d=>!isUnavailableFn(p, d)).length;
-  const fixedSum = pool.filter(p=>p.fixedCount!=null).reduce((s,p)=>s+Math.min(p.fixedCount, avail[p.id]), 0);
+  const isFixed = p=>p.active!==false && p.fixedCount!=null;
+  const wOf = p=>p.weight==null ? 1 : p.weight;
+  const fixedSum = pool.filter(isFixed).reduce((s,p)=>s+Math.min(p.fixedCount, avail[p.id]), 0);
   const remainingSeats = Math.max(0, seats-fixedSum);
   const weightBased = pool.filter(p=>p.active!==false && p.fixedCount==null);
-  const weightAvailSum = weightBased.reduce((s,p)=>s+(p.weight==null?1:p.weight)*avail[p.id], 0);
+  const weightAvailSum = weightBased.reduce((s,p)=>s+wOf(p)*avail[p.id], 0);
   return pool.map(p=>{
     const actual = totals[p.id]||0;
-    let expected, availShort=false;
-    if(p.fixedCount!=null){
+    let expected = 0, availShort = false;
+    if(p.active===false) expected = 0;
+    else if(p.fixedCount!=null){
       expected = Math.min(p.fixedCount, avail[p.id]);
       availShort = avail[p.id]<p.fixedCount;
     }
-    else if(p.active===false) expected = 0;
-    else expected = weightAvailSum>0 ? remainingSeats*((p.weight==null?1:p.weight)*avail[p.id])/weightAvailSum : 0;
+    else expected = weightAvailSum>0 ? remainingSeats*(wOf(p)*avail[p.id])/weightAvailSum : 0;
     return {person:p, actual, expected, deviation: actual-expected, avail:avail[p.id], availShort};
   });
 }
@@ -2567,18 +2636,18 @@ function parseTSV(text){
 }
 function csvFormulaSafe(v){
   const s = String(v==null?'':v);
-  if(/^[=+@]/.test(s)) return "'"+s;
+  if(/^[=+@\t\r]/.test(s)) return "'"+s;
   if(/^-/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) return "'"+s;
   return s;
 }
 function toCSV(rows){
   const esc = v=>{
     const s = csvFormulaSafe(v);
-    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+    return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
   return '\uFEFF'+rows.map(r=>r.map(esc).join(',')).join('\r\n');
 }
-function toTSVLine(row){ return row.map(csvFormulaSafe).join('\t'); }
+function toTSVLine(row){ return row.map(v=>csvFormulaSafe(String(v==null?'':v).replace(/[\t\r\n]+/g,' '))).join('\t'); }
 const HEADER_ALIASES = {
   'جهة المرور':'facility', 'المنطقة':'category', 'الخطة':'cycle',
   'المرور':'typeLabel', 'التاريخ':'date', 'القائم بالمرور':'team'
@@ -2764,12 +2833,13 @@ function offSpanDays(span){
   return daysBetween(new Date(fy,fm-1,fd), new Date(ty,tm-1,td)) + 1;
 }
 function makeUnavailableChecker(){
+  const exc = state.exceptions || new Set();
   return function(person, date){
-    const wd = new Set(person.workWeekdays!=null ? person.workWeekdays : [...state.weekdays]);
-    if(!wd.has(date.getDay())) return true;
     const iso = fmtISO(date);
     if(isOffDay(person.off, iso)) return true;
-    return false;
+    if(person.workWeekdays==null && exc.has(iso)) return false;
+    const wd = new Set(person.workWeekdays!=null ? person.workWeekdays : [...state.weekdays]);
+    return !wd.has(date.getDay());
   };
 }
 function makeBlockedChecker(){
@@ -3032,6 +3102,15 @@ p_rankMain:'الرتبة في الزيارات الأساسية', p_rankContract
 p_rankHint:'١ = الأدنى، ٥ = الأعلى. الرتبة الأعلى توضع في الجهات المهمة أولاً. الرتبة لا تغيّر عدد زيارات الشخص.',
 p_rankChip:(m,c)=>`الرتبة: أساسية ${m} · متعاقدة ${c}`,
 f_importance:'الأهمية',
+externalChangeMsg:'تم تعديل البيانات في نافذة أخرى. أعد التحميل لتجنب فقدان التغييرات.', reloadAction:'إعادة التحميل',
+planRestoreDroppedToast:'تعذّر استرجاع الخطة المحفوظة لأن بعض الجهات أو الأفراد لم يعودوا موجودين',
+undoApproveUnavailable:'لا يمكن التراجع عن الاعتماد بعد إعادة تحميل الصفحة', generatingLabel:'جارٍ التوليد…',
+themeToggleLabel:'تبديل المظهر', langToggleLabel:'تبديل اللغة',
+actionbarReady:n=>`${n} زيارة · جاهزة للاعتماد`, actionbarFailing:(n,f)=>`${n} زيارة · ${f} فحص لم يجتز`, actionbarApproved:'الخطة معتمدة',
+gateJumpAction:'اذهب', highlightingPerson:name=>`زيارات: ${name}`,
+replaceFacilityTitle:'استبدال الجهة', replaceFacilityAction:'استبدال', noReplacement:'لا توجد جهة بديلة مناسبة لهذا اليوم والفريق', replacedManually:'استُبدلت يدويًا',
+emptyPlanNote:'لم تُجدول أي زيارة في هذه الفترة. راجع الأيام والفريق والتوزيع.',
+genderUnknownNote:n=>`${n} من أفراد الفريق بدون نوع محدد — لا يمكن التحقق من قاعدة النوع لزياراتهم`, genderUnset:'غير محدد',
 f_importanceHint:'١ = الأدنى، ٥ = الأعلى. عند ٤ أو ٥ يضم الفريق شخصاً برتبة لا تقل عنها (انظر الإعدادات). لا تغيّر عدد مرات زيارة الجهة.'
 }
 };
@@ -3288,6 +3367,15 @@ p_rankMain:'Rank in main visits', p_rankContracted:'Rank in contracted visits',
 p_rankHint:'1 = lowest, 5 = highest. Higher rank is placed at important facilities first. Rank does not change how many visits a person gets.',
 p_rankChip:(m,c)=>`Rank: main ${m} · contracted ${c}`,
 f_importance:'Importance',
+externalChangeMsg:'Data was changed in another tab. Reload to avoid losing changes.', reloadAction:'Reload',
+planRestoreDroppedToast:'The saved plan couldn\'t be restored because some facilities or people no longer exist',
+undoApproveUnavailable:'Approval can\'t be undone after the page was reloaded', generatingLabel:'Generating…',
+themeToggleLabel:'Toggle theme', langToggleLabel:'Switch language',
+actionbarReady:n=>`${n} visits · ready to approve`, actionbarFailing:(n,f)=>`${n} visits · ${f} checks failing`, actionbarApproved:'Plan approved',
+gateJumpAction:'Show', highlightingPerson:name=>`Visits for: ${name}`,
+replaceFacilityTitle:'Replace facility', replaceFacilityAction:'Replace', noReplacement:'No suitable replacement for this day and team', replacedManually:'Replaced manually',
+emptyPlanNote:'No visits were scheduled in this period. Check days, team, and distribution.',
+genderUnknownNote:n=>`${n} team members have no gender set — the gender rule can\'t be checked for their visits`, genderUnset:'Not set',
 f_importanceHint:'1 = lowest, 5 = highest. At 4 or 5, the team includes someone with at least this rank (see Settings). Does not change how often the facility is visited.'
 };
 function t(key){
@@ -3474,10 +3562,130 @@ function migrateLegacyStore(){
   }
   return s;
 }
+const PLAN_KEY = 'alkhitta.plan.v1';
+let persistFailed = false, externalStoreChange = false, storeWriteFailed = false, planWriteFailed = false;
+function serializePlan(){
+  const p = state.plan, m = state.planMeta;
+  if(!p || !m || !Array.isArray(p.rows)) return null;
+  const iso = d=>d ? fmtISO(d) : null;
+  return {
+    v:1, planId:m.planId, cycle:m.cycle, approved:!!state.planApproved, committed:!!m.committed, stale:!!state.planStale,
+    days:(p.days||[]).map(iso), N:p.N, planStart:iso(p.planStart), NEVER:p.NEVER, times:p.times||1, isShared:!!p.isShared,
+    maxVisitsPerDay:p.maxVisitsPerDay||1, globalDistanceBias:p.globalDistanceBias||0, budget:p.budget, minDays:p.minDays==null ? null : p.minDays,
+    pools:p.pools, sequence:(p.sequence||[]).map(s=>({kind:s.kind})), diagnostics:p.diagnostics||[],
+    budgetDiagnostics:p.budgetDiagnostics||[], sharedNotes:p.sharedNotes||[],
+    sharedDrops:(p.sharedDrops||[]).map(d=>({f:d.facility&&d.facility.id, kind:d.kind, reason:d.reason})),
+    genderDropped:(p.genderDropped||[]).map(g=>Object.assign({}, g, {date: g.date instanceof Date ? fmtISO(g.date) : g.date})),
+    leftoverBasic:(p.leftoverBasic||[]).map(f=>f.id), leftoverContracted:(p.leftoverContracted||[]).map(f=>f.id),
+    pinnedOverflow:(p.pinnedOverflow||[]).map(f=>f.id),
+    rows:p.rows.map(r=>r.empty ? {e:1} : {
+      d:fmtISO(r.date), k:r.kind, f:r.facility.id, r:r.rankInStream==null ? null : r.rankInStream,
+      di:r.dayIdx==null ? null : r.dayIdx, si:r.seqIdx==null ? null : r.seqIdx,
+      t:Object.fromEntries(poolIdsOfRow(r).map(id=>[id, teamOf(r, id).map(x=>x.id)])), o:r.openSeats||null
+    })
+  };
+}
+function deserializePlan(s){
+  if(!s || s.v!==1 || !Array.isArray(s.rows) || !state.registry) return null;
+  const fac = new Map(state.registry.map(f=>[f.id, f]));
+  const ppl = new Map(allPeople().map(x=>[x.id, x]));
+  const D = x=>x ? parseDateFlexible(x) : null;
+  const rows = [];
+  for(const r of s.rows){
+    if(r.e){ rows.push({empty:true}); continue; }
+    const facility = fac.get(r.f);
+    const date = D(r.d);
+    if(!facility || !date) return null;
+    const row = {date, kind:r.k, facility, rankInStream:r.r};
+    if(r.di!=null) row.dayIdx = r.di;
+    if(r.si!=null) row.seqIdx = r.si;
+    for(const id in (r.t||{})){
+      const team = r.t[id].map(pid=>ppl.get(pid));
+      if(team.some(x=>!x)) return null;
+      setTeam(row, id, team);
+    }
+    if(r.o) row.openSeats = r.o;
+    rows.push(row);
+  }
+  const facs = ids=>(ids||[]).map(id=>fac.get(id)).filter(Boolean);
+  return {
+    rows, days:(s.days||[]).map(D), N:s.N, planStart:D(s.planStart), NEVER:s.NEVER, times:s.times, isShared:s.isShared,
+    maxVisitsPerDay:s.maxVisitsPerDay, globalDistanceBias:s.globalDistanceBias, dctx:distanceContext(state.registry),
+    budget:s.budget, minDays:s.minDays, pools:s.pools, sequence:s.sequence, diagnostics:s.diagnostics||[],
+    budgetDiagnostics:s.budgetDiagnostics||[], sharedNotes:s.sharedNotes||[],
+    sharedDrops:(s.sharedDrops||[]).map(d=>({facility:fac.get(d.f), kind:d.kind, reason:d.reason})).filter(d=>d.facility),
+    genderDropped:(s.genderDropped||[]).map(g=>Object.assign({}, g, {date:D(g.date)})),
+    leftoverBasic:facs(s.leftoverBasic), leftoverContracted:facs(s.leftoverContracted), pinnedOverflow:facs(s.pinnedOverflow)
+  };
+}
+function savePlanNow(){
+  if(externalStoreChange) return;
+  let s = null;
+  try{ s = serializePlan(); }
+  catch(e){ console.error('plan serialize failed', e); return; }
+  try{
+    if(s) localStorage.setItem(PLAN_KEY, JSON.stringify(s)); else localStorage.removeItem(PLAN_KEY);
+    planWriteFailed = false;
+    persistFailed = storeWriteFailed || planWriteFailed;
+  }catch(e){
+    const first = !planWriteFailed;
+    planWriteFailed = true; persistFailed = true;
+    if(e && (e.name==='QuotaExceededError' || e.code===22 || e.code===1014)){ if(first) showToast(t('storageQuotaToast')); }
+    else console.error('plan persist failed', e);
+  }
+}
+function buildPlanMeta(plan, keep){
+  keep = keep || {};
+  const pools = livePools();
+  const retiredIds = new Set((state.retiredPool||[]).map(x=>x.id));
+  const peopleCtx = {pools: livePoolMembers(), isUnavailable: makeUnavailableChecker(), maxVisitsPerDay: state.maxVisitsPerDay};
+  const gates = computeGates(plan, state.registry, retiredIds, peopleCtx);
+  const totals = computeTotals(plan.rows, state.pools.map(pl=>pl.id));
+  const nonEmpty = plan.rows.filter(r=>!r.empty);
+  const unavail = makeUnavailableChecker();
+  return {
+    gates, totals, thirds:computeThirds(nonEmpty),
+    deviation:Object.fromEntries(pools.map(pl=>[pl.id, computeDeviation(pl.members, totals[pl.id]||{}, poolSeatTotal(plan, pl), plan.days, unavail)])),
+    nearMisses:computeNearMisses(plan, 10), weightOverrides:computeWeightOverrideNotes(plan),
+    cycle: keep.cycle!=null ? keep.cycle : nextCycleNumber(), planId: keep.planId || uid('plan'), committed: !!keep.committed
+  };
+}
+function relinkOrDropPlan(){
+  const s = serializePlan();
+  const rebuilt = s && deserializePlan(s);
+  if(rebuilt){
+    state.plan = rebuilt;
+    state.planMeta = buildPlanMeta(rebuilt, {cycle:s.cycle, planId:s.planId, committed:s.committed});
+    if(!state.planApproved) state.planStale = true;
+  } else {
+    state.plan = null; state.planMeta = null; state.planApproved = false; state.planStale = false;
+  }
+  savePlanNow();
+}
+function restorePersistedPlan(){
+  let s = null;
+  try{ s = JSON.parse(localStorage.getItem(PLAN_KEY)||'null'); }
+  catch(e){ s = null; }
+  if(!s) return;
+  const rebuilt = deserializePlan(s);
+  if(!rebuilt){
+    try{ localStorage.removeItem(PLAN_KEY); }catch(e){}
+    state.pendingPlanDroppedToast = true;
+    return;
+  }
+  state.plan = rebuilt; state.planApproved = !!s.approved; state.planStale = !!s.stale && !s.approved;
+  state.planMeta = buildPlanMeta(rebuilt, {cycle:s.cycle, planId:s.planId, committed:s.committed});
+}
 function persistStoreNow(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
+  if(externalStoreChange) return;
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    storeWriteFailed = false; persistFailed = storeWriteFailed || planWriteFailed;
+  }
   catch(e){
+    storeWriteFailed = true; persistFailed = true;
     if(e && (e.name==='QuotaExceededError' || e.code===22 || e.code===1014)) showToast(t('storageQuotaToast'));
+    else console.error('persist failed', e);
   }
 }
 function resetAppStorage(){
@@ -3492,7 +3700,7 @@ function flushPendingPersist(){
   if(persistTimer){ clearTimeout(persistTimer); persistTimer=null; persistStoreNow(); }
 }
 function shouldWarnBeforeUnload(){
-  return !!(state.plan && !state.planApproved);
+  return !externalStoreChange && persistFailed && !!(state.plan && !state.planApproved);
 }
 function persistStore(){
   if(persistTimer) clearTimeout(persistTimer);
@@ -3879,7 +4087,9 @@ function saveLocations(){
   markPlanStaleIfNeeded();
 }
 function markPlanStaleIfNeeded(){
-  if(state.plan) state.planStale = true;
+  if(!state.plan || state.planApproved) return;
+  state.planStale = true;
+  if(typeof savePlanNow==='function') savePlanNow();
 }
 function poolMembersOf(id){ return state.poolMembers[id] || (state.poolMembers[id] = []); }
 function initialCountsOf(id){ return state.initialCounts[id] || (state.initialCounts[id] = {}); }
@@ -4022,7 +4232,7 @@ function Popover(anchor, buildContent, opts){
     if(popEl && !popEl.contains(e.target) && e.target!==anchor && !anchor.contains(e.target)) close();
   }
   function onKeydown(e){
-    if(e.key==='Escape'){ e.stopPropagation(); close(); }
+    if(e.key==='Escape' && isTopOverlay(close)){ e.preventDefault(); e.stopImmediatePropagation(); close(); }
   }
   function open(){
     if(activePopover) activePopover.close();
@@ -4044,12 +4254,14 @@ function Popover(anchor, buildContent, opts){
     window.addEventListener('scroll', position, true);
     anchor.classList.add('open');
     activePopover = {close};
+    pushOverlay(close);
     if(opts.onOpen) opts.onOpen(popEl);
     const f = popEl.querySelector('[data-autofocus]') || popEl.querySelector('input,button');
     if(f) f.focus();
   }
   function close(){
     if(!popEl) return;
+    popOverlay(close);
     if(resizeObs){ resizeObs.disconnect(); resizeObs = null; }
     document.removeEventListener('mousedown', onDocMouseDown, true);
     document.removeEventListener('keydown', onKeydown, true);
@@ -4535,6 +4747,18 @@ function TokenFieldInput(config){
 }
 let activeDrawerClose = null;
 let settingsScrollHandler = null;
+const overlayStack = [];
+function pushOverlay(fn){ overlayStack.push(fn); }
+function popOverlay(fn){ const i = overlayStack.lastIndexOf(fn); if(i>=0) overlayStack.splice(i, 1); }
+function isTopOverlay(fn){ return overlayStack[overlayStack.length-1]===fn; }
+function requestGenerate(btn){
+  const label = btn ? btn.textContent : null;
+  if(btn){ btn.disabled = true; btn.textContent = t('generatingLabel'); }
+  requestAnimationFrame(()=>setTimeout(()=>{
+    handleGenerate();
+    if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = label; }
+  }, 0));
+}
 function openDrawer(title, bodyFn, footerFn, breadcrumb){
   if(activeDrawerClose) activeDrawerClose();
   const scrim = el('div', {class:'scrim'});
@@ -4574,10 +4798,11 @@ function openDrawer(title, bodyFn, footerFn, breadcrumb){
     if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
     else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
   }
-  function onKey(e){ if(e.key==='Escape') close(); if(e.key==='Tab') trapFocus(e); }
+  function onKey(e){ if(!isTopOverlay(close)) return; if(e.key==='Escape') close(); if(e.key==='Tab') trapFocus(e); }
   document.addEventListener('keydown', onKey, true);
   scrim.addEventListener('click', ()=>close());
   function close(){
+    popOverlay(close);
     document.removeEventListener('keydown', onKey, true);
     scrim.classList.remove('show'); drawer.classList.remove('show');
     document.body.classList.remove('drawer-open');
@@ -4585,6 +4810,7 @@ function openDrawer(title, bodyFn, footerFn, breadcrumb){
     if(activeDrawerClose===close) activeDrawerClose = null;
     if(prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus();
   }
+  pushOverlay(close);
   activeDrawerClose = close;
   const f = drawer.querySelector('[data-autofocus]');
   if(f) f.focus(); else head.querySelector('button').focus();
@@ -4592,7 +4818,7 @@ function openDrawer(title, bodyFn, footerFn, breadcrumb){
 }
 let toastRegionEl = null;
 function ensureToastRegion(){
-  if(!toastRegionEl){ toastRegionEl = el('div', {class:'toast-region', 'aria-live':'polite'}); document.body.appendChild(toastRegionEl); }
+  if(!toastRegionEl){ toastRegionEl = el('div', {class:'toast-region', role:'status', 'aria-live':'polite'}); document.body.appendChild(toastRegionEl); }
   return toastRegionEl;
 }
 function showToast(msg, action){
@@ -4602,9 +4828,10 @@ function showToast(msg, action){
     children.push(el('button', {type:'button', class:'btn-link', style:'color:inherit;margin-inline-start:10px;pointer-events:auto', onclick:()=>{ action.onClick(); toastEl.classList.remove('show'); }}, action.label));
   }
   const toastEl = el('div', {class:'toast', style: action ? 'pointer-events:auto' : ''}, children);
+  while(region.children.length>=3) region.removeChild(region.firstChild);
   region.appendChild(toastEl);
   requestAnimationFrame(()=>toastEl.classList.add('show'));
-  setTimeout(()=>{ toastEl.classList.remove('show'); setTimeout(()=>toastEl.remove(), 200); }, action ? 4500 : 2500);
+  setTimeout(()=>{ toastEl.classList.remove('show'); setTimeout(()=>toastEl.remove(), 200); }, action ? 8000 : 2500);
 }
 function showConfirmDialog(title, message, opts){
   opts = opts || {};
@@ -4629,23 +4856,35 @@ function showConfirmDialog(title, message, opts){
     if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
     else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
   }
-  function onKey(e){ if(e.key==='Escape') close(); if(e.key==='Tab') trapFocus(e); }
+  function onKey(e){ if(!isTopOverlay(close)) return; if(e.key==='Escape') close(); if(e.key==='Tab') trapFocus(e); }
   document.addEventListener('keydown', onKey, true);
   scrim.addEventListener('click', close);
   function close(){
+    popOverlay(close);
     document.removeEventListener('keydown', onKey, true); scrim.remove(); dialog.remove();
     if(activeConfirmClose===close) activeConfirmClose = null;
     if(prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus();
   }
+  pushOverlay(close);
   activeConfirmClose = close;
-  okBtn.focus();
+  (opts.danger ? cancelBtn : okBtn).focus();
 }
+const ICON_THEME_AUTO = svgIcon('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/>');
 const WORDMARK_SVG = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 3a13 13 0 1 0 13 13"/><path d="M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6"/><circle cx="8.5" cy="21" r="2.1" fill="currentColor" stroke="none"/><circle cx="25.5" cy="14.6" r="2.1" fill="currentColor" stroke="none"/></svg>';
+const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+  + '<style>.t{fill:#6D4461}.g{stroke:#F9F4F7}.d{fill:#F9F4F7}'
+  + '@media (prefers-color-scheme: dark){.t{fill:#C79BB8}.g{stroke:#241A21}.d{fill:#241A21}}</style>'
+  + '<rect class="t" width="32" height="32" rx="8"/>'
+  + '<g transform="translate(4.8 4.8) scale(.7)" fill="none" stroke-width="3.4" stroke-linecap="round">'
+  + '<path class="g" d="M16 3a13 13 0 1 0 13 13"/>'
+  + '<path class="g" d="M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6"/>'
+  + '<circle class="d" cx="8.5" cy="21" r="2.8"/><circle class="d" cx="25.5" cy="14.6" r="2.8"/>'
+  + '</g></svg>';
 function setupFavicon(){
-  const svg = WORDMARK_SVG.replace(/currentColor/g, '#6D4461');
+  document.querySelectorAll('link[rel~="icon"]').forEach(n=>n.remove());
   const link = document.createElement('link');
   link.rel = 'icon'; link.type = 'image/svg+xml';
-  link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  link.href = 'data:image/svg+xml,' + encodeURIComponent(FAVICON_SVG);
   document.head.appendChild(link);
 }
 const TABS = ['plan','weekdays','summary','facilities','team','settings'];
@@ -4655,6 +4894,13 @@ function applyTheme(){
   if(state.theme!=='light' && state.theme!=='dark') state.theme = 'auto';
   if(state.theme==='auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', state.theme);
+  syncThemeColor();
+}
+function syncThemeColor(){
+  let m = document.querySelector('meta[name="theme-color"]');
+  if(!m){ m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-page').trim();
+  if(bg) m.content = bg;
 }
 function cycleTheme(){
   state.theme = state.theme==='light' ? 'dark' : (state.theme==='dark' ? 'auto' : 'light');
@@ -4677,9 +4923,9 @@ function renderTopbar(){
   clear(root);
   root.appendChild(el('div', {class:'wordmark'}, [el('span', {class:'wordmark-mark', html:WORDMARK_SVG}), el('span', {class:'wordmark-name'}, t('appName'))]));
   const controls = el('div', {class:'topbar-controls'});
-  const themeIcon = state.theme==='dark' ? ICONS.moon : (state.theme==='light' ? ICONS.sun : ICONS.globe);
-  controls.appendChild(el('button', {type:'button', class:'icon-btn', 'aria-label':'theme', html:themeIcon, onclick:cycleTheme}));
-  controls.appendChild(el('button', {type:'button', class:'icon-btn', 'aria-label':'language', onclick:toggleLang}, state.lang==='ar'?'EN':'AR'));
+  const themeIcon = state.theme==='dark' ? ICONS.moon : (state.theme==='light' ? ICONS.sun : ICON_THEME_AUTO);
+  controls.appendChild(el('button', {type:'button', class:'icon-btn', 'aria-label':t('themeToggleLabel'), title:t('themeToggleLabel'), html:themeIcon, onclick:cycleTheme}));
+  controls.appendChild(el('button', {type:'button', class:'icon-btn', 'aria-label':t('langToggleLabel'), title:t('langToggleLabel'), onclick:toggleLang}, state.lang==='ar'?'EN':'AR'));
   root.appendChild(controls);
 }
 function renderTabbar(){
@@ -4691,6 +4937,7 @@ function renderTabbar(){
     const selected = state.tab===tab;
     const btn = el('button', {
       type:'button', class:'tab-btn', role:'tab', id:'tab-'+tab, 'aria-selected': selected?'true':'false',
+      'aria-label':labels[tab], title:labels[tab],
       tabindex: selected?'0':'-1', onclick:()=>switchTab(tab)
     }, [
       el('span', {html:tabIcons[tab], 'aria-hidden':'true'}),
@@ -4745,6 +4992,7 @@ function renderActiveTab(){
   applySettingsRestore();
 }
 function initShell(){
+  if(TABS.indexOf(state.tab)<0) state.tab = 'plan';
   if(state.lang!=='ar' && state.lang!=='en') state.lang = 'ar';
   document.title = t('appName');
   document.documentElement.lang = state.lang;
@@ -5096,6 +5344,7 @@ function planToRows(plan, cycle, exportOpts){
   return {headers, rows};
 }
 function nextCycleNumber(){ return (state.lastCycleNumber||0)+1; }
+function planCycle(){ return (state.planMeta && state.planMeta.cycle!=null) ? state.planMeta.cycle : nextCycleNumber(); }
 function downloadBlob(bytes, filename, mime){
   const blob = new Blob([bytes], {type:mime});
   const url = URL.createObjectURL(blob);
@@ -5104,17 +5353,17 @@ function downloadBlob(bytes, filename, mime){
   setTimeout(()=>URL.revokeObjectURL(url), 1500);
 }
 function doExportXlsx(){
-  const {headers, rows} = planToRows(state.plan, nextCycleNumber(), currentExportOpts());
+  const {headers, rows} = planToRows(state.plan, planCycle(), currentExportOpts());
   const bytes = buildXlsxBytes(headers, rows, headers.map(()=>18));
   downloadBlob(bytes, 'الخطة.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 function doExportCsv(){
-  const {headers, rows} = planToRows(state.plan, nextCycleNumber(), currentExportOpts());
+  const {headers, rows} = planToRows(state.plan, planCycle(), currentExportOpts());
   const text = toCSV([headers, ...rows]);
   downloadBlob(new TextEncoder().encode(text), 'الخطة.csv', 'text/csv;charset=utf-8');
 }
 function doCopyTsv(){
-  const {headers, rows} = planToRows(state.plan, nextCycleNumber(), currentExportOpts());
+  const {headers, rows} = planToRows(state.plan, planCycle(), currentExportOpts());
   const text = [headers, ...rows].map(toTSVLine).join('\n');
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>showToast(t('tsvCopied')));
   else{
@@ -5126,7 +5375,12 @@ function doCopyTsv(){
 function buildPrintSurface(){
   const surface = document.getElementById('printSurface');
   clear(surface);
-  const {headers, rows} = planToRows(state.plan, nextCycleNumber(), currentExportOpts());
+  surface.setAttribute('dir', state.lang==='ar' ? 'rtl' : 'ltr');
+  surface.setAttribute('lang', state.lang);
+  const {headers, rows} = planToRows(state.plan, planCycle(), currentExportOpts());
+  const dates = state.plan.rows.filter(r=>!r.empty).map(r=>fmtISO(r.date)).sort();
+  const range = dates.length ? formatDateDisplay(dates[0])+(dates[dates.length-1]!==dates[0] ? ' – '+formatDateDisplay(dates[dates.length-1]) : '') : '';
+  surface.appendChild(el('h1', null, t('appName')+' '+planCycle()+(range ? ' — '+range : '')));
   const table = el('table');
   const thead = el('thead', null, el('tr', null, headers.map(h=>el('th', null, h))));
   const tbody = el('tbody', null, rows.map(r=>el('tr', null, r.map(v=>el('td', null, String(v))))));
@@ -5223,7 +5477,7 @@ function openExportDrawer(){
     body.appendChild(excWrap);
     const previewField = el('div', {class:'field'});
     previewField.appendChild(el('label', {class:'field-label'}, t('exportPreviewTitle')));
-    const {headers, rows} = planToRows(state.plan, nextCycleNumber(), currentExportOpts());
+    const {headers, rows} = planToRows(state.plan, planCycle(), currentExportOpts());
     const previewWrap = el('div', {class:'export-preview'});
     const table = el('table');
     table.appendChild(el('thead', null, el('tr', null, headers.map(h=>el('th',null,h)))));
@@ -5533,19 +5787,19 @@ function coverageWindow(){
   const peopleSig = activePoolPeople().map(p=>[p.id, p.pool, p.active, p.off, p.workWeekdays]);
   const key = JSON.stringify([state.goal, B, Cc, fmtISO(start), [...state.weekdays], [...state.holidays], [...(state.exceptions||[])], state.dayDefaults, state.dayOverrides, state.maxVisitsPerDay, state.visitBudget&&state.visitBudget.perWeek, state.poolUtilizationCap, state.pools, peopleSig]);
   if(coverageCache && coverageCache.key===key) return coverageCache.value;
-  const window = resolveCoverageWindow({
+  const cw = resolveCoverageWindow({
     start, B, Cc, pools:livePools(), isUnavailable:makeUnavailableChecker(), weekdays:state.weekdays, holidays:state.holidays,
     exceptions:state.exceptions||new Set(), weekdayCfg:resolvedWeekdays2(), k:state.maxVisitsPerDay||1,
     perWeek:state.visitBudget ? state.visitBudget.perWeek : null, rho:state.poolUtilizationCap==null ? 0.85 : state.poolUtilizationCap
   });
-  const value = window ? Object.assign({start}, window) : null;
+  const value = cw ? Object.assign({start}, cw) : null;
   coverageCache = {key, value};
   return value;
 }
 function resolveDateRangeState(){
   if(state.goal.mode==='coverage'){
-    const window = coverageWindow();
-    return window ? {start:window.start, end:window.end} : null;
+    const cw = coverageWindow();
+    return cw ? {start:cw.start, end:cw.end} : null;
   }
   const start0 = todayStart();
   if(state.range==='custom'){
@@ -5624,13 +5878,18 @@ function poolSeatTotal(plan, pool){
   return plan.rows.reduce((sum,r)=>r.empty ? sum : sum+seatsFor(pool, r.kind, r.facility.category), 0);
 }
 function formatDateShort(date){ return `${t('weekdaysShort')[date.getDay()]} ${date.getDate()}`; }
+function genderUnknownDiags(){
+  const r = state.genderRule || {};
+  if((r.basic||'off')==='off' && (r.contracted||'off')==='off') return [];
+  const n = livePools().flatMap(pl=>pl.members).filter(p=>p.active!==false && p.gender!=='m' && p.gender!=='f').length;
+  return n ? [{severity:'warn', code:'gender-unknown', ar:I18N.ar.genderUnknownNote(n), en:I18N.en.genderUnknownNote(n)}] : [];
+}
 function handleGenerate(){
   const range = resolveDateRangeState();
   if(!range) return;
   try {
   const pools = livePools();
   const rules = activePairRules();
-  const retiredIds = new Set(state.retiredPool.map(p=>p.id));
   const plan = generatePlan({
     registry: state.registry, pools, pairRules: rules,
     startDate: range.start, endDate: range.end, weekdays: state.weekdays, holidays: state.holidays, exceptions: state.exceptions||new Set(),
@@ -5645,29 +5904,19 @@ function handleGenerate(){
     originMode: state.originMode, originStrength: state.originStrength, critMatchStrength: state.critMatchStrength, critMode: state.critMode, visitBudget: state.visitBudget, goal: state.goal,
     preferenceWindow: state.preferenceWindow
   });
-  const peopleCtx = {pools: livePoolMembers(), isUnavailable: makeUnavailableChecker(), maxVisitsPerDay: state.maxVisitsPerDay};
-  const gates = computeGates(plan, state.registry, retiredIds, peopleCtx);
-  const totals = computeTotals(plan.rows, state.pools.map(pl=>pl.id)); const nonEmpty = plan.rows.filter(r=>!r.empty);
-  const unavailChecker = makeUnavailableChecker();
-  const weightOverrides = computeWeightOverrideNotes(plan);
+  state.plan = plan;
+  state.planMeta = buildPlanMeta(plan);
   const floorNotes = state.critMode==='require' ? rankFloorNotes(plan, pools) : [];
   const pairNotes = pairRuleNotes(plan, rules);
-  plan.diagnostics = dedupeSortDiagnostics((plan.diagnostics||[]).concat(weightOverrides.map(diagFromWeightOverride), floorNotes.map(diagFromRankFloor), pairNotes.map(diagFromPairRule)));
-  state.plan = plan;
-  state.planMeta = {
-    gates, totals, thirds: computeThirds(nonEmpty),
-    deviation: Object.fromEntries(pools.map(pl=>[pl.id, computeDeviation(pl.members, totals[pl.id], poolSeatTotal(plan, pl), plan.days, unavailChecker)])),
-    nearMisses: computeNearMisses(plan, 10),
-    weightOverrides,
-    cycle: nextCycleNumber(),
-    planId: uid('plan')
-  }; state.planApproved = false;
-  approveSnapshot = null;
-  state.planStale = false; pruneExportExceptions();
+  plan.diagnostics = dedupeSortDiagnostics((plan.diagnostics||[]).concat(state.planMeta.weightOverrides.map(diagFromWeightOverride), floorNotes.map(diagFromRankFloor), pairNotes.map(diagFromPairRule), genderUnknownDiags()));
+  state.planApproved = false; approveSnapshot = null; state.planStale = false; pruneExportExceptions();
+  state.resultsFocusPerson = null; state.animateResults = true;
+  savePlanNow();
   renderActiveTab();
   const live = document.getElementById('liveRegion');
   if(live) live.textContent = t('resultsTitle')+' — '+plan.rows.filter(r=>!r.empty).length;
   } catch(err){
+    console.error(err);
     showToast(t('generateFailedToast'));
     if(state.plan){
       state.plan.diagnostics = dedupeSortDiagnostics((state.plan.diagnostics||[]).concat([{severity:'error', code:'generate-failed', ar:`تعذّر توليد الخطة: ${(err&&err.message)||err}`, en:`Failed to generate the plan: ${(err&&err.message)||err}`}]));
@@ -5688,6 +5937,7 @@ function handleApprovePlan(){
   if(state.planMeta && state.planMeta.committed) return;
   if(state.planStale) return;
   if(!state.plan || !state.planMeta) return;
+  if(!state.plan.rows.some(r=>!r.empty)) return;
   approveSnapshot = {
     planId: state.planMeta.planId,
     registry: serializeRegistry(state.registry),
@@ -5709,17 +5959,16 @@ function handleApprovePlan(){
   }
   state.lastCycleNumber = state.planMeta.cycle; state.planApproved = true;
   state.planMeta.committed = true;
-  saveRegistry(); saveHistoryStats(); renderActiveTab();
+  saveRegistry(); saveHistoryStats(); savePlanNow(); renderActiveTab();
 }
 function handleUndoApprove(){
-  if(approveSnapshot && state.planMeta && approveSnapshot.planId===state.planMeta.planId){
-    state.registry = deserializeRegistry(approveSnapshot.registry); state.facilityPersonVisits = approveSnapshot.facilityPersonVisits;
-    state.initialCounts = approveSnapshot.initialCounts;
-    state.lastCycleNumber = approveSnapshot.lastCycleNumber; relinkPlanFacilities(); saveRegistry(); saveHistoryStats();
-    approveSnapshot = null;
-  }
-  if(state.planMeta) state.planMeta.committed = false;
-  state.planApproved = false; renderActiveTab();
+  if(!(approveSnapshot && state.planMeta && approveSnapshot.planId===state.planMeta.planId)){ showToast(t('undoApproveUnavailable')); return; }
+  state.registry = deserializeRegistry(approveSnapshot.registry); state.facilityPersonVisits = approveSnapshot.facilityPersonVisits;
+  state.initialCounts = approveSnapshot.initialCounts;
+  state.lastCycleNumber = approveSnapshot.lastCycleNumber; relinkPlanFacilities(); saveRegistry(); saveHistoryStats();
+  approveSnapshot = null;
+  state.planMeta.committed = false;
+  state.planApproved = false; savePlanNow(); renderActiveTab();
 }
 function bindDisclosureHead(head, isOpen, bodyId, focusKey, toggle){
   head.setAttribute('role', 'button');
@@ -5800,9 +6049,9 @@ function renderCoverageGoal(){
   if(goal.start) startRow.appendChild(el('button', {type:'button', class:'chip', onclick:()=>setGoal({start:null})}, t('goalStartToday')));
   wrap.appendChild(startRow);
   const targets = goalTargets().length;
-  const window = coverageWindow();
+  const cw = coverageWindow();
   wrap.appendChild(el('p', {class:'field-hint', style:'margin-block-start:12px'}, t('coverageFacilityCount')(targets)));
-  const line = !targets ? t('coverageNoTargets') : (window ? t('coverageEndLine')(formatDateDisplay(fmtISO(window.end)), window.workingDays) : t('coverageUnreachable'));
+  const line = !targets ? t('coverageNoTargets') : (cw ? t('coverageEndLine')(formatDateDisplay(fmtISO(cw.end)), cw.workingDays) : t('coverageUnreachable'));
   wrap.appendChild(el('p', {style:'font-weight:600;margin-block-start:6px'}, line));
   return wrap;
 }
@@ -5968,14 +6217,14 @@ function renderPlanTab(root){
   if(state.planStale){
     const bar = el('div', {class:'stale-bar'}, [
       el('span', null, t('planStaleMsg')),
-      el('button', {type:'button', onclick:handleGenerate}, t('regenerateAction'))
+      el('button', {type:'button', onclick:e=>requestGenerate(e.currentTarget)}, t('regenerateAction'))
     ]); root.appendChild(bar);
   }
   const setupCard = el('div', {class:'card'});
   setupCard.appendChild(renderSetupRow('period','periodTitle', ()=>{
     if(state.goal.mode==='coverage'){
-      const window = coverageWindow();
-      return window ? t('coverageSummary')(formatDateDisplay(fmtISO(window.end)), window.workingDays) : t('coverageUnreachable');
+      const cw = coverageWindow();
+      return cw ? t('coverageSummary')(formatDateDisplay(fmtISO(cw.end)), cw.workingDays) : t('coverageUnreachable');
     }
     const days = computeWorkingDaysListState(); const wdNames = [...state.weekdays].sort().map(i=>t('weekdaysShort')[i]).join('، ');
     return t('workingDaysSummary')(days.length, wdNames);
@@ -5994,33 +6243,24 @@ function renderPlanTab(root){
   importRow.appendChild(el('button', {type:'button', class:'btn-link', onclick:()=>openImportDrawer('history')}, t('historyImportLink')));
   setupCard.appendChild(importRow); root.appendChild(setupCard);
   if(!state.plan){
-    const genBtn = el('button', {type:'button', class:'btn btn-primary btn-block sticky-primary', disabled: !resolveDateRangeState(), onclick:handleGenerate}, t('generateBtn'));
+    const genBtn = el('button', {type:'button', class:'btn btn-primary btn-block sticky-primary', disabled: !resolveDateRangeState(), onclick:e=>requestGenerate(e.currentTarget)}, t('generateBtn'));
     root.appendChild(genBtn); return;
   }
-  renderResultsSection(root); renderReviewSection(root);
+  renderResultsSection(root); renderReviewSection(root); renderPlanActionBar(root);
 }
 function poolTone(id){ return id==='fin' ? 'fin' : (id==='clin' ? 'clin' : 'alt'); }
 function refreshPlanDerivedState(){
   if(!state.plan || !state.planMeta) return;
-  const plan = state.plan;
-  const pools = livePools();
-  const retiredIds = new Set(state.retiredPool.map(p=>p.id));
-  const peopleCtx = {pools: livePoolMembers(), isUnavailable: makeUnavailableChecker(), maxVisitsPerDay: state.maxVisitsPerDay};
-  const nonEmpty = plan.rows.filter(r=>!r.empty);
-  const totals = computeTotals(plan.rows, state.pools.map(pl=>pl.id));
-  const unavailChecker = makeUnavailableChecker();
-  state.planMeta.totals = totals;
-  state.planMeta.thirds = computeThirds(nonEmpty);
-  state.planMeta.deviation = Object.fromEntries(pools.map(pl=>[pl.id, computeDeviation(pl.members, totals[pl.id], poolSeatTotal(plan, pl), plan.days, unavailChecker)]));
-  state.planMeta.gates = computeGates(plan, state.registry, retiredIds, peopleCtx);
-  state.planMeta.nearMisses = computeNearMisses(plan, 10);
+  const m = state.planMeta;
+  state.planMeta = buildPlanMeta(state.plan, {cycle:m.cycle, planId:m.planId, committed:m.committed});
+  savePlanNow();
 }
 function openRowDrawer(row, plan){
   const streamRows = plan.rows.filter(r=>!r.empty && r.kind===row.kind);
   openDrawer(row.facility.name, ()=>{
     const body = el('div', null); const whyCard = el('div', null);
     whyCard.appendChild(el('h3', {style:'font-size:13px;color:var(--ink-500);margin-block-end:8px'}, t('whyTitle')));
-    whyCard.appendChild(el('p', null, t('rankLine')(row.rankInStream, streamRows.length, row.kind==='basic'?t('inStreamBasic'):t('inStreamContracted'))));
+    whyCard.appendChild(el('p', null, row.rankInStream==null ? t('replacedManually') : t('rankLine')(row.rankInStream, streamRows.length, row.kind==='basic'?t('inStreamBasic'):t('inStreamContracted'))));
     const f = row.facility; const overdue = f.pinned ? null : (f.lastVisit ? daysBetween(f.lastVisit, plan.planStart) : null);
     const dTerm = distanceTerm(f, plan.dctx, plan.globalDistanceBias); const weight = f.weight==null?1:f.weight;
     const score = f.pinned ? '∞' : (overdue==null ? t('neverVisitedShort') : Math.round(overdue*weight*dTerm));
@@ -6028,6 +6268,32 @@ function openRowDrawer(row, plan){
     if(overdue!=null) brk.appendChild(el('div', {class:'score-line'}, t('scoreLine')(overdue, weight, dTerm.toFixed(2), score)));
     else brk.appendChild(el('div', {class:'score-line'}, t('neverVisitedShort'))); whyCard.appendChild(brk);
     body.appendChild(whyCard);
+    if(!state.planApproved){
+      const repCard = el('div', {style:'margin-block-start:18px'});
+      repCard.appendChild(el('h3', {style:'font-size:13px;color:var(--ink-500);margin-block-end:8px'}, t('replaceFacilityTitle')));
+      const repLine = el('div', {class:'alt-row'});
+      repLine.appendChild(el('span', {class:'alt-name'}, row.facility.name));
+      const repBtn = el('button', {type:'button', class:'btn btn-sm'}, t('replaceFacilityAction'));
+      const repPop = Popover(repBtn, ()=>{
+        const list = el('div', {class:'popover-list'});
+        const candidates = replacementCandidates(row, plan);
+        if(!candidates.length) list.appendChild(el('div', {class:'popover-item'}, t('noReplacement')));
+        candidates.forEach(f=>{
+          list.appendChild(el('button', {type:'button', class:'popover-item', onclick:()=>{
+            const old = row.facility; row.facility = f; row.rankInStream = null; row.dayExplain = null;
+            for(const id of poolIdsOfRow(row)) setExplain(row, id, null);
+            const key = row.kind==='basic' ? 'leftoverBasic' : 'leftoverContracted';
+            plan[key] = [old, ...(plan[key]||[]).filter(x=>x.id!==f.id)];
+            refreshPlanDerivedState(); repPop.close(); activeDrawerClose && activeDrawerClose(); renderActiveTab();
+          }}, f.name+' · '+f.category));
+        });
+        listKeyNav(list);
+        return list;
+      }, {});
+      repLine.appendChild(repBtn);
+      repCard.appendChild(repLine);
+      body.appendChild(repCard);
+    }
     if(row.dayExplain){
       const dayCard = el('div', {style:'margin-block-start:18px'});
       dayCard.appendChild(el('h3', {style:'font-size:13px;color:var(--ink-500);margin-block-end:8px'}, t('whyThisDayTitle')));
@@ -6104,9 +6370,23 @@ function openRowDrawer(row, plan){
 }
 function renderResultsSection(root){
   const plan = state.plan; const card = el('div', {class:'card'});
+  if(state.animateResults){ card.classList.add('animate-rows'); state.animateResults = false; }
   const head = el('div', {class:'results-head'}); head.appendChild(el('h2', null, t('resultsTitle')));
-  head.appendChild(el('button', {type:'button', class:'btn btn-sm btn-ghost', onclick:handleGenerate}, t('regenerateBtn')));
+  head.appendChild(el('button', {type:'button', class:'btn btn-sm btn-ghost', onclick:e=>requestGenerate(e.currentTarget)}, t('regenerateBtn')));
   card.appendChild(head);
+  let focusName = null;
+  if(state.resultsFocusPerson){
+    for(const r of plan.rows){
+      if(r.empty) continue;
+      const hit = rowTeam(r).find(x=>x.id===state.resultsFocusPerson);
+      if(hit){ focusName = hit.name; break; }
+    }
+    if(focusName==null) state.resultsFocusPerson = null;
+  }
+  if(focusName!=null){
+    card.appendChild(el('div', {class:'chip-row', style:'margin-block-end:8px'}, el('button', {type:'button', class:'chip active', onclick:()=>{ state.resultsFocusPerson = null; renderActiveTab(); }}, t('highlightingPerson')(focusName)+'  ×')));
+  }
+  if(!plan.rows.some(r=>!r.empty)) card.appendChild(el('p', {class:'card-summary'}, t('emptyPlanNote')));
   card.appendChild(el('div', {class:'results-sticky-head'}, [el('span',null,t('colDate')), el('span',null,t('colFacility')), el('span',null,t('colCategory')), el('span',null,t('colTeam'))]));
   let curMonth = null, curDateKey = null, rowIdx = 0;
   for(let i=0;i<plan.rows.length;i++){
@@ -6124,14 +6404,17 @@ function renderResultsSection(root){
     const nextRow = plan.rows[i+1];
     const hasFollowingSameDate = !!(nextRow && !nextRow.empty && fmtISO(nextRow.date)===dateKey);
     const openSeatsN = openSeatCount(row);
-    const teamPills = poolIdsOfRow(row).flatMap(id=>teamOf(row, id).map(p=>el('span', {class:'pill '+poolTone(id), 'data-p':p.id}, p.name)));
+    const teamPills = poolIdsOfRow(row).flatMap(id=>teamOf(row, id).map(person=>el('span', {
+      class:'pill '+poolTone(id)+(state.resultsFocusPerson===person.id ? ' hl' : ''), 'data-p':person.id,
+      onclick:e=>{ e.stopPropagation(); state.resultsFocusPerson = state.resultsFocusPerson===person.id ? null : person.id; renderActiveTab(); }
+    }, person.name)));
     if(openSeatsN){
       teamPills.push(el('span', {class:'pill', style:'background:var(--danger-soft);color:var(--danger)'}, t('openSeatsMarker')(openSeatsN)));
     }
-    const rowEl = el('button', {type:'button', class:'result-row'+(row.kind==='contracted'?' contracted':'')+(sameDateAsPrev?' same-date':'')+(hasFollowingSameDate?' has-following-same-date':'')+(openSeatsN?' open-seats':''), onclick:()=>openRowDrawer(row, plan)}, [
+    const rowEl = el('button', {type:'button', class:'result-row'+(row.kind==='contracted'?' contracted':'')+(sameDateAsPrev?' same-date':'')+(hasFollowingSameDate?' has-following-same-date':'')+(openSeatsN?' open-seats':'')+(state.resultsFocusPerson && !rowTeam(row).some(x=>x.id===state.resultsFocusPerson) ? ' dim' : ''), 'data-ri':String(i), onclick:()=>openRowDrawer(row, plan)}, [
       el('span', {class:'rdate'}, sameDateAsPrev?'':formatDateShort(row.date)),
       el('span', {class:'rfac'}, row.facility.name),
-      el('span', {class:'rcat'}, row.facility.category),
+      row.facility.category ? el('span', {class:'rcat'}, row.facility.category) : el('span', {class:'rcat rcat-empty', 'aria-hidden':'true'}),
       el('span', {class:'rteam'}, teamPills)
     ]);
     rowEl.style.setProperty('--i', Math.min(rowIdx, 18)); rowIdx++;
@@ -6154,6 +6437,8 @@ function renderReviewSection(root){
   for(const g of meta.gates){
     if(g.pass) continue;
     const line = el('div', {class:'gate-line fail'}); line.appendChild(el('span', null, t('gateLabels')[g.key]||g.key));
+    const oi = gateOffenderIndex(g.key, plan);
+    if(oi>=0) line.appendChild(el('button', {type:'button', class:'btn-link gate-jump', onclick:()=>jumpToRow(oi)}, t('gateJumpAction')));
     card.appendChild(line);
   }
   const nonEmptyRows = plan.rows.filter(r=>!r.empty);
@@ -6182,7 +6467,7 @@ function renderReviewSection(root){
   const allDev = Object.values(meta.deviation).flat(); const maxAbs = Math.max(1, ...allDev.map(d=>Math.abs(d.deviation)));
   for(const d of allDev){
     const row = el('div', {class:'totals-bar-row'});
-    row.appendChild(el('span', {class:'totals-bar-name', title: d.availShort ? t('fixedClampedNote')(d.avail) : ''}, d.person.name+(d.availShort?' *':'')));
+    row.appendChild(el('span', {class:'totals-bar-name', title: d.person.name + (d.availShort ? ' — '+t('fixedClampedNote')(d.avail) : '')}, d.person.name+(d.availShort?' *':'')));
     const track = el('div', {class:'totals-bar-track'}); const fill = el('div', {class:'totals-bar-fill'});
     const pct = Math.min(100, Math.abs(d.deviation)/maxAbs*50); fill.style.width = pct+'%';
     fill.style.insetInlineStart = d.deviation>=0 ? '50%' : (50-pct)+'%'; fill.style.background = d.deviation>=0 ? 'var(--ok)' : 'var(--danger)';
@@ -6199,18 +6484,99 @@ function renderReviewSection(root){
     for(const f of meta.nearMisses) nmBody.appendChild(el('div', {class:'history-row'}, [el('span',null,f.name), el('span',{class:'field-hint'},f.category)]));
     card.appendChild(nmHead); card.appendChild(nmBody);
   }
-  const footer = el('div', {style:'margin-block-start:16px;display:flex;gap:10px;align-items:center'});
+  root.appendChild(card);
+}
+function renderPlanActionBar(root){
+  const plan = state.plan, meta = state.planMeta;
+  if(!plan || !meta) return;
+  const n = plan.rows.filter(r=>!r.empty).length;
+  const failing = meta.gates.filter(g=>!g.pass && g.key!=='budget-met').length;
+  let status, tone;
+  if(state.planApproved){ status = t('actionbarApproved'); tone = 'ok'; }
+  else if(state.planStale){ status = t('planStaleMsg'); tone = 'gold'; }
+  else if(failing){ status = t('actionbarFailing')(n, failing); tone = 'danger'; }
+  else { status = t('actionbarReady')(n); tone = 'ok'; }
+  const actions = el('div', {class:'plan-actionbar-actions'});
   if(state.planApproved){
-    footer.appendChild(el('span', {class:'card-summary'}, t('approvedNote')));
-    footer.appendChild(el('button', {type:'button', class:'btn btn-ghost', onclick:handleUndoApprove}, t('undoApprove')));
+    if(approveSnapshot && approveSnapshot.planId===meta.planId) actions.appendChild(el('button', {type:'button', class:'btn btn-ghost btn-sm', onclick:handleUndoApprove}, t('undoApprove')));
+    actions.appendChild(el('button', {type:'button', class:'btn btn-primary btn-sm', onclick:openExportDrawer}, t('exportTitle')));
+  } else if(state.planStale){
+    actions.appendChild(el('button', {type:'button', class:'btn btn-primary btn-sm', onclick:e=>requestGenerate(e.currentTarget)}, t('regenerateAction')));
   } else {
-    footer.appendChild(el('button', {type:'button', class:'btn btn-primary', disabled:!allPass || state.planStale, onclick:handleApprovePlan}, t('approvePlan')));
-    footer.appendChild(el('button', {type:'button', class:'btn', onclick:openExportDrawer}, t('exportTitle')));
-    if(state.planStale) footer.appendChild(el('span', {class:'field-hint'}, t('planStaleMsg')));
-    else if(!allPass) footer.appendChild(el('span', {class:'field-hint'}, t('gateBlockNote')));
+    actions.appendChild(el('button', {type:'button', class:'btn btn-sm', onclick:openExportDrawer}, t('exportTitle')));
+    actions.appendChild(el('button', {type:'button', class:'btn btn-primary btn-sm', disabled: failing>0 || n===0, onclick:handleApprovePlan}, t('approvePlan')));
   }
-  if(state.planApproved) footer.appendChild(el('button', {type:'button', class:'btn', onclick:openExportDrawer}, t('exportTitle')));
-  card.appendChild(footer); root.appendChild(card);
+  root.appendChild(el('div', {class:'plan-actionbar', role:'region', 'aria-label':t('reviewTitle')}, [
+    el('span', {class:'plan-actionbar-status'}, [el('span', {class:'dot dot-'+tone}), status]), actions
+  ]));
+}
+function gateOffenderIndex(key, plan){
+  const rows = plan.rows, specs = plan.pools || defaultPools();
+  const times = plan.times || 1;
+  if(key==='open-seats') return rows.findIndex(r=>!r.empty && openSeatCount(r)>0);
+  if(key==='team-size') return rows.findIndex(r=>!r.empty && rowTeam(r).length!==specs.reduce((sum, pl)=>sum+seatsFor(pl, r.kind, r.facility.category), 0));
+  if(key==='window') return rows.findIndex(r=>!r.empty && r.facility.visitWeekdays && !r.facility.visitWeekdays.includes(r.date.getDay()));
+  if(key==='dup-person') return rows.findIndex(r=>!r.empty && new Set(rowTeam(r).map(x=>x.id)).size!==rowTeam(r).length);
+  if(key==='no-excluded') return rows.findIndex(r=>!r.empty && (r.facility.kind==='excluded' || r.facility.manualExcluded));
+  if(key==='no-retired'){
+    const retired = new Set((state.retiredPool||[]).map(x=>x.id));
+    return rows.findIndex(r=>!r.empty && rowTeam(r).some(x=>retired.has(x.id)));
+  }
+  if(key==='dup-facility'){
+    const seen = new Map();
+    for(let i=0; i<rows.length; i++){
+      const r = rows[i]; if(r.empty) continue;
+      const c = (seen.get(r.facility.id)||0)+1; seen.set(r.facility.id, c);
+      if(c>times) return i;
+    }
+    return -1;
+  }
+  if(key==='dup-person-day'){
+    const seen = new Set();
+    for(let i=0; i<rows.length; i++){
+      const r = rows[i]; if(r.empty) continue;
+      const d = fmtISO(r.date);
+      for(const x of rowTeam(r)){
+        const k = d+'|'+x.id;
+        if(seen.has(k)) return i;
+        seen.add(k);
+      }
+    }
+  }
+  return -1;
+}
+function jumpToRow(i){
+  const n = document.querySelector('.result-row[data-ri="'+i+'"]');
+  if(!n) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  n.scrollIntoView({block:'center', behavior: reduce ? 'auto' : 'smooth'});
+  n.classList.remove('flash'); void n.offsetWidth; n.classList.add('flash');
+  setTimeout(()=>n.classList.remove('flash'), 1400);
+  n.focus({preventScroll:true});
+}
+function replacementCandidates(row, plan){
+  const times = plan.times || 1, dow = row.date.getDay();
+  const inPlan = new Map();
+  for(const r of plan.rows) if(!r.empty) inPlan.set(r.facility.id, (inPlan.get(r.facility.id)||0)+1);
+  const w2 = resolvedWeekdays2(), wcfg = w2 && w2[dow];
+  const blocked = makeBlockedChecker(), team = rowTeam(row), specs = plan.pools || defaultPools();
+  const ok = f=>{
+    if(f.id===row.facility.id || f.kind!==row.kind || f.manualExcluded) return false;
+    if((inPlan.get(f.id)||0) >= times) return false;
+    if(f.visitWeekdays && !f.visitWeekdays.includes(dow)) return false;
+    if(wcfg && wcfg.restrictTo && !wcfg.restrictTo.includes(f.category)) return false;
+    if(team.some(x=>blocked(x, f))) return false;
+    for(const pl of specs){
+      const have = teamOf(row, pl.id).length + ((row.openSeats && row.openSeats[pl.id])||0);
+      if(seatsFor(pl, row.kind, f.category)!==have) return false;
+    }
+    return true;
+  };
+  const NEVER = plan.NEVER || computeNever(state.registry);
+  return state.registry.filter(ok)
+    .map(f=>({f, s:displayScore(f, plan.planStart, NEVER, plan.dctx, plan.globalDistanceBias)}))
+    .sort((a, b)=>(b.s===a.s ? 0 : (b.s>a.s ? 1 : -1)))
+    .slice(0, 12).map(x=>x.f);
 }
 function clearFacilitySelectionOnFilterChange(){
   if(state.facilitySelected.size) state.facilitySelected = new Set();
@@ -6699,9 +7065,9 @@ function openPersonDrawer(p){
     body.appendChild(wdField);
     body.appendChild(buildOffCalendar(p));
     body.appendChild(SelectField({
-      label:t('genderLabel'), value:p.gender||'m',
-      options:[{value:'m',label:t('genderM')},{value:'f',label:t('genderF')}],
-      onChange:v=>{ p.gender=v; savePeople(); rerender(); }
+      label:t('genderLabel'), value:p.gender||'',
+      options:[...(p.gender ? [] : [{value:'', label:t('genderUnset')}]), {value:'m',label:t('genderM')},{value:'f',label:t('genderF')}],
+      onChange:v=>{ p.gender = v||undefined; savePeople(); rerender(); }
     }));
     const activeRow = el('div', {class:'settings-row'});
     activeRow.appendChild(el('span', {class:'settings-row-label'}, [el('span',{class:'name'},t('activeLabel'))]));
@@ -7164,12 +7530,14 @@ function renderSettingsTab(root){
       const snapshot = store;
       store = incoming;
       applyStoreToRuntime();
+      approveSnapshot = null; if(state.plan) relinkOrDropPlan();
       persistStore();
       markPlanStaleIfNeeded();
       renderActiveTab();
       showToast(t('importedToast'), {label:t('undoImport'), onClick:()=>{
         store = snapshot;
         applyStoreToRuntime();
+        approveSnapshot = null; if(state.plan) relinkOrDropPlan();
         persistStore();
         renderActiveTab();
       }});
@@ -7181,6 +7549,7 @@ function renderSettingsTab(root){
   dataRow.appendChild(restoreInput);
   dataRow.appendChild(el('button', {type:'button', class:'btn btn-danger', onclick:()=>{
     showConfirmDialog(t('resetAction'), t('confirmReset'), {danger:true, confirmLabel:t('resetAction'), onConfirm:()=>{
+      externalStoreChange = true;
       resetAppStorage();
       location.hash = '#plan';
       location.reload();
@@ -8878,7 +9247,7 @@ check('day defaults (6.2): resolvedWeekdays2 stays empty while everything is neu
   const neutral = resolvedWeekdays2();
   state.dayDefaults = Object.assign(defaultDayConfig(), {visitCap:2}); state.dayOverrides = {3:{visitCap:1}};
   const custom = resolvedWeekdays2();
-  const caps = dayCaps([new Date(2026,8,7), new Date(2026,8,9)], custom, 1);
+  const caps = dayCaps([new Date(2026,8,7), new Date(2026,8,9)], custom, 2);
   state.dayDefaults = saved.defaults; state.dayOverrides = saved.overrides;
   if(Object.keys(neutral).length!==0) throw new Error('neutral settings must resolve to an empty map so no date preferences are implied');
   if(Object.keys(custom).length!==7) throw new Error(`expected all seven days, got ${Object.keys(custom).length}`);
@@ -9702,27 +10071,40 @@ check('persistStoreNow (bug #5): a quota-exceeded write is surfaced, not silentl
   const originalShowToast = showToast;
   window.showToast = (msg)=>{ if(msg===t('storageQuotaToast')) toastShown = true; };
   Storage.prototype.setItem = function(){ const err = new Error('quota'); err.name='QuotaExceededError'; throw err; };
+  const savedFailed = persistFailed, savedStoreFailed = storeWriteFailed;
   try{ persistStoreNow(); } finally {
     Storage.prototype.setItem = originalSetItem;
     window.showToast = originalShowToast;
     store.facilities = savedFacilities;
+    persistFailed = savedFailed; storeWriteFailed = savedStoreFailed;
   }
   if(!toastShown) throw new Error('a QuotaExceededError during persistStoreNow should surface a toast to the user, not fail silently');
   return 'a storage-quota failure now shows a toast instead of vanishing into an empty catch block';
 });
-check('shouldWarnBeforeUnload (bug #6): warns exactly when an unapproved plan would be lost', ()=>{
-  const savedPlan = state.plan, savedApproved = state.planApproved;
-  state.plan = null; state.planApproved = false;
-  const noPlan = shouldWarnBeforeUnload();
-  state.plan = {rows:[]}; state.planApproved = false;
-  const unapproved = shouldWarnBeforeUnload();
-  state.plan = {rows:[]}; state.planApproved = true;
-  const approved = shouldWarnBeforeUnload();
-  state.plan = savedPlan; state.planApproved = savedApproved;
+check('shouldWarnBeforeUnload (bug #6): warns only when an unapproved plan could not be written to storage', ()=>{
+  const savedPlan = state.plan, savedApproved = state.planApproved, savedFailed = persistFailed, savedExternal = externalStoreChange;
+  let noPlan, unapprovedOk, unapprovedFailed, approvedFailed, externalFailed;
+  try{
+    externalStoreChange = false;
+    state.plan = null; state.planApproved = false; persistFailed = true;
+    noPlan = shouldWarnBeforeUnload();
+    state.plan = {rows:[]}; state.planApproved = false; persistFailed = false;
+    unapprovedOk = shouldWarnBeforeUnload();
+    persistFailed = true;
+    unapprovedFailed = shouldWarnBeforeUnload();
+    state.planApproved = true;
+    approvedFailed = shouldWarnBeforeUnload();
+    state.planApproved = false; externalStoreChange = true;
+    externalFailed = shouldWarnBeforeUnload();
+  } finally {
+    state.plan = savedPlan; state.planApproved = savedApproved; persistFailed = savedFailed; externalStoreChange = savedExternal;
+  }
   if(noPlan) throw new Error('should not warn when there is no plan to lose');
-  if(!unapproved) throw new Error('should warn when a generated plan has not been approved yet');
-  if(approved) throw new Error('should not warn once the plan is already approved (and thus already persisted into the registry)');
-  return 'the unload warning fires only for a generated-but-not-yet-approved plan, which is the actual data at risk';
+  if(unapprovedOk) throw new Error('should not warn when the plan was saved successfully');
+  if(!unapprovedFailed) throw new Error('should warn when an unapproved plan failed to save');
+  if(approvedFailed) throw new Error('should not warn once the plan is approved');
+  if(externalFailed) throw new Error('should not warn while another tab owns the data');
+  return 'the unload warning fires only for an unapproved plan whose save failed';
 });
 check('handleApprovePlan/handleUndoApprove (P0 fix #1A): undoing cycle B never rolls back cycle A', ()=>{
   const savedRegistry=state.registry, savedPlan=state.plan, savedMeta=state.planMeta, savedApproved=state.planApproved, savedFPV=state.facilityPersonVisits, savedSnapshot=approveSnapshot, savedCycle=state.lastCycleNumber, savedStale=state.planStale, savedTab=state.tab;
@@ -10323,6 +10705,411 @@ check('renderFacilityList (merged from alt_branch): rows carry column labels for
   if(labelled!==rows*7) throw new Error(`expected 7 labelled cells per row, got ${labelled} for ${rows} rows`);
   return `${rows} rows × 7 labelled cells`;
 });
+const planGuard = ()=>{
+  const s = {plan:state.plan, meta:state.planMeta, approved:state.planApproved, stale:state.planStale, snap:approveSnapshot, cycle:state.lastCycleNumber, tab:state.tab, dropped:state.pendingPlanDroppedToast, registry:state.registry, fpv:state.facilityPersonVisits};
+  return ()=>{
+    state.plan = s.plan; state.planMeta = s.meta; state.planApproved = s.approved; state.planStale = s.stale; approveSnapshot = s.snap;
+    state.lastCycleNumber = s.cycle; state.tab = s.tab; state.pendingPlanDroppedToast = s.dropped; state.registry = s.registry; state.facilityPersonVisits = s.fpv;
+  };
+};
+const teamIdsOf = row=>JSON.stringify(poolIdsOfRow(row).sort().map(id=>[id, teamOf(row, id).map(x=>x.id)]));
+check('makeUnavailableChecker (B1): an exception working day is available for people on the default weekdays', ()=>{
+  const saved = state.exceptions, sat = new Date(2026,8,5);
+  const p = freshPerson({id:'b1a', name:'a'});
+  const q = freshPerson({id:'b1b', name:'b', workWeekdays:[1,2]});
+  const r = freshPerson({id:'b1c', name:'c', off:[{from:'2026-09-05', to:'2026-09-05'}]});
+  let before, after, custom, off;
+  try{
+    state.exceptions = new Set();
+    before = makeUnavailableChecker()(p, sat);
+    state.exceptions = new Set(['2026-09-05']);
+    const chk = makeUnavailableChecker();
+    after = chk(p, sat); custom = chk(q, sat); off = chk(r, sat);
+  } finally { state.exceptions = saved; }
+  if(!before) throw new Error('a Saturday outside the working weekdays should be unavailable when it is not an exception day');
+  if(after) throw new Error('an exception working day must not make everyone unavailable');
+  if(!custom) throw new Error('a person with their own weekday list keeps that list on exception days');
+  if(!off) throw new Error('a personal day off still wins on an exception day');
+  return 'exception days open up default-schedule people only, and days off still apply';
+});
+check('dayCaps (B2): a per-weekday cap never exceeds the daily maximum', ()=>{
+  const d = new Date(2026,8,7), dow = d.getDay();
+  const high = dayCaps([d], {[dow]:{visitCap:5}}, 2)[0], low = dayCaps([d], {[dow]:{visitCap:1}}, 2)[0], none = dayCaps([d], {[dow]:{visitCap:null}}, 2)[0];
+  if(high!==2 || low!==1 || none!==2) throw new Error(`got ${high},${low},${none}`);
+  return 'caps are clamped to the daily maximum';
+});
+check('computeDeviation (B3): weight 0, inactive fixed counts and missing totals are handled', ()=>{
+  const days = [new Date(2026,8,7), new Date(2026,8,8), new Date(2026,8,9)];
+  const a = freshPerson({id:'b3a', weight:1}), z = freshPerson({id:'b3z', weight:0});
+  const gone = freshPerson({id:'b3g', weight:1, fixedCount:2, active:false});
+  const dev = computeDeviation([a, z, gone], undefined, 6, days, ()=>false);
+  const da = dev.find(x=>x.person===a), dz = dev.find(x=>x.person===z), dg = dev.find(x=>x.person===gone);
+  if(dz.expected!==0) throw new Error('a weight-0 person must expect 0 visits, got '+dz.expected);
+  if(Math.abs(da.expected-6)>1e-9) throw new Error('the only weighted active person should expect every seat, got '+da.expected);
+  if(dg.expected!==0 || dg.availShort) throw new Error('an inactive person expects nothing and is never availability-short');
+  return 'deviation mirrors the engine for zero weights, inactive people and undefined totals';
+});
+check('gender rule (B5): people without a gender are never treated as female', ()=>{
+  const g = x=>({gender:x});
+  const unknownRow = {finTeam:[g('m'), g('m')], clinTeam:[g('m'), g(undefined)]};
+  const counts = teamGenderCounts(unknownRow);
+  if(counts.m!==3 || counts.f!==0 || counts.u!==1) throw new Error('counts wrong: '+JSON.stringify(counts));
+  if(violatesGenderRule(unknownRow, '31') || violatesGenderRule(unknownRow, 'mixed')) throw new Error('a team with an unknown gender cannot be judged, so it must not be flagged');
+  const three = {finTeam:[g('m'), g('m')], clinTeam:[g('f')]};
+  if(violatesGenderRule(three, '31')) throw new Error('2+1 is a valid 3-1 style split for a team of three');
+  if(!violatesGenderRule({finTeam:[g('m'), g('m'), g('m')], clinTeam:[]}, '31')) throw new Error('a single-gender team of three must fail');
+  if(violatesGenderRule({finTeam:[g('m')], clinTeam:[g('f')]}, '31')) throw new Error('a team of two with one of each passes');
+  return 'unknown gender is its own bucket and 3-1 also works for teams that are not exactly four';
+});
+check('genderUnknownDiags (B5): warns only when a gender rule is on and someone has no gender', ()=>{
+  const savedRule = state.genderRule, saved = state.poolMembers;
+  const first = state.pools[0].id;
+  let onWith, off, onNone;
+  try{
+    const person = freshPerson({id:'gu1', name:'gu', gender:undefined, active:true});
+    state.poolMembers = Object.assign({}, state.poolMembers, {[first]:[...poolMembersOf(first), person]});
+    state.genderRule = {basic:'31', contracted:'off'};
+    onWith = genderUnknownDiags();
+    state.genderRule = {basic:'off', contracted:'off'};
+    off = genderUnknownDiags();
+    state.genderRule = {basic:'31', contracted:'off'};
+    person.gender = 'f';
+    onNone = genderUnknownDiags();
+  } finally { state.genderRule = savedRule; state.poolMembers = saved; }
+  if(onWith.length!==1 || onWith[0].code!=='gender-unknown') throw new Error('expected one gender-unknown warning');
+  if(off.length!==0) throw new Error('no warning when every gender rule is off');
+  if(onNone.length!==0) throw new Error('no warning once everyone has a gender');
+  return 'the warning follows the rule setting and the missing genders';
+});
+check('coverage leftovers (B6): near-miss candidates are unique and skip facilities already visited the full number of times', ()=>{
+  const registry = buildRegistry(REGISTRY_SEED);
+  const scope = {kind:'category', ids:[registry.find(f=>f.kind==='basic').category]};
+  const finPool = FIN_ADMIN_SEED.map(freshPerson), clinPool = CLINICAL_SEED.map(freshPerson);
+  const plan = generatePlan({registry, finPool, clinPool, startDate:new Date(2026,8,1), endDate:new Date(2026,8,10), weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(), mode:'ratio', ratioP:0.25, isUnavailable:()=>false, goal:{mode:'coverage', scope, times:2}});
+  const ids = [...plan.leftoverBasic, ...plan.leftoverContracted].map(f=>f.id);
+  if(new Set(ids).size!==ids.length) throw new Error('leftover facilities contain duplicates');
+  const placed = new Map();
+  for(const r of plan.rows) if(!r.empty) placed.set(r.facility.id, (placed.get(r.facility.id)||0)+1);
+  for(const id of ids) if((placed.get(id)||0)>=2) throw new Error(id+' was already visited twice but is still listed as a leftover');
+  return `${ids.length} unique leftovers, none already fully visited`;
+});
+check('handleUndoApprove (B7): with no snapshot the undo is refused and nothing is double-counted', ()=>{
+  const restore = planGuard(), origToast = showToast;
+  let toast = null;
+  try{
+    window.showToast = m=>{ toast = m; };
+    state.plan = {rows:[{empty:true}]}; state.planMeta = {cycle:4, planId:'b7', committed:true};
+    state.planApproved = true; approveSnapshot = null; state.lastCycleNumber = 4;
+    handleUndoApprove();
+    if(!state.planApproved || !state.planMeta.committed) throw new Error('the plan must stay approved when the undo data is gone');
+    if(state.lastCycleNumber!==4) throw new Error('the cycle counter must not change');
+    if(toast!==t('undoApproveUnavailable')) throw new Error('expected the undo-unavailable toast');
+  } finally { window.showToast = origToast; restore(); }
+  return 'undo after a reload is blocked with an explanation';
+});
+check('handleApprovePlan (B8): a plan with no visits cannot be approved', ()=>{
+  const restore = planGuard();
+  try{
+    state.plan = {rows:[{empty:true}, {empty:true}]}; state.planMeta = {cycle:1, planId:'b8'}; state.planApproved = false; state.planStale = false; approveSnapshot = null;
+    handleApprovePlan();
+    if(state.planApproved) throw new Error('an empty plan was approved');
+  } finally { restore(); }
+  return 'approval ignored for an empty plan';
+});
+check('planCycle (B9): an approved plan exports its own cycle number, not the next one', ()=>{
+  const restore = planGuard();
+  try{
+    state.planMeta = {cycle:5}; state.lastCycleNumber = 5;
+    if(planCycle()!==5 || nextCycleNumber()!==6) throw new Error(`planCycle ${planCycle()} vs next ${nextCycleNumber()}`);
+    state.planMeta = null;
+    if(planCycle()!==nextCycleNumber()) throw new Error('without a plan the next cycle number is used');
+  } finally { restore(); }
+  return 'cycle number follows the plan';
+});
+check('csv/tsv safety (B10): tabs and carriage returns cannot start a formula or break a row', ()=>{
+  if(csvFormulaSafe('\t=1+1')[0]!=="'" || csvFormulaSafe('\r1')[0]!=="'") throw new Error('leading tab/CR must be neutralised');
+  if(toTSVLine(['a\tb', 'c\nd', null]).split('\t').length!==3) throw new Error('embedded tabs/newlines must not add columns');
+  if(!/^\uFEFF"a\rb"$/.test(toCSV([['a\rb']]))) throw new Error('a lone CR must force quoting');
+  return 'formula guard and row integrity hold';
+});
+check('date parsing (B11): Egyptian month spellings, Arabic weekday prefixes and more separators', ()=>{
+  const eq = (raw, y, m, d)=>{ const v = parseDateFlexible(raw); if(!v || v.getFullYear()!==y || v.getMonth()!==m || v.getDate()!==d) throw new Error(`${raw} -> ${v}`); };
+  eq('7 يونيه 2026', 2026, 5, 7); eq('7 يوليه 2026', 2026, 6, 7); eq('7 إبريل 2026', 2026, 3, 7);
+  eq('الأحد 6 سبتمبر 2026', 2026, 8, 6); eq('يوم الاثنين 7 سبتمبر 2026', 2026, 8, 7);
+  eq('2026.09.07', 2026, 8, 7); eq('7.9.2026', 2026, 8, 7); eq('7-9-2026', 2026, 8, 7); eq('2026/9/7', 2026, 8, 7);
+  const my = parseMonthYear('يوليه 2026');
+  if(!my || my.month!==6 || my.year!==2026) throw new Error('parseMonthYear failed for يوليه');
+  return 'all spellings parse';
+});
+check('plan persistence (P1): a plan survives serialize, JSON and deserialize with the same rows, teams and checks', ()=>{
+  const restore = planGuard();
+  try{
+    handleGenerate();
+    const before = state.plan, metaBefore = state.planMeta;
+    if(!before || !before.rows.some(r=>!r.empty)) throw new Error('setup: no plan was generated');
+    const s = JSON.parse(JSON.stringify(serializePlan()));
+    const back = deserializePlan(s);
+    if(!back) throw new Error('deserialize returned null');
+    if(back.rows.length!==before.rows.length) throw new Error('row count differs');
+    before.rows.forEach((r, i)=>{
+      const b = back.rows[i];
+      if(!!r.empty!==!!b.empty) throw new Error('empty flag differs at '+i);
+      if(r.empty) return;
+      if(fmtISO(r.date)!==fmtISO(b.date) || r.facility.id!==b.facility.id || r.kind!==b.kind) throw new Error('row differs at '+i);
+      if(teamIdsOf(r)!==teamIdsOf(b)) throw new Error('team differs at '+i);
+    });
+    const metaBack = buildPlanMeta(back, {cycle:s.cycle, planId:s.planId, committed:s.committed});
+    if(JSON.stringify(metaBack.gates)!==JSON.stringify(metaBefore.gates)) throw new Error('gates differ after restore');
+    if(metaBack.cycle!==metaBefore.cycle || metaBack.planId!==metaBefore.planId) throw new Error('cycle or id lost');
+    if(back.days.length!==before.days.length || fmtISO(back.planStart)!==fmtISO(before.planStart)) throw new Error('days lost');
+  } finally { restore(); }
+  return 'lossless for everything the screens and checks read';
+});
+check('plan persistence (P1): reload restores the plan, its approved flag and refuses a snapshot-less undo', ()=>{
+  const restore = planGuard(), origToast = showToast;
+  try{
+    window.showToast = ()=>{};
+    handleGenerate();
+    const id = state.planMeta.planId, n = state.plan.rows.length;
+    state.planApproved = true; state.planMeta.committed = true; savePlanNow();
+    state.plan = null; state.planMeta = null; state.planApproved = false; approveSnapshot = null;
+    restorePersistedPlan();
+    if(!state.plan || state.plan.rows.length!==n) throw new Error('plan not restored');
+    if(!state.planApproved || state.planMeta.planId!==id || !state.planMeta.committed) throw new Error('approval state not restored');
+    const cycle = state.lastCycleNumber;
+    handleUndoApprove();
+    if(!state.planApproved || state.lastCycleNumber!==cycle) throw new Error('undo without a snapshot must be refused');
+    state.plan = null; state.planMeta = null; state.planApproved = false; state.planStale = false; savePlanNow();
+    if(localStorage.getItem(PLAN_KEY)!==null) throw new Error('clearing the plan should clear the saved copy');
+  } finally { window.showToast = origToast; restore(); savePlanNow(); }
+  return 'restore, approval flag and undo guard all behave';
+});
+check('plan persistence (P1): a saved plan that references a missing facility is dropped with a notice', ()=>{
+  const restore = planGuard();
+  try{
+    handleGenerate();
+    const s = serializePlan(); s.rows.find(r=>!r.e).f = 'no-such-facility';
+    localStorage.setItem(PLAN_KEY, JSON.stringify(s));
+    state.plan = null; state.planMeta = null; state.pendingPlanDroppedToast = false;
+    restorePersistedPlan();
+    if(state.plan) throw new Error('a plan with a missing facility must not be restored');
+    if(!state.pendingPlanDroppedToast) throw new Error('the person should be told the plan was dropped');
+    if(localStorage.getItem(PLAN_KEY)!==null) throw new Error('the unusable saved plan should be removed');
+  } finally { restore(); savePlanNow(); }
+  return 'unusable saved plans are removed and reported';
+});
+check('stale marking (B15): approved plans are never marked stale, unapproved ones are', ()=>{
+  const restore = planGuard();
+  try{
+    state.plan = {rows:[]}; state.planMeta = {cycle:1, planId:'st'}; state.planApproved = true; state.planStale = false;
+    markPlanStaleIfNeeded();
+    if(state.planStale) throw new Error('an approved plan was marked stale');
+    state.planApproved = false;
+    markPlanStaleIfNeeded();
+    if(!state.planStale) throw new Error('an unapproved plan should be marked stale');
+    state.plan = null; state.planStale = false;
+    markPlanStaleIfNeeded();
+    if(state.planStale) throw new Error('nothing to mark without a plan');
+  } finally { restore(); savePlanNow(); }
+  return 'stale flag follows approval state';
+});
+check('multiple tabs (P2): once another tab changed the data this tab stops writing and shows a reload bar', ()=>{
+  const savedFlag = externalStoreChange;
+  try{
+    externalStoreChange = false;
+    localStorage.setItem(STORE_KEY, 'sentinel');
+    window.dispatchEvent(new StorageEvent('storage', {key:STORE_KEY}));
+    if(!externalStoreChange) throw new Error('the storage event did not raise the flag');
+    if(!document.getElementById('externalChangeBar')) throw new Error('the reload bar is missing');
+    persistStoreNow(); savePlanNow();
+    if(localStorage.getItem(STORE_KEY)!=='sentinel') throw new Error('this tab overwrote the other tab\'s data');
+  } finally {
+    const bar = document.getElementById('externalChangeBar'); if(bar) bar.remove();
+    externalStoreChange = savedFlag; persistStoreNow();
+  }
+  return 'writes are suspended and the person is asked to reload';
+});
+check('overlays (P3): Escape in a dropdown inside a drawer closes only the dropdown; the confirm default is safe for danger', ()=>{
+  const base = overlayStack.length;
+  const trigger = el('button', {type:'button'}, 'menu');
+  const d = openDrawer('t', ()=>el('div', null, trigger));
+  const pop = Popover(trigger, ()=>el('div', null, el('button', {type:'button', 'data-autofocus':'1'}, 'item')), {});
+  let confirmCancelFocused = false;
+  try{
+    pop.open();
+    if(overlayStack.length!==base+2) throw new Error('drawer and dropdown should both be tracked');
+    (document.activeElement||document).dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true, cancelable:true}));
+    if(pop.isOpen()) throw new Error('the dropdown should have closed');
+    if(overlayStack.length!==base+1) throw new Error('the drawer must survive the first Escape');
+    (document.activeElement||document).dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true, cancelable:true}));
+    if(overlayStack.length!==base) throw new Error('the second Escape should close the drawer');
+    showConfirmDialog('x', 'y', {danger:true, confirmLabel:'ok'});
+    confirmCancelFocused = document.activeElement && document.activeElement.textContent===t('cancel');
+    if(overlayStack.length!==base+1) throw new Error('the confirm dialog should be tracked');
+    if(activeConfirmClose) activeConfirmClose();
+  } finally { pop.close(); d.close(); if(activeConfirmClose) activeConfirmClose(); }
+  if(!confirmCancelFocused) throw new Error('a danger confirmation should start on the cancel button');
+  if(overlayStack.length!==base) throw new Error('overlay stack leaked');
+  return 'stacked overlays close one at a time';
+});
+const mkFac = (id, extra)=>Object.assign({id, name:id, category:'c', kind:'basic', weight:1, lastVisit:null, visitCount:0, pinned:false, manualExcluded:false, visitHistory:[], reviewFlag:null}, extra||{});
+const mkRow = (f, d, team, extra)=>Object.assign({empty:false, kind:f.kind, date:d, facility:f, finTeam:team}, extra||{});
+const onePool = [{id:'fin', seats:{basic:1, contracted:1}, byCategory:{}}];
+check('gateOffenderIndex (U2): each failed check points at the row that causes it', ()=>{
+  const pa = {id:'pa'}, pb = {id:'pb'};
+  const d1 = new Date(2026,8,7), d2 = new Date(2026,8,8);
+  const plan = rows=>({rows, pools:onePool, times:1});
+  const expectIdx = (key, rows, want)=>{ const got = gateOffenderIndex(key, plan(rows)); if(got!==want) throw new Error(`${key}: expected ${want}, got ${got}`); };
+  expectIdx('team-size', [mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('b'), d2, [pa, pb])], 1);
+  expectIdx('dup-person', [mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('b'), d2, [pb, pb])], 1);
+  expectIdx('dup-person-day', [mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('b'), d1, [pa])], 1);
+  expectIdx('window', [mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('w', {visitWeekdays:[3]}), d1, [pb])], 1);
+  expectIdx('open-seats', [mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('b'), d2, [], {openSeats:{fin:1}})], 1);
+  expectIdx('dup-facility', [{empty:true}, mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('a'), d2, [pb])], 2);
+  expectIdx('no-excluded', [mkRow(mkFac('a'), d1, [pa]), mkRow(mkFac('x', {manualExcluded:true}), d2, [pb])], 1);
+  expectIdx('team-size', [mkRow(mkFac('a'), d1, [pa])], -1);
+  expectIdx('count', [mkRow(mkFac('a'), d1, [pa])], -1);
+  return 'index matches the row used by the gate, -1 when nothing is at fault';
+});
+check('replacementCandidates (U5): only same-kind, unused, allowed facilities that fit the team', ()=>{
+  const restore = planGuard(), savedReg = state.registry;
+  try{
+    const pa = {id:'pa'};
+    const d1 = new Date(2026,8,7);
+    const reg = [mkFac('x1'), mkFac('x2'), mkFac('x3', {kind:'contracted'}), mkFac('x4', {manualExcluded:true}), mkFac('x5', {visitWeekdays:[3]}), mkFac('x6'), mkFac('x7', {category:'other'})];
+    state.registry = reg;
+    const cur = mkRow(reg[0], d1, [pa]);
+    const other = mkRow(reg[1], new Date(2026,8,8), [pa]);
+    const plan = {rows:[cur, other], pools:onePool, times:1, planStart:d1, dctx:distanceContext(reg), globalDistanceBias:0, NEVER:720};
+    const ids = replacementCandidates(cur, plan).map(f=>f.id).sort();
+    if(ids.join()!=='x6,x7') throw new Error('got '+ids.join());
+    const blockedPerson = {id:'pb', blockedFacilities:['x6']};
+    const cur2 = mkRow(reg[0], d1, [blockedPerson]);
+    const ids2 = replacementCandidates(cur2, {rows:[cur2], pools:onePool, times:1, planStart:d1, dctx:distanceContext(reg), globalDistanceBias:0, NEVER:720}).map(f=>f.id);
+    if(ids2.includes('x6')) throw new Error('a facility blocked for a team member must not be offered');
+  } finally { state.registry = savedReg; restore(); }
+  return 'kind, usage, exclusion, weekday window, blocking and seat shape are all respected';
+});
+check('plan action bar (U1): status and actions follow the plan state', ()=>{
+  const restore = planGuard();
+  const d1 = new Date(2026,8,7);
+  const bar = ()=>{ const host = el('div'); renderPlanActionBar(host); return host.querySelector('.plan-actionbar'); };
+  const btnTexts = b=>[...b.querySelectorAll('button')].map(x=>x.textContent);
+  try{
+    state.plan = {rows:[mkRow(mkFac('a'), d1, [{id:'pa'}])]};
+    state.planMeta = {cycle:1, planId:'ab', gates:[{key:'count', pass:true}]};
+    state.planApproved = false; state.planStale = false; approveSnapshot = null;
+    let b = bar();
+    if(!b.textContent.includes(t('actionbarReady')(1))) throw new Error('ready status missing');
+    const approve = [...b.querySelectorAll('button')].find(x=>x.textContent===t('approvePlan'));
+    if(!approve || approve.disabled) throw new Error('approve must be enabled when every check passes');
+    state.planMeta.gates = [{key:'count', pass:false}, {key:'budget-met', pass:false}];
+    b = bar();
+    if(!b.textContent.includes(t('actionbarFailing')(1, 1))) throw new Error('failing status wrong: '+b.textContent);
+    if(![...b.querySelectorAll('button')].find(x=>x.textContent===t('approvePlan')).disabled) throw new Error('approve must be disabled while a check fails');
+    state.planStale = true;
+    b = bar();
+    if(btnTexts(b).join()!==t('regenerateAction')) throw new Error('stale plans offer only regenerate: '+btnTexts(b).join());
+    state.planStale = false; state.planApproved = true;
+    b = bar();
+    if(btnTexts(b).join()!==t('exportTitle')) throw new Error('approved without snapshot offers only export: '+btnTexts(b).join());
+    approveSnapshot = {planId:'ab'};
+    b = bar();
+    if(btnTexts(b).join()!==[t('undoApprove'), t('exportTitle')].join()) throw new Error('approved with snapshot offers undo and export: '+btnTexts(b).join());
+    state.plan = {rows:[{empty:true}]}; state.planApproved = false; state.planMeta.gates = [{key:'count', pass:true}];
+    if(![...bar().querySelectorAll('button')].find(x=>x.textContent===t('approvePlan')).disabled) throw new Error('an empty plan cannot be approved');
+  } finally { restore(); }
+  return 'ready, failing, stale, approved and empty states all render the right actions';
+});
+check('results list (U3/U4): row indexes, person highlight, dimming and the empty note', ()=>{
+  const restore = planGuard(), savedFocus = state.resultsFocusPerson;
+  try{
+    const d1 = new Date(2026,8,7), d2 = new Date(2026,8,8);
+    const pa = {id:'pa', name:'A'}, pb = {id:'pb', name:'B'};
+    state.plan = {rows:[mkRow(mkFac('a'), d1, [pa]), {empty:true}, mkRow(mkFac('b', {category:''}), d2, [pb])]};
+    state.planMeta = {cycle:1, planId:'r', gates:[]};
+    state.resultsFocusPerson = 'pa';
+    let host = el('div'); renderResultsSection(host);
+    const rows = [...host.querySelectorAll('.result-row')];
+    if(rows.length!==2 || rows[0].dataset.ri!=='0' || rows[1].dataset.ri!=='2') throw new Error('data-ri must be the index in plan.rows');
+    if(rows[0].classList.contains('dim') || !rows[1].classList.contains('dim')) throw new Error('only rows without the focused person are dimmed');
+    if(!host.querySelector('.rteam .pill.hl')) throw new Error('the focused person pill is not highlighted');
+    if(!host.querySelector('.chip-row .chip.active')) throw new Error('the highlight chip is missing');
+    if(rows[1].querySelector('.rcat:not(.rcat-empty)')) throw new Error('no category pill when the facility has no category');
+    if(rows[1].children.length!==4) throw new Error('the grid cell for the category must remain');
+    state.resultsFocusPerson = 'ghost';
+    host = el('div'); renderResultsSection(host);
+    if(state.resultsFocusPerson!==null) throw new Error('an unknown focused person must be cleared');
+    state.plan = {rows:[{empty:true}]};
+    host = el('div'); renderResultsSection(host);
+    if(!host.textContent.includes(t('emptyPlanNote'))) throw new Error('empty plan note missing');
+  } finally { state.resultsFocusPerson = savedFocus; restore(); }
+  return 'highlight, dim, index and empty state all behave';
+});
+check('print surface (U7): direction, language, heading with cycle and range, repeating header row', ()=>{
+  const restore = planGuard();
+  const surface = document.getElementById('printSurface');
+  try{
+    state.plan = {rows:[mkRow(mkFac('a'), new Date(2026,8,7), [{id:'pa', name:'A'}]), mkRow(mkFac('b'), new Date(2026,8,9), [{id:'pb', name:'B'}])]};
+    state.planMeta = {cycle:7, planId:'pr'};
+    buildPrintSurface();
+    const h1 = surface.querySelector('h1');
+    if(!h1 || !h1.textContent.includes('7')) throw new Error('heading must carry the cycle number');
+    if(!h1.textContent.includes(formatDateDisplay('2026-09-07')) || !h1.textContent.includes(formatDateDisplay('2026-09-09'))) throw new Error('heading must carry the date range: '+h1.textContent);
+    if(!surface.querySelector('table thead th')) throw new Error('table header missing');
+    if(surface.getAttribute('dir')!==(state.lang==='ar'?'rtl':'ltr') || surface.getAttribute('lang')!==state.lang) throw new Error('dir/lang not set');
+    if(surface.querySelectorAll('tbody tr').length!==2) throw new Error('row count wrong');
+  } finally { clear(surface); restore(); }
+  return 'print output is self-describing and paginates with a header';
+});
+check('topbar and tab bar (U6): localized accessible names on every control', ()=>{
+  const top = document.getElementById('topbarRoot'), tabs = document.getElementById('tabbarInner');
+  const btns = [...top.querySelectorAll('button')];
+  if(btns.length!==2 || btns.some(b=>!b.getAttribute('aria-label') || !b.title)) throw new Error('topbar buttons need label and title');
+  if(btns[0].getAttribute('aria-label')!==t('themeToggleLabel') || btns[1].getAttribute('aria-label')!==t('langToggleLabel')) throw new Error('labels are not the localized ones');
+  const tabBtns = [...tabs.querySelectorAll('button')];
+  if(tabBtns.length!==TABS.length || tabBtns.some(b=>!b.getAttribute('aria-label') || !b.title)) throw new Error('tabs need a name even when the visible label is hidden');
+  return `${btns.length} topbar controls and ${tabBtns.length} tabs are named`;
+});
+check('favicon and theme color (A1/A2): valid SVG with xmlns, a single icon link, a theme-color meta tracking the page background', ()=>{
+  const doc = new DOMParser().parseFromString(FAVICON_SVG, 'image/svg+xml');
+  if(doc.querySelector('parsererror')) throw new Error('the favicon is not valid standalone SVG');
+  if(!/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/.test(FAVICON_SVG)) throw new Error('xmlns missing');
+  setupFavicon(); setupFavicon();
+  const links = document.querySelectorAll('link[rel~="icon"]');
+  if(links.length!==1) throw new Error('expected exactly one icon link, got '+links.length);
+  if(decodeURIComponent(links[0].href.split(',').slice(1).join(','))!==FAVICON_SVG) throw new Error('icon link does not carry the favicon');
+  syncThemeColor();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-page').trim();
+  if(!meta || meta.content!==bg) throw new Error('theme-color does not match --bg-page');
+  return 'icon renders standalone and the browser bar follows the theme';
+});
+check('toasts (S2): status role, at most three at once, longer life for action toasts', ()=>{
+  const region = ensureToastRegion();
+  const before = region.innerHTML;
+  clear(region);
+  for(let i=0;i<5;i++) showToast('m'+i);
+  const n = region.children.length, first = region.firstChild.textContent;
+  clear(region);
+  if(region.getAttribute('role')!=='status') throw new Error('toast region needs role=status');
+  if(n!==3 || first!=='m2') throw new Error(`expected the newest three, got ${n} starting at ${first}`);
+  return 'toast region is announced politely and never stacks more than three';
+});
+await checkAsync('requestGenerate (P4): the busy button is restored when generation does not happen', async ()=>{
+  const savedRange = state.range, savedStart = state.customStart, savedEnd = state.customEnd, savedGoal = state.goal;
+  const btn = el('button', {type:'button'}, 'go'); document.body.appendChild(btn);
+  try{
+    state.goal = Object.assign({}, state.goal, {mode:'range'});
+    state.range = 'custom'; state.customStart = null; state.customEnd = null;
+    if(resolveDateRangeState()) throw new Error('setup: expected no valid range');
+    requestGenerate(btn);
+    if(!btn.disabled || btn.textContent!==t('generatingLabel')) throw new Error('the button should show the busy state immediately');
+    await new Promise(res=>setTimeout(res, 120));
+    if(btn.disabled || btn.textContent!=='go') throw new Error('the button stayed stuck in the busy state');
+  } finally { btn.remove(); state.range = savedRange; state.customStart = savedStart; state.customEnd = savedEnd; state.goal = savedGoal; }
+  return 'no stuck "Generating…" button';
+});
 check('debug gating (merged from alt_branch): the self-test button only appears when the page is opened with ?debug', ()=>{
   const host = el('div');
   renderSettingsTab(host);
@@ -10345,10 +11132,27 @@ check('debug gating (merged from alt_branch): the self-test button only appears 
 return results;
 }
 (function init(){
+  setupFavicon();
+  syncThemeColor();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeColor);
   store = hydrateStore();
   applyStoreToRuntime();
+  restorePersistedPlan();
   initShell();
-  setupFavicon();
+  window.addEventListener('storage', e=>{
+    if(e.key!==null && e.key!==STORE_KEY && e.key!==PLAN_KEY) return;
+    if(externalStoreChange) return;
+    externalStoreChange = true;
+    document.body.appendChild(el('div', {id:'externalChangeBar', class:'stale-bar external-bar', role:'alert'}, [
+      el('span', null, t('externalChangeMsg')),
+      el('button', {type:'button', onclick:()=>location.reload()}, t('reloadAction'))
+    ]));
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key!=='Enter' || !(e.ctrlKey||e.metaKey) || e.repeat) return;
+    if(state.tab!=='plan' || overlayStack.length || state.planApproved || !resolveDateRangeState()) return;
+    e.preventDefault(); requestGenerate(null);
+  });
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushPendingPersist(); });
   window.addEventListener('pagehide', flushPendingPersist);
   window.addEventListener('beforeunload', (e)=>{
@@ -10367,6 +11171,10 @@ return results;
   }
   if(corruptStoreRecoveryKey){
     showToast(t('corruptStoreRecoveredToast'));
+  }
+  if(state.pendingPlanDroppedToast){
+    state.pendingPlanDroppedToast = false;
+    showToast(t('planRestoreDroppedToast'));
   }
 })();
 </script>
