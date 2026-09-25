@@ -1169,7 +1169,23 @@ function classifyKind(name, category){
   if(CONTRACTED_CATEGORIES_N.has(norm(category))) return 'contracted';
   return 'excluded';
 }
-const FACILITY_CRIT_SEED = {'دمنهور الشاملة':75};
+const FACILITY_CRIT_SEED = {
+  'هيئة التأمين الصحي':0, 'المحافظة':0, 'سنترال دمنهور':0, 'لجان الانتخابات':0, 'مبني العيادة التخصصية':0,
+  'كفر الشيخ':0, 'ادارة الفرع':75, 'التوثيق والمعلومات':75, 'الشئون الطبية':75, 'الشئون القانونية':75,
+  'المركبات':75, 'الملحق':75, 'ابو المطامير':75, 'مدارس ابو المطامير':0, 'مدرسة جانكليز':0, 'ادكو طلاب':75,
+  'ادكو قوي عاملة':75, 'البيضا':75, 'النوبارية':75, 'قرية العشر آلاف فدان':0, 'رشيد طلاب':75, 'رشيد قوي عاملة':75,
+  'ادارة المنطقة الاولي':75, 'كفر الدوار طلاب':75, 'كفر الدوار قوي عاملة':100, 'كفر الدوار مسائي':75,
+  'مستشفي كفر الدوار مسائي':75, 'كفر الدوار طلاب صلاح سالم':75, 'ابو حمص':75, 'الرحمانية':75, 'المحمودية':75,
+  'المحمودية مسائي':75, 'حوش عيسي طلاب':75, 'حوش عيسي قوي عاملة':75, 'مدارس حوش عيسي':0, 'ادارة المنطقة الثانية':75,
+  'الاجهزة التعويضية صلاح الدين':75, 'الزراعة':75, 'الشرطة':75, 'العلاج الطبيعي':75, 'اللجنة الطبية':75,
+  'المخازن الطبية':75, 'المخازن الغير طبية':75, 'دمنهور الشاملة':100, 'دمنهور طلاب':75, 'دمنهور مسائي':75,
+  'مديرية التربية والتعليم':75, 'الدلنجات قوي عاملة':75, 'الدلنجات مسائي':75, 'الدلنجات طلاب':75, 'ادارة المنطقة الثالثة':75,
+  'ايتاي البارود':100, 'ايتاي البارود طلاب':75, 'ايتاي مسائي':75, 'مستشفي ايتاي مسائي':75, 'بدر':75, 'علاج طبيعي':75,
+  'شبراخيت طلاب':75, 'شبراخيت قوي عاملة':75, 'قليشان':75, 'كوم حمادة طلاب':75, 'كوم حمادة قوي عاملة':75,
+  'كوم حمادة مسائي':75, 'مستشفي كوم حمادة مسائي':75, 'وادي النطرون':75, 'الرقابة الادارية':0, 'السعد خورشيد':0,
+  'الصفوة اسكندرية':0, 'بيجاد ذات العماد':0, 'فوزي معاذ اسكندرية':0, 'نيابة ابو المطامير':0, 'نيابة الرحمانية':0,
+  'نيابة ايتاي':0, 'نيابة دمنهور':0, 'نيابة شبين الكوم':0, 'نيابة كفر الدوار':0, 'نيابة كوم حمادة':0
+};
 function buildRegistry(seedRows){
   return seedRows.map((r,i)=>{
     return {
@@ -9103,16 +9119,18 @@ check('criticality and frequency (3.2): crit never changes a facility weight and
   if(snapLevel(12)!==0 || snapLevel(37)!==25 || snapLevel(88)!==100) throw new Error('snapLevel did not pick the nearest of the five levels');
   return 'weight stays 0.5 at crit 100; 65 snaps to 75, 12 to 0, 37 to 25, 88 to 100';
 });
-check('seed crit (2.2): دمنهور الشاملة seeded at crit 75, every facility keeps its computeWeight frequency', ()=>{
+check('seed crit (2.2): the shipped importance seed snaps onto the five StepField levels and everything else keeps its computeWeight frequency', ()=>{
   const registry = buildRegistry(REGISTRY_SEED);
-  const d = registry.find(f=>f.name==='دمنهور الشاملة');
-  if(!d) throw new Error('fixture assumption failed: دمنهور الشاملة not in shipped registry');
-  if(d.crit!==75) throw new Error(`دمنهور الشاملة crit is ${d.crit}, expected 75`);
-  for(const f of registry){
-    if(f.weight!==computeWeight(f.name)) throw new Error(`${f.name}: weight changed from computeWeight baseline (got ${f.weight})`);
-    if(f.name!=='دمنهور الشاملة' && f.crit!==50) throw new Error(`${f.name}: crit is ${f.crit}, expected the neutral 50`);
-  }
-  return `دمنهور الشاملة is the only shipped facility above neutral criticality; ${registry.length-1} others sit at 50`;
+  const byName = name=>{ const f = registry.find(x=>x.name===name); if(!f) throw new Error(`fixture assumption failed: ${name} not in shipped registry`); return f; };
+  const spot = {'دمنهور الشاملة':100, 'كفر الدوار قوي عاملة':100, 'ايتاي البارود':100, 'ادارة الفرع':75, 'ابو المطامير':75, 'هيئة التأمين الصحي':0, 'نيابة دمنهور':0, 'دار الشفا ابو حمص':50};
+  for(const name in spot) if(byName(name).crit!==spot[name]) throw new Error(`${name}: crit is ${byName(name).crit}, expected ${spot[name]}`);
+  const counts = {};
+  for(const f of registry) counts[f.crit] = (counts[f.crit]||0)+1;
+  const expectedCounts = {0:22, 50:87, 75:52, 100:3};
+  for(const lvl of LEVEL_VALUES) if((counts[lvl]||0)!==(expectedCounts[lvl]||0)) throw new Error(`crit level ${lvl}: ${counts[lvl]||0} facilities, expected ${expectedCounts[lvl]||0}`);
+  if(Object.keys(FACILITY_CRIT_SEED).some(name=>!REGISTRY_SEED.some(r=>r[0]===name))) throw new Error('FACILITY_CRIT_SEED has a name not present in REGISTRY_SEED');
+  for(const f of registry) if(f.weight!==computeWeight(f.name)) throw new Error(`${f.name}: weight changed from computeWeight baseline (got ${f.weight})`);
+  return `${registry.length} facilities seeded, crit levels 0:${counts[0]||0} 25:${counts[25]||0} 50:${counts[50]||0} 75:${counts[75]||0} 100:${counts[100]||0}`;
 });
 check('engine parity (3.7): inputs carrying the legacy coupled weights reproduce the pre-split digest exactly', ()=>{
   const registry = buildRegistry(REGISTRY_SEED);
