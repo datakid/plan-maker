@@ -518,7 +518,7 @@ const MONTHS_AR = {
 const MONTHS_EN = {
   jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11
 };
-const WEEKDAY_NAMES_STRIP = /^(sun|mon|tue|wed|thu|fri|sat)\w*\.?\s+/i;
+const WEEKDAY_NAMES_STRIP = /^(sun|mon|tue|wed|thu|fri|sat)\w*\.?[,،]?\s+/i;
 const MONTHS_AR_NORM = (()=>{
   const m = new Map();
   for(const k in MONTHS_AR) m.set(norm(k), MONTHS_AR[k]);
@@ -529,7 +529,7 @@ function monthIndexFrom(key){
   const a = MONTHS_AR_NORM.get(norm(key));
   return a!==undefined ? a : MONTHS_EN[String(key).slice(0,3).toLowerCase()];
 }
-const WEEKDAY_NAMES_STRIP_AR = /^(?:يوم\s+)?(?:ال)?(?:احد|أحد|اثنين|إثنين|ثلاثاء|اربعاء|أربعاء|خميس|جمعة|جمعه|سبت)\s+/;
+const WEEKDAY_NAMES_STRIP_AR = /^(?:يوم\s+)?(?:ال)?(?:احد|أحد|اثنين|إثنين|ثلاثاء|اربعاء|أربعاء|خميس|جمعة|جمعه|سبت)[،,]?\s+/;
 function toAsciiDigits(s){
   return s.replace(/[\u0660-\u0669]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x0660+48))
           .replace(/[\u06F0-\u06F9]/g,d=>String.fromCharCode(d.charCodeAt(0)-0x06F0+48));
@@ -550,7 +550,7 @@ function parseDateFlexible(raw){
     const d=+m[1], mo=+m[2]-1, y=+m[3];
     return validYMD(y,mo,d);
   }
-  m = s.match(/^(\d{1,2})\s+([A-Za-z\u0600-\u06FF]+)\.?\s+(\d{4})$/);
+  m = s.match(/^(\d{1,2})\s+([A-Za-z\u0600-\u060B\u060D-\u06FF]+)\.?[,،]?\s+(\d{4})$/);
   if(m){
     const d=+m[1], y=+m[3];
     const monKey = m[2].trim();
@@ -597,13 +597,14 @@ function parseDateList(text){
   const accepted = [], rejected = [];
   const tokens = String(text||'').split(/[,،;\n]+/).map(s=>s.trim()).filter(Boolean);
   for(const tok of tokens){
-    const rangeParts = tok.split(/\.\.|\s+إلى\s+/);
+    const rangeParts = tok.split(/\.\.|\s+(?:إلى|الى|to)\s+|\s*[–—]\s*/i);
     if(rangeParts.length===2){
       const a = parseDateFlexible(rangeParts[0].trim());
       const b = parseDateFlexible(rangeParts[1].trim());
       if(a && b){
         let lo=a, hi=b;
         if(lo>hi){ const tmp=lo; lo=hi; hi=tmp; }
+        if(daysBetween(lo,hi)>400){ rejected.push(tok); continue; }
         let cur=lo;
         while(cur<=hi){ accepted.push(fmtISO(cur)); cur=addDays(cur,1); }
         continue;
@@ -642,7 +643,7 @@ function workingDays(start,end,weekdays,holidaySet,exceptionSet){
   return out;
 }
 function facilityMaxGap(f){
-  const hist = f.visitHistory;
+  const hist = f.visitHistory ? f.visitHistory.slice().sort((a,b)=>b.date-a.date) : null;
   if(!hist || hist.length<2) return null;
   let maxGap = 0;
   for(let i=0;i<hist.length-1;i++){
@@ -750,7 +751,7 @@ function migrateWeekdayProfiles(weekdayProfiles){
     const p = weekdayProfiles[key];
     const strength = p.kindStrength!=null ? p.kindStrength : 0.5;
     const kindLean = !p.kindPref ? 0 : (p.kindPref==='basic' ? strength : -strength);
-    const distLean = p.distanceBias!=null ? clamp(p.distanceBias,-1,1) : 0;
+    const distLean = p.distanceBias!=null ? Math.max(-1, Math.min(1, Number(p.distanceBias)||0)) : 0;
     const favorCategory = (p.favorTags && p.favorTags[0] && p.favorTags[0].type==='category') ? p.favorTags[0].id : null;
     weekdays2[key] = {kindLean, distLean, visitCap:null, favorCategory};
   }
@@ -781,7 +782,7 @@ function rankStream(facilities, planStart, NEVER, dctx, bias){
   };
   pinned.sort(tieBreak);
   const scored = rest.map(f=>{
-    const overdue = f.lastVisit ? daysBetween(f.lastVisit, planStart) : NEVER;
+    const overdue = f.lastVisit ? Math.max(0, daysBetween(f.lastVisit, planStart)) : NEVER;
     const weight = f.weight==null?1:f.weight;
     const score = overdue*weight*distanceTerm(f, dctx, bias);
     return {f, overdue, score};
@@ -846,7 +847,7 @@ function slotBudget(N, mode, opts){
   return {M,R,unused,notes};
 }
 function computeSharedBudget(N, k, ratioP, B, Cc, poolLoad, rho, capSum){
-  const Vmax = Math.min(capSum!=null?capSum:k*N, B+Cc);
+  const Vmax = Math.floor(Math.min(capSum!=null?capSum:k*N, B+Cc));
   for(let V=Vmax; V>=1; V--){
     let M = Math.min(Math.round(ratioP*V), B);
     let R = V-M;
@@ -953,6 +954,7 @@ function buildPairIndex(rules){
   const index = new Map();
   const add = (id, entry)=>{ if(!index.has(id)) index.set(id, []); index.get(id).push(entry); };
   for(const r of rules){
+    if(!r || !r.a || !r.b || r.a===r.b) continue;
     const factor = PAIR_FACTOR[r.strength] || PAIR_FACTOR.medium;
     add(r.a, {other:r.b, type:r.type, mode:r.mode, factor});
     add(r.b, {other:r.a, type:r.type, mode:r.mode, factor});
@@ -1052,7 +1054,7 @@ function sainteLagueAssign(pool, count, day, ctx){
       for(const e of partnersOf(id)){
         if(e.mode!=='rigid' || e.type!=='together' || seated(e.other)) continue;
         const q = candidates.find(c=>c.id===e.other);
-        if(q && passesFilters(q) && !partnersOf(q.id).some(x=>x.mode==='rigid' && x.type==='avoid' && seated(x.other))) return q;
+        if(q && passesFilters(q) && baseWeightOf(q)>0 && !partnersOf(q.id).some(x=>x.mode==='rigid' && x.type==='avoid' && seated(x.other))) return q;
       }
     }
     return null;
@@ -1070,7 +1072,7 @@ function sainteLagueAssign(pool, count, day, ctx){
     let guardRank = null;
     if(floor!=null && slot===count-1 && !chosen.some(p=>rankOf(p, ctx.facility.kind)>=floor)){
       let top = -Infinity;
-      for(const p of candidates) if(passesFilters(p) && baseWeightOf(p)>0) top = Math.max(top, rankOf(p, ctx.facility.kind));
+      for(const p of candidates) if(passesFilters(p) && baseWeightOf(p)>0 && !(pairs && pairBlocked(p, slot))) top = Math.max(top, rankOf(p, ctx.facility.kind));
       if(top>-Infinity) guardRank = Math.min(floor, top);
     }
     let best=null, bestKey=Infinity;
@@ -1239,7 +1241,13 @@ function buildDateOccupancy(rows, excludeRows){
   }
   return map;
 }
-function tryFixGenderPair(rowA, rowB, allRows, rule, isUnavailable, isBlocked, pairs){
+function rankFloorHolds(row, poolId, critMode){
+  if(critMode!=='require') return true;
+  const floor = rankFloorOf(row.facility);
+  if(floor==null) return true;
+  return teamOf(row, poolId).some(p=>rankOf(p, row.facility.kind)>=floor);
+}
+function tryFixGenderPair(rowA, rowB, allRows, rule, isUnavailable, isBlocked, pairs, critMode){
   const occ = buildDateOccupancy(allRows||[rowA,rowB], [rowA,rowB]);
   const dateAKey = fmtISO(rowA.date), dateBKey = fmtISO(rowB.date);
   for(const pool of poolIdsOfRow(rowA)){
@@ -1247,23 +1255,28 @@ function tryFixGenderPair(rowA, rowB, allRows, rule, isUnavailable, isBlocked, p
     for(const personA of teamA){
       for(const personB of teamB){
         if(personA.gender===personB.gender) continue;
+        if((personA.gender!=='m' && personA.gender!=='f') || (personB.gender!=='m' && personB.gender!=='f')) continue;
         if(teamA.some(p=>p!==personA&&p.id===personB.id)) continue;
         if(teamB.some(p=>p!==personB&&p.id===personA.id)) continue;
         if(occ[dateAKey] && occ[dateAKey].has(personB.id)) continue;
         if(occ[dateBKey] && occ[dateBKey].has(personA.id)) continue;
         if(isUnavailable && (isUnavailable(personB, rowA.date) || isUnavailable(personA, rowB.date))) continue;
         if(isBlocked && (isBlocked(personB, rowA.facility) || isBlocked(personA, rowB.facility))) continue;
+        const floorA = rankFloorHolds(rowA, pool, critMode), floorB = rankFloorHolds(rowB, pool, critMode);
+        const exA = explainOf(rowA, pool), exB = explainOf(rowB, pool);
         const breaksBefore = rigidPairBreaks(rowA, pairs) + rigidPairBreaks(rowB, pairs);
         swapPersonBetweenRows(rowA,pool,personA,rowB,pool,personB);
         const breaksAfter = rigidPairBreaks(rowA, pairs) + rigidPairBreaks(rowB, pairs);
-        if(breaksAfter<=breaksBefore && !violatesGenderRule(rowA,rule) && !violatesGenderRule(rowB,rule)) return true;
+        const floorOk = (!floorA || rankFloorHolds(rowA, pool, critMode)) && (!floorB || rankFloorHolds(rowB, pool, critMode));
+        if(floorOk && breaksAfter<=breaksBefore && !violatesGenderRule(rowA,rule) && !violatesGenderRule(rowB,rule)) return true;
         swapPersonBetweenRows(rowA,pool,personB,rowB,pool,personA);
+        setExplain(rowA, pool, exA); setExplain(rowB, pool, exB);
       }
     }
   }
   return false;
 }
-function applyGenderBalance(rows, genderRule, isUnavailable, isBlocked, pairs){
+function applyGenderBalance(rows, genderRule, isUnavailable, isBlocked, pairs, critMode){
   const rule = genderRule || {basic:'31', contracted:'off'};
   const dropped=[];
   for(const kind of ['basic','contracted']){
@@ -1277,7 +1290,7 @@ function applyGenderBalance(rows, genderRule, isUnavailable, isBlocked, pairs){
       let fixedWith=null;
       for(let j=1;j<list.length && attempts<200;j++){
         attempts++;
-        if(tryFixGenderPair(rowA, list[j], rows, kindRule, isUnavailable, isBlocked, pairs)){ fixedWith=list[j]; break; }
+        if(tryFixGenderPair(rowA, list[j], rows, kindRule, isUnavailable, isBlocked, pairs, critMode)){ fixedWith=list[j]; break; }
       }
       if(!fixedWith){
         dropped.push({date:rowA.date, facility:rowA.facility.name, reason:'gender-balance-no-partner'});
@@ -1663,7 +1676,7 @@ function generatePlan(opts){
     applyTeamsToRow(row, assignTeams(pools, row, row.date, ctx, {assigned}));
   }
   let genderDropped=[];
-  genderDropped = applyGenderBalance(rows, genderRule, isUnavailable, isBlocked, pairs);
+  genderDropped = applyGenderBalance(rows, genderRule, isUnavailable, isBlocked, pairs, critMode);
   const planOut = {
     rows, budget, N, days, genderDropped, dctx, globalDistanceBias: bias, pools: poolConfigs(pools),
     planStart: days[0]||startDate, NEVER, sequence: gateSequence,
@@ -1955,7 +1968,7 @@ function planShared(opts){
   const relocatePrefCtx = {tctx, lastDayIdx, prefSettings, critMatchStrength, critMode, weekdays2:effectiveWeekdays2};
   const {rows:relocatedRows, dropped:relocateDrops} = relocateUnfillable(builtRows, days, k, avail, load, used, pools, assigned, baseCtx, caps, vb.perWeek, relocatePrefCtx);
   let genderDropped=[];
-  genderDropped = applyGenderBalance(relocatedRows, genderRule, isUnavailable, isBlocked, pairs);
+  genderDropped = applyGenderBalance(relocatedRows, genderRule, isUnavailable, isBlocked, pairs, critMode);
   const rowsByDay = new Map();
   for(const r of relocatedRows){ if(!rowsByDay.has(r.dayIdx)) rowsByDay.set(r.dayIdx, []); rowsByDay.get(r.dayIdx).push(r); }
   const rows = [];
@@ -2713,7 +2726,7 @@ function serializeRegistry(reg){
 function deserializeRegistry(saved){
   return saved.map(f=>{
     const crit = snapLevel(f.crit==null ? 50 : f.crit);
-    const weight = typeof f.weight==='number' && isFinite(f.weight) && f.weight>0 ? f.weight : computeWeight(f.name);
+    const weight = typeof f.weight==='number' && isFinite(f.weight) && f.weight>=0 ? f.weight : computeWeight(f.name);
     return Object.assign({}, f, {
       crit, weight,
       lastVisit: f.lastVisit ? parseDateFlexible(f.lastVisit) : null,
@@ -4194,7 +4207,10 @@ function livePoolMembers(){
 }
 function cloneCountMap(map){
   const out = {};
-  for(const id in map) out[id] = Object.assign({}, map[id]);
+  for(const id in (map||{})){
+    const v = map[id];
+    out[id] = (v && typeof v==='object') ? Object.assign({}, v) : v;
+  }
   return out;
 }
 function peopleBuckets(){
@@ -4353,12 +4369,12 @@ function Stepper(config){
   const max = config.max==null ? Infinity : config.max;
   const step = config.step || 1;
   function clamp(v){ return Math.min(max, Math.max(min, v)); }
-  const dec = el('button', {type:'button', 'aria-label':'−', html:ICONS.minus, disabled: config.value<=min, onclick:()=>config.onChange(clamp(config.value-step))});
+  const dec = el('button', {type:'button', 'aria-label':'−', html:ICONS.minus, disabled: config.value<=min, onclick:()=>config.onChange(clamp(+(config.value-step).toFixed(6)))});
   const input = el('input', {
     type:'text', inputmode:'numeric', value:String(config.value), 'aria-label':config.ariaLabel||'',
-    onchange:e=>{ const v = parseFloat(toAsciiDigits(e.target.value).replace(/[^\d.-]/g,'')); config.onChange(clamp(isNaN(v)?config.value:v)); }
+    onchange:e=>{ const raw = toAsciiDigits(e.target.value).replace(/\u066B/g,'.').replace(/[^\d.-]/g,''); const v = parseFloat(raw); const next = clamp(isNaN(v) ? config.value : +v.toFixed(6)); e.target.value = String(next); config.onChange(next); }
   });
-  const inc = el('button', {type:'button', 'aria-label':'+', html:ICONS.plus, disabled: config.value>=max, onclick:()=>config.onChange(clamp(config.value+step))});
+  const inc = el('button', {type:'button', 'aria-label':'+', html:ICONS.plus, disabled: config.value>=max, onclick:()=>config.onChange(clamp(+(config.value+step).toFixed(6)))});
   wrap.appendChild(dec); wrap.appendChild(input); wrap.appendChild(inc);
   if(config.unit) wrap.appendChild(el('span', {class:'unit'}, config.unit));
   return wrap;
@@ -5769,6 +5785,7 @@ function applyImport(kind, diffResult, historyReport, missingActions, close){
   markPlanStaleIfNeeded();
   close();
   renderActiveTab();
+  approveSnapshot = null;
   showToast(t('importedToast'), {label:t('undoImport'), onClick:()=>{ if(lastImportUndo) lastImportUndo(); }});
 }
 function effectiveDayConfig(dow){
@@ -5963,7 +5980,8 @@ function handleApprovePlan(){
   };
   for(const r of state.plan.rows){
     if(r.empty) continue;
-    r.facility.lastVisit = r.date; r.facility.visitCount = (r.facility.visitCount||0)+1;
+    if(!r.facility.lastVisit || r.date > r.facility.lastVisit) r.facility.lastVisit = r.date;
+    r.facility.visitCount = (r.facility.visitCount||0)+1;
     pushVisit(r.facility, r.date, rowTeam(r).map(p=>p.name));
     for(const id of poolIdsOfRow(r)){
       const counts = initialCountsOf(id);
@@ -11127,6 +11145,75 @@ await checkAsync('requestGenerate (P4): the busy button is restored when generat
     if(btn.disabled || btn.textContent!=='go') throw new Error('the button stayed stuck in the busy state');
   } finally { btn.remove(); state.range = savedRange; state.customStart = savedStart; state.customEnd = savedEnd; state.goal = savedGoal; }
   return 'no stuck "Generating…" button';
+});
+check('parseDateFlexible (hunt): tolerates a comma after the weekday or month', ()=>{
+  const cases = [['en','Monday, 7 Sep 2026'],['ar','الاثنين، 7 سبتمبر 2026'],['month-comma','7 Sep, 2026'],['ar-month-comma','7 سبتمبر، 2026']];
+  for(const [lbl,raw] of cases){ const d = parseDateFlexible(raw); if(!d || fmtISO(d)!=='2026-09-07') throw new Error(lbl+' parsed as '+(d&&fmtISO(d))); }
+  return 'weekday and month commas accepted';
+});
+check('parseDateList (hunt): range separators and the runaway-range guard', ()=>{
+  const a = parseDateList('2026-09-01 الى 2026-09-03');
+  if(a.accepted.length!==3) throw new Error('الى range gave '+a.accepted.length);
+  const b = parseDateList('2026-09-01 – 2026-09-02');
+  if(b.accepted.length!==2) throw new Error('en-dash range gave '+b.accepted.length);
+  const c = parseDateList('2026-09-01..2206-09-01');
+  if(c.accepted.length!==0 || c.rejected.length!==1) throw new Error('runaway range was not rejected');
+  return 'ranges parsed, runaway rejected';
+});
+check('facilityMaxGap (hunt): unsorted history still yields the true max gap', ()=>{
+  const f = {visitHistory:[{date:new Date(2026,0,1)},{date:new Date(2026,5,1)},{date:new Date(2026,2,1)}]};
+  const g = facilityMaxGap(f);
+  if(g!==92) throw new Error('expected 92, got '+g);
+  return 'max gap is order-independent';
+});
+check('buildPairIndex (hunt): self-pairs and incomplete rules are ignored', ()=>{
+  const idx = buildPairIndex([{a:'x', b:'x', type:'avoid', mode:'rigid', strength:'medium'}, {a:'y', b:null, type:'together', mode:'rigid'}]);
+  if(idx && (idx.has('x') || idx.has('y'))) throw new Error('invalid rules leaked into the pair index');
+  return 'invalid rules skipped';
+});
+check('migrateWeekdayProfiles (hunt): distanceBias migrates without a global clamp', ()=>{
+  const w = migrateWeekdayProfiles({1:{distanceBias:2}, 2:{distanceBias:-0.4}});
+  if(w[1].distLean!==1 || w[2].distLean!==-0.4) throw new Error('got '+JSON.stringify(w));
+  return 'distLean clamped to [-1,1]';
+});
+check('cloneCountMap (hunt): nested pool maps are copied, not shared', ()=>{
+  const src = {fin:{x:1}, flat:3};
+  const c = cloneCountMap(src);
+  src.fin.x = 2;
+  if(c.fin.x!==1 || c.flat!==3) throw new Error('snapshot shares inner objects');
+  return 'inner count maps are independent';
+});
+check('forcedPartner (hunt): a rigid partner with no quota left is not forced', ()=>{
+  const b = freshPerson({id:'b', gender:'m', rank:50, fixedCount:0});
+  const c = freshPerson({id:'c', gender:'m', rank:50, fixedCount:null});
+  const ctx = {isUnavailable:()=>false, isBlocked:()=>false, isOverTied:()=>false, dctx:null, facilityPersonVisits:{}, familiarityGamma:0, hardBlockOverTied:false,
+    facility:{id:'fm', crit:50, kind:'basic'}, tctx:null, prefSettings:{}, critMatchStrength:0, critMode:'prefer', assignedCount:{},
+    rowChosen:new Set(['a']), pairs:buildPairIndex([{a:'a', b:'b', type:'together', mode:'rigid', strength:'medium'}])};
+  const team = sainteLagueAssign([b,c], 1, new Date(2026,8,1), ctx);
+  if(!team[0] || team[0].id!=='c') throw new Error('expected c, got '+(team[0]&&team[0].id));
+  return 'quota respected over rigid pairing';
+});
+check('rankStream (hunt): a future lastVisit does not invert weighting', ()=>{
+  const start = new Date(2026,8,1);
+  const heavy = {id:'h', name:'h', kind:'basic', weight:3, lastVisit:new Date(2026,8,10)};
+  const light = {id:'l', name:'l', kind:'basic', weight:1, lastVisit:new Date(2026,8,10)};
+  const out = rankStream([light, heavy], start, 720, null, 0);
+  if(out.length!==2) throw new Error('lost a facility');
+  return 'future lastVisit clamped to zero overdue';
+});
+check('registry round-trip (hunt): serialize/deserialize keeps facility fields', ()=>{
+  const f0 = state.registry && state.registry[0];
+  if(!f0) return 'skipped: empty registry';
+  const src = Object.assign({}, f0, {weight:0, crit:100, pinned:true, visitHistory:[{date:new Date(2026,0,5), team:['x']}], lastVisit:new Date(2026,0,5)});
+  const back = deserializeRegistry(serializeRegistry([src]))[0];
+  const bad = [];
+  for(const k of ['id','name','kind','category','locationId','weight','crit','pinned','manualExcluded']){
+    if(src[k]!==undefined && JSON.stringify(src[k])!==JSON.stringify(back[k])) bad.push(k);
+  }
+  if(!back.lastVisit || fmtISO(back.lastVisit)!=='2026-01-05') bad.push('lastVisit');
+  if(!back.visitHistory || back.visitHistory.length!==1) bad.push('visitHistory');
+  if(bad.length) throw new Error('lost or changed: '+bad.join(', '));
+  return 'all facility fields survive the undo snapshot';
 });
 check('debug gating (merged from alt_branch): the self-test button only appears when the page is opened with ?debug', ()=>{
   const host = el('div');
