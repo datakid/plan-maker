@@ -3961,7 +3961,8 @@ function loadSettings(){
   if(s.critMatchStrength!=null) state.critMatchStrength = s.critMatchStrength;
   if(s.critMode) state.critMode = s.critMode;
   if(s.rankSplitNotice) state.pendingRankSplitToast = true;
-  if(s.preferenceWindow!=null) state.preferenceWindow = s.preferenceWindow;
+  if(s.preferenceWindow!=null && Number.isFinite(+s.preferenceWindow) && +s.preferenceWindow>=1) state.preferenceWindow = Math.round(+s.preferenceWindow);
+  else state.preferenceWindow = 3;
   if(s.visitBudget) state.visitBudget = s.visitBudget;
   if(s.goal) state.goal = normalizeGoal(s.goal);
   if(Array.isArray(s.pools) && s.pools.length) state.pools = normalizePools(s.pools);
@@ -3982,7 +3983,6 @@ function loadSettings(){
   state.preferenceCeiling = 2.5;
   state.critMatchStrength = 0.3;
   state.originStrength = 0.5;
-  state.preferenceWindow = 3;
   state.overTieMinRatio = 0;
   state.cadence = Object.assign({mode:'prefer', gapDays:2}, state.cadence||{}, {strength:0.7, scope:'plan'});
   if(state.cadence.mode==='strict') state.cadence.mode = 'prefer';
@@ -9342,14 +9342,14 @@ check('rank floor (3.6): a generated plan gives every critical facility a top-ra
   registry.filter(f=>f.kind==='basic').slice(0,12).forEach(f=>{ f.crit = 100; });
   const finPool = FIN_ADMIN_SEED.map(freshPerson);
   const clinPool = CLINICAL_SEED.map(freshPerson);
-  finPool.concat(clinPool).forEach((p,i)=>{ p.rank = [20,35,50,65][i%4]; });
-  finPool.slice(0,2).concat(clinPool.slice(0,2)).forEach(p=>{ p.rank = 100; });
+  finPool.concat(clinPool).forEach((p,i)=>{ p.rank = p.rankBasic = p.rankContracted = [20,35,50,65][i%4]; });
+  finPool.slice(0,2).concat(clinPool.slice(0,2)).forEach(p=>{ p.active = true; p.rank = p.rankBasic = p.rankContracted = 100; });
   const plan = generatePlan({registry, finPool, clinPool, startDate:new Date(2026,8,1), endDate:new Date(2026,10,30), weekdays:new Set([1,2,3,4]), holidays:new Set(), exceptions:new Set(), mode:'ratio', ratioP:0.25, critMode:'require'});
   const critical = plan.rows.filter(r=>!r.empty && r.facility.crit===100);
   if(!critical.length) throw new Error('fixture assumption failed: no critical facility was scheduled');
   for(const r of critical){
-    if(!r.finTeam.some(p=>p.rank===100)) throw new Error(`${r.facility.name}: no rank-100 person from the finance pool`);
-    if(!r.clinTeam.some(p=>p.rank===100)) throw new Error(`${r.facility.name}: no rank-100 person from the technical pool`);
+    if(!r.finTeam.some(p=>rankOf(p, r.facility.kind)===100)) throw new Error(`${r.facility.name}: no rank-100 person from the finance pool`);
+    if(!r.clinTeam.some(p=>rankOf(p, r.facility.kind)===100)) throw new Error(`${r.facility.name}: no rank-100 person from the technical pool`);
   }
   return `${critical.length} critical visits each carry a rank-100 person from both pools`;
 });
