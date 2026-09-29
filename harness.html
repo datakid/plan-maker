@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0} iframe{border:0}</style></head><body>
+<iframe id="f" src="test.html" width="390" height="844"></iframe>
+<script>
+const f = document.getElementById('f');
+f.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    const d = f.contentDocument, w = f.contentWindow;
+    console.log('tab', w.eval('App.ui.tab'), 'scrollX', w.scrollX, 'docScrollW', d.documentElement.scrollWidth, 'clientW', d.documentElement.clientWidth);
+    const r = s=>{ const n = d.querySelector(s); if(!n) return s+': none'; const b = n.getBoundingClientRect(); return s+': L'+Math.round(b.left)+' R'+Math.round(b.right)+' W'+Math.round(b.width)+' sw'+n.scrollWidth; };
+    ['.page','.layout-side','.side-nav','.layout-side > .stack','#rule-calendar','#rule-volume','#rule-volume .setting','#rule-days','#rule-days .day-table','#rule-gender .rule-card','#rule-pairs .rule-card','#rule-distance .setting'].forEach(s=>console.log(r(s)));
+    const wide = [...d.querySelectorAll('.layout-side > .stack *')].filter(n=>{ const b = n.getBoundingClientRect(); return b.width>0 && (b.right>392 || b.left<-2); }).filter(n=>!n.closest('[style*="overflow"]')).slice(0,12).map(n=>n.tagName+'.'+n.className+' L'+Math.round(n.getBoundingClientRect().left)+' R'+Math.round(n.getBoundingClientRect().right));
+    console.log('wide', JSON.stringify(wide));
+    const cs = w.getComputedStyle(d.querySelector('.layout-side'));
+    console.log('grid cols', cs.gridTemplateColumns);
+  }, 6000);
+});
+</script></body></html>
