@@ -42,7 +42,7 @@ function renderFacilities(root){
   card.appendChild(bulk);
   const info = el('div', {class:'muted', style:{padding:'8px 16px', fontSize:'12.5px'}});
   card.appendChild(info);
-  const tableWrap = el('div', {style:{overflowX:'auto'}});
+  const tableWrap = el('div', {class:'tbl-wrap'});
   card.appendChild(tableWrap);
   root.appendChild(card);
   root.appendChild(renderCategoriesCard());

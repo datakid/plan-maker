@@ -232,10 +232,16 @@ function Slider(value, onChange, opts){
   return el('div', {class:'slider'}, [input, val, tier]);
 }
 function Select(options, value, onChange, opts){
-  const s = el('select', {class:'select'+(opts&&opts.sm?' sm':''), 'aria-label':(opts&&opts.label)||null, onchange:e=>onChange(e.target.value)});
-  for(const o of options){ const op = el('option', {value:o.value}, o.label); if(o.value===value) op.selected = true; s.appendChild(op); }
-  if(opts && opts.width) s.style.width = opts.width;
-  return s;
+  opts = opts||{};
+  let cur = value;
+  const lbl = el('span', {class:'select-lbl'});
+  const b = el('button', {type:'button', class:'select'+(opts.sm?' sm':''), 'aria-haspopup':'menu', 'aria-expanded':'false', 'aria-label':opts.label||null}, lbl);
+  function paint(){ const o = options.find(x=>x.value===cur) || options[0]; lbl.textContent = o ? o.label : '—'; b.title = lbl.textContent; }
+  b.addEventListener('click', ()=>menu(b, options.map(o=>({label:o.label, selected:o.value===cur, onClick:()=>{ if(o.value===cur) return; cur = o.value; paint(); onChange(o.value); }})), {search:options.length>8, width:Math.max(b.offsetWidth, 220)}));
+  if(opts.width) b.style.width = opts.width;
+  paint();
+  b.set = v=>{ cur = v; paint(); };
+  return b;
 }
 function DaySet(selected, onChange, opts){
   const set = new Set(selected||[]);

@@ -28,6 +28,7 @@ function defaultSettings(){
       {id:'g_basic', on:true, kinds:['basic'], categories:[], facilities:[], minEach:25, avoidEven:true},
       {id:'g_contracted', on:false, kinds:['contracted'], categories:[], facilities:[], minEach:1, avoidEven:false}
     ],
+    genderPrefs: {m:{on:false, dist:null, kind:null, days:[], strength:'medium'}, f:{on:false, dist:null, kind:null, days:[], strength:'medium'}},
     seniority: {on:true, threshold:60, mode:'require', match:0.3},
     fairness: {carry:true},
     rotation: {on:true, strength:0.35},
@@ -172,6 +173,8 @@ function normalizeData(d){
   d.settings.days = d.settings.days || {};
   d.settings.genderRules = Array.isArray(d.settings.genderRules) ? d.settings.genderRules : [];
   d.settings.pairs = Array.isArray(d.settings.pairs) ? d.settings.pairs : [];
+  const gp = d.settings.genderPrefs || {};
+  d.settings.genderPrefs = {m:Object.assign(fresh.genderPrefs.m, gp.m||{}), f:Object.assign(fresh.genderPrefs.f, gp.f||{})};
   d.locations = d.locations||[]; d.categories = d.categories||[]; d.facilities = d.facilities||[];
   d.people = (d.people||[]).map(freshPerson);
   d.history = Object.assign({fpv:{}, counts:{}, lastCycle:0}, d.history||{});

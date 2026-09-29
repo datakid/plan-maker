@@ -1,5 +1,16 @@
 const NEVER_DAYS = 1000;
 const PAIR_FACTOR = {light:1.4, medium:2, strong:3};
+const GP_FACTOR = {light:1.25, medium:1.6, strong:2.4};
+function genderPrefFactor(p, ord, kind, band){
+  const gp = p.gender && S().genderPrefs && S().genderPrefs[p.gender];
+  if(!gp || !gp.on) return 1;
+  const k = GP_FACTOR[gp.strength] || GP_FACTOR.medium;
+  let m = 1;
+  if(gp.dist) m *= gp.dist===band ? k : (band==='mid' ? 1 : 1/k);
+  if(gp.kind) m *= gp.kind===kind ? k : 1/k;
+  if(gp.days && gp.days.length && !gp.days.includes(wdOf(ord))) m *= 1/(k*k);
+  return m;
+}
 
 function isWorkday(ord){
   const cal = S().calendar, iso = isoOf(ord);
@@ -277,6 +288,7 @@ function assignTeam(visit, ord, ctx, opts){
         if(sen.on && sen.match){ const crit = (f.importance||50)/100; pref *= Math.max(0.1, 1 + sen.match*4*(crit-0.5)*(skill/100-0.5)); }
         const band = distBand(personTravelKm(p, f));
         if(p.distPref){ pref *= p.distPref===band ? 1.5 : (band==='mid' ? 1 : 0.65); }
+        pref *= genderPrefFactor(p, ord, kind, band);
         if(set.distance.shortTrips){ pref *= band==='near' ? 1.3 : (band==='far' ? 0.75 : 1); }
         if(set.distance.balanceFar && band==='far'){ const fc = ctx.far ? (ctx.far[p.id]||0) : 0; pref *= 1/(1+0.5*fc); }
         if(ctx.lastOrd[p.id]===ord-1) pref *= 0.85;

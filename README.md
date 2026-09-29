@@ -29,6 +29,8 @@ original/index.html   previous version (reference only)
 - **Skill**: 0–100 per visit type, with optional per-category overrides. Replaces the old 1–5 rank.
 - **Importance**: 0–100 per facility, with a configurable seniority threshold (require or prefer) and matching strength.
 - **Gender rules**: an ordered list, each rule switchable on/off. Scope by type, categories or specific facilities. Set a minimum % of each gender and whether to avoid even splits (e.g. 2+2). The rule card previews which team splits are valid.
+- **Preferences by gender** (inside Gender rules): separate soft preferences for men and women: near/far trips, basic/contracted facilities, preferred weekdays, and a strength (light/medium/strong). They weight who gets picked but never block anyone. Stored in `settings.genderPrefs.{m,f}`.
+- **Dropdowns**: every select is a themed button with a popover menu (searchable when it has more than 8 options), so it matches the other controls and the dark theme.
 - **Pairs**: together/apart, flexible (light/medium/strong) or rigid, each switchable on/off.
 - **Distance**: editable near/far km bands, trips measured from HQ or each person's starting point, a short-trip preference, sharing far trips evenly, and a facility pick bias.
 - **Per weekday**: max visits, min visits, type lean, distance lean, favoured category, only-these categories.

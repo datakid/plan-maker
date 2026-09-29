@@ -113,6 +113,26 @@ function renderRules(root){
     list.appendChild(el('button', {type:'button', class:'btn sm outline', style:{alignSelf:'flex-start'}, onclick:()=>{ set.genderRules.push({id:uid('g'), on:true, kinds:[], categories:[], facilities:[], minEach:25, avoidEven:false}); commit('settings'); paint(); }}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('gAdd')]));
     const unknown = activePeople().filter(p=>!p.gender).length;
     if(unknown) list.appendChild(el('div', {class:'banner warn'}, t('dGenderUnknown', unknown)));
+    const gpWrap = el('div', {class:'stack', style:{gap:'8px', paddingTop:'6px'}}, [
+      el('div', {class:'row'}, [el('b', {style:{fontWeight:'600', fontSize:'13.5px'}}, t('gpTitle'))]),
+      el('div', {class:'hint'}, t('gpHint'))
+    ]);
+    const grid = el('div', {class:'gp-grid'});
+    for(const g of ['m','f']){
+      const gp = set.genderPrefs[g];
+      const n = activePeople().filter(p=>p.gender===g).length;
+      const upd = ()=>{ commit('settings'); paint(); };
+      const card = el('div', {class:'rule-card'+(gp.on?'':' off')}, [
+        el('div', {class:'rc-head'}, [Switch(gp.on, v=>{ gp.on = v; upd(); }), el('b', null, t(g==='m'?'gpMale':'gpFemale')), el('span', {class:'muted num', style:{fontSize:'12px'}}, String(n)), el('div', {class:'spacer'})]),
+        el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gpDist')), Seg([{value:'near',label:t('bandNear')},{value:'',label:t('any')},{value:'far',label:t('bandFar')}], gp.dist||'', v=>{ gp.dist = v||null; commit('settings'); }, {cls:'sm'})]),
+        el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gpKind')), Seg([{value:'basic',label:t('kBasic')},{value:'',label:t('any')},{value:'contracted',label:t('kContracted')}], gp.kind||'', v=>{ gp.kind = v||null; commit('settings'); }, {cls:'sm'})]),
+        el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gpDays')), DaySet(gp.days||[], v=>{ gp.days = v; commit('settings'); }, {sm:true})]),
+        el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gpStrength')), Seg([{value:'light',label:t('prLight')},{value:'medium',label:t('prMedium')},{value:'strong',label:t('prStrong')}], gp.strength||'medium', v=>{ gp.strength = v; commit('settings'); }, {cls:'sm'})])
+      ]);
+      grid.appendChild(card);
+    }
+    gpWrap.appendChild(grid);
+    list.appendChild(gpWrap);
     return list;
   }));
 

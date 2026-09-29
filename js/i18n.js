@@ -141,6 +141,8 @@ defs({
   gAdd:['قاعدة جديدة','New rule'], gKinds:['النوع','Type'], gCats:['التصنيفات','Categories'], gFacs:['جهات محددة','Specific facilities'],
   gMinEach:['الحد الأدنى لكل نوع','Minimum of each'], gAvoidEven:['تجنّب التعادل (مثل 2+2)','Avoid even split (e.g. 2+2)'],
   gAllKinds:['كل الأنواع','All types'], gAllCats:['كل التصنيفات','All categories'], gAllFacs:['كل الجهات','All facilities'],
+  gpTitle:['تفضيلات حسب النوع','Preferences by gender'], gpHint:['تفضيل مرن يُرجّح التوزيع ولا يمنعه.','Soft preference: tilts assignment, never blocks it.'],
+  gpMale:['الذكور','Men'], gpFemale:['الإناث','Women'], gpDist:['المسافة','Distance'], gpKind:['نوع الجهة','Facility type'], gpDays:['أيام مفضلة','Preferred days'], gpAnyDay:['أي يوم','Any day'], gpStrength:['القوة','Strength'],
   gPreview:n=>`فريق من ${n}`,
   gExample:(n,a,b)=>`فريق ${n}: ${a}`,
   rSeniority:['الخبرة والأهمية','Seniority'], rSeniorityHint:['الجهات فوق الحد تحصل على شخص بخبرة لا تقل عن أهميتها.','Facilities above the threshold get someone at least as skilled as their importance.'],
