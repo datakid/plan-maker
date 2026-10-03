@@ -2,6 +2,7 @@ const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
 const LEGACY_PLAN_KEY = 'alkhitta.plan.v1';
+const SETTINGS_REV = 6;
 
 const App = {
   data: null,
@@ -20,8 +21,10 @@ function locIdFor(name){ return 'loc_' + norm(name).replace(/\s+/g,'_'); }
 function defaultSettings(){
   return {
     period: {goal:'range', preset:'month', start:null, end:null, scope:{kind:'all', ids:[]}, times:1},
-    calendar: {workdays:[1,2,3,4], holidays:[], extra:[]},
-    volume: {mode:'fill', share:0.25, exact:{basic:4, contracted:12}, quotas:{}, perDay:1, perWeek:null},
+    calendar: {workdays:[0,1,2,3,4], holidays:[], extra:[]},
+    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null},
+    goals: defaultGoals(),
+    overrides: [],
     spacing: {mode:'even', gap:2},
     days: {},
     genderRules: [
@@ -53,7 +56,7 @@ function seedData(){
     };
   });
   const people = SEED_PEOPLE.map(p=>freshPerson(Object.assign({}, p, {origin: locIdFor(p.origin||'دمنهور')})));
-  return {version:5, settings:defaultSettings(), locations, categories, facilities, people,
+  return {version:5, rev:SETTINGS_REV, settings:defaultSettings(), locations, categories, facilities, people,
     history:{fpv:{}, counts:{}, lastCycle:0}, aliases:{people:{}}, unresolved:[]};
 }
 
@@ -61,12 +64,12 @@ function freshPerson(p){
   const base = {
     id: uid('p'), name:'', pool:'fin', gender:null, title:null, retired:false, active:true,
     skill:{basic:50, contracted:50, byCategory:{}}, share:1, fixed:null, origin:null, distPref:null,
-    avail:{mode:'plan', weekdays:[1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}},
+    avail:{mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}},
     maxRun:null, maxPerWeek:null, off:[], blocked:[]
   };
   const out = Object.assign(base, p||{});
   out.skill = Object.assign({basic:50, contracted:50, byCategory:{}}, (p&&p.skill)||{});
-  out.avail = Object.assign({mode:'plan', weekdays:[1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}}, (p&&p.avail)||{});
+  out.avail = Object.assign({mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}}, (p&&p.avail)||{});
   out.avail.cycle = Object.assign({on:2, off:2, anchor:todayISO()}, out.avail.cycle||{});
   return out;
 }
@@ -173,6 +176,14 @@ function normalizeData(d){
   d.settings.days = d.settings.days || {};
   d.settings.genderRules = Array.isArray(d.settings.genderRules) ? d.settings.genderRules : [];
   d.settings.pairs = Array.isArray(d.settings.pairs) ? d.settings.pairs : [];
+  d.settings.goals = Array.isArray(d.settings.goals) ? d.settings.goals.map(normalizeGoal) : defaultGoals();
+  d.settings.overrides = Array.isArray(d.settings.overrides) ? d.settings.overrides.map(normalizeOverride) : [];
+  if((d.rev||0) < SETTINGS_REV){
+    d.settings.calendar.workdays = [0,1,2,3,4];
+    d.settings.volume.share = 0.6;
+    if(!d.settings.goals.length) d.settings.goals = defaultGoals();
+    d.rev = SETTINGS_REV;
+  }
   const gp = d.settings.genderPrefs || {};
   d.settings.genderPrefs = {m:Object.assign(fresh.genderPrefs.m, gp.m||{}), f:Object.assign(fresh.genderPrefs.f, gp.f||{})};
   d.locations = d.locations||[]; d.categories = d.categories||[]; d.facilities = d.facilities||[];
@@ -259,8 +270,10 @@ function personPatternOn(p, ord){
   }
   const iso = isoOf(ord);
   if(cal.extra.includes(iso)) return true;
+  if(isOverrideDate(iso)) return true;
   return cal.workdays.includes(wdOf(ord));
 }
+function isOverrideDate(iso){ const ov = S().overrides; return !!ov && ov.some(o=>o.on!==false && o.date===iso && o.facilityId); }
 function personAvailable(p, ord){
   if(!p || p.retired || p.active===false) return false;
   if(isOff(p, isoOf(ord))) return false;

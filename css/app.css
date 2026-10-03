@@ -187,7 +187,7 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 .setting .full{grid-column:1 / -1}
 .setting.disabled .full, .setting.disabled .ctl > :not(.switch){opacity:.45; pointer-events:none}
 
-.setup{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)) auto; gap:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--elev-1); overflow:hidden}
+.setup{display:grid; grid-template-columns:repeat(6, minmax(0,1fr)) auto; gap:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--elev-1); overflow:hidden}
 .setup-tile{display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:14px 18px; text-align:start; border-inline-start:1px solid var(--line); min-width:0; transition:background var(--t)}
 .setup-tile:first-child{border-inline-start:0}
 .setup-tile:hover{background:var(--hover)}
@@ -451,6 +451,37 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 
 .empty{padding:40px 20px; text-align:center; color:var(--ink-3); font-size:13px}
 
+.goal-ic{display:flex; color:var(--primary)}
+.goal-card .scope-seg{flex-wrap:wrap}
+.goal-row, .goal-prow, .fixed-row{display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:10px; text-align:start; width:100%}
+.goal-row.off{opacity:.55}
+.fixed-row:hover{background:var(--hover)}
+.fixed-row.off{opacity:.55}
+.gl-main{display:flex; flex-direction:column; gap:2px; flex:1; min-width:0}
+.gl-main b{font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.gl-main > span{font-size:11.5px; color:var(--ink-3); display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+.goal-prow{padding:8px 10px; border:1px solid var(--line); background:var(--raised); margin-bottom:6px}
+.goal-prow.met > span:first-child{color:var(--ok)}
+.goal-prow.short > span:first-child{color:var(--warn)}
+.goal-prow.progress > span:first-child{color:var(--primary)}
+.goal-meter{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-family:var(--font-num); color:var(--ink-3); flex-shrink:0}
+.goal-meter i{display:block; width:56px; height:6px; border-radius:3px; background:var(--sunken); position:relative; overflow:hidden}
+.goal-meter i::after{content:""; position:absolute; inset:0; width:var(--p); background:var(--primary); border-radius:3px}
+.goal-meter.met i::after{background:var(--ok)}
+.goal-meter.short i::after{background:var(--warn)}
+.fx-date{display:flex; flex-direction:column; align-items:center; min-width:40px; padding:4px 6px; border-radius:9px; background:var(--primary-soft); color:var(--primary); line-height:1.15}
+.fx-date b{font-size:15px; font-weight:600}
+.fx-date span{font-size:10.5px}
+.fx-flag{display:inline-flex; vertical-align:-2px; margin-inline-end:4px; color:var(--warn)}
+.fx-flag svg{width:13px; height:13px}
+.cal-ev.fixed{box-shadow:inset 0 0 0 1px var(--warn)}
+.cal-cell{position:relative}
+.cal-add{position:absolute; top:5px; inset-inline-end:5px; width:22px; height:22px; border-radius:7px; display:grid; place-items:center; color:var(--ink-3); opacity:0; transition:opacity var(--t), background var(--t)}
+.cal-cell:hover .cal-add, .cal-add:focus-visible{opacity:1}
+.cal-add:hover{background:var(--primary-soft); color:var(--primary)}
+@media (hover:none){.cal-add{opacity:.55}}
+.person-chip{gap:6px}
+
 #printSurface{display:none}
 @page{size:A4 landscape; margin:11mm}
 @media print{
@@ -467,7 +498,7 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 @media (min-width:721px){html{scrollbar-gutter:stable}}
 @media (max-width:980px){
   .setup{grid-template-columns:repeat(2, minmax(0,1fr))}
-  .setup-tile:nth-child(3){border-inline-start:0}
+  .setup-tile:nth-child(odd){border-inline-start:0}
   .setup-tile:nth-child(n+3){border-top:1px solid var(--line)}
   .setup-go{grid-column:1 / -1; border-inline-start:0; border-top:1px solid var(--line)}
   .setup-go .gen-btn{width:100%; justify-content:center}
@@ -506,6 +537,8 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
   .visit{grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"fac cat" "team team"; row-gap:6px}
   .visit .fac{grid-area:fac} .visit .cat{grid-area:cat; justify-self:end} .visit .team{grid-area:team; justify-content:flex-start}
   .cal-cell{min-height:64px; padding:3px}
+  .cal-add{width:18px; height:18px; top:2px; inset-inline-end:2px}
+  .goal-card .rc-head{flex-wrap:wrap}
   .cal-ev{padding:3px 4px; font-size:10px}
   .cal-ev span{display:none}
   .cal-wd{padding:5px 2px; font-size:10.5px}

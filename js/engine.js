@@ -12,12 +12,13 @@ function genderPrefFactor(p, ord, kind, band){
   return m;
 }
 
-function isWorkday(ord){
+function normalWorkday(ord){
   const cal = S().calendar, iso = isoOf(ord);
   if(cal.holidays.includes(iso)) return false;
   if(cal.extra.includes(iso)) return true;
   return cal.workdays.includes(wdOf(ord));
 }
+function isWorkday(ord){ return normalWorkday(ord) || isOverrideDate(isoOf(ord)); }
 function dayCfg(ord){ return S().days[wdOf(ord)] || {}; }
 
 function presetWindow(preset, startIso, endIso){
@@ -83,12 +84,14 @@ function inScope(f, scope){
   if(scope.kind==='type') return ids.includes(facilityKind(f));
   if(scope.kind==='category') return ids.includes(f.category);
   if(scope.kind==='location') return ids.includes(f.locationId);
+  if(scope.kind==='facility') return ids.includes(f.id);
   return true;
 }
 
 function listWorkdays(start, end){ const out = []; for(let o=start;o<=end;o++) if(isWorkday(o)) out.push(o); return out; }
 
 function dayVisitCapacity(ord, shareBasic){
+  if(!normalWorkday(ord)) return 0;
   const cap = dayCap(ord);
   const avail = poolAvailOn(ord);
   let teamFit = Infinity;
@@ -115,7 +118,7 @@ function resolveCoverageEnd(startOrd, need, shareBasic){
   const byWeek = new Map();
   let acc = 0, count = 0;
   for(let o=startOrd; o<startOrd+3650; o++){
-    if(!isWorkday(o)) continue;
+    if(!normalWorkday(o)) continue;
     let c = dayVisitCapacity(o, shareBasic);
     if(perWeek){ const k = weekKey(o); const used = byWeek.get(k)||0; c = Math.max(0, Math.min(c, perWeek-used)); byWeek.set(k, used+c); }
     acc += c; count++;
@@ -156,7 +159,8 @@ function volumePreview(){
     C = Math.min(total - B, conAll.length);
     if(B + C < total) B = Math.min(basicAll.length, total - C);
   }
-  return {goal:'range', start:w.start, end:w.end, workdays:days.length, basic:B, contracted:C, total:B+C, capacity:cap, overCapacity: B+C>cap};
+  const fixed = overridesIn(w.start, w.end).length;
+  return {goal:'range', start:w.start, end:w.end, workdays:days.length, basic:B, contracted:C, total:B+C, capacity:cap, overCapacity: B+C>cap, fixed};
 }
 
 function genderRuleFor(f, kind){
@@ -248,13 +252,20 @@ function assignTeam(visit, ord, ctx, opts){
   const needSenior = sen.on && sen.mode==='require' && (f.importance||0) >= sen.threshold;
   const team = {}, chosen = [];
   const pairs = ctx.pairs;
-  let remaining = n;
+  const preset = (opts && opts.preset) || [];
+  const auto = !opts || !opts.preset || opts.auto;
+  for(const pl of set.pools) team[pl.id] = [];
+  for(const id of preset){
+    const p = personById(id); if(!p) continue;
+    const pid = set.pools.some(pl=>pl.id===p.pool) ? p.pool : set.pools[0].id;
+    team[pid].push(id); chosen.push(id); used.add(id);
+  }
+  let remaining = Math.max(0, n - chosen.length);
   const partners = id=>pairs.get(id)||[];
   const inTeam = id=>chosen.includes(id);
   for(const {pool, members} of poolsLive()){
-    const seats = seatsFor(pool, kind, f.category);
-    team[pool.id] = [];
-    for(let s=0; s<seats; s++){
+    const seats = auto ? seatsFor(pool, kind, f.category) : 0;
+    for(let s=team[pool.id].length; s<seats; s++){
       const g = teamGender(chosen);
       const hasSenior = chosen.some(id=>skillOf(personById(id), kind, f.category) >= (f.importance||0));
       const lastSeatOverall = remaining===1;
@@ -310,12 +321,12 @@ function assignTeam(visit, ord, ctx, opts){
   }
   const open = {};
   let openTotal = 0;
-  for(const pl of set.pools){ const need = seatsFor(pl, kind, f.category); const got = (team[pl.id]||[]).length; if(need>got){ open[pl.id] = need-got; openTotal += need-got; } }
+  if(auto) for(const pl of set.pools){ const need = seatsFor(pl, kind, f.category); const got = (team[pl.id]||[]).length; if(need>got){ open[pl.id] = need-got; openTotal += need-got; } }
   if(opts && opts.trial) return {team, open, openTotal};
   return {team, open, openTotal};
 }
 
-function commitTeam(visit, ord, ctx){
+function commitTeam(visit, ord, ctx, counted){
   const all = [].concat(...Object.values(visit.team));
   if(!ctx.dayUsed.has(ord)) ctx.dayUsed.set(ord, new Set());
   const f = facilityById(visit.facilityId);
@@ -323,167 +334,21 @@ function commitTeam(visit, ord, ctx){
   ctx.far = ctx.far || {};
   for(const id of all){
     ctx.dayUsed.get(ord).add(id);
-    ctx.assigned[id] = (ctx.assigned[id]||0)+1;
+    const pre = counted && counted.has(id);
+    if(!pre) ctx.assigned[id] = (ctx.assigned[id]||0)+1;
     if(ctx.lastOrd[id]!==ord){
       ctx.run[id] = ctx.lastOrd[id]===ord-1 ? (ctx.run[id]||0)+1 : 1;
       ctx.lastOrd[id] = ord;
     }
-    const wk = id+'|'+weekKey(ord); ctx.week[wk] = (ctx.week[wk]||0)+1;
+    if(!pre){ const wk = id+'|'+weekKey(ord); ctx.week[wk] = (ctx.week[wk]||0)+1; }
     if(farBand) ctx.far[id] = (ctx.far[id]||0)+1;
   }
 }
 
-function generatePlan(){
-  const set = S();
-  const P = set.period, V = set.volume;
-  const diags = [];
-  const pool = schedulableFacilities();
-  let startOrd, endOrd, candidatesB, candidatesC, times = 1;
-  const prev = volumePreview();
-  if(P.goal==='coverage'){
-    if(!prev.reachable){ return {error:'coverageUnreachable'}; }
-    startOrd = prev.start; endOrd = prev.end; times = Math.max(1, P.times||1);
-  } else {
-    if(prev.invalid) return {error:'rangeInvalid'};
-    startOrd = prev.start; endOrd = prev.end;
-  }
-  const days = listWorkdays(startOrd, endOrd);
-  if(!days.length) return {error:'noWorkdays'};
-  const scopeList = P.goal==='coverage' ? pool.filter(f=>inScope(f, P.scope)) : pool;
-  const rankedB = rankFacilities(scopeList.filter(f=>facilityKind(f)==='basic'), startOrd);
-  const rankedC = rankFacilities(scopeList.filter(f=>facilityKind(f)==='contracted'), startOrd);
-  let pickB, pickC;
-  if(P.goal==='coverage'){
-    pickB = []; pickC = [];
-    for(let i=0;i<times;i++){ pickB.push(...rankedB); pickC.push(...rankedC); }
-  } else if(V.mode==='quota'){
-    pickB = []; pickC = [];
-    for(const cat of Object.keys(V.quotas||{})){
-      const q = Math.max(0, V.quotas[cat]|0); if(!q) continue;
-      const src = (categoryKind(cat)==='basic' ? rankedB : rankedC).filter(x=>x.f.category===cat);
-      if(src.length<q) diags.push({sev:'warn', key:'dQuotaShort', args:[cat, q, src.length]});
-      (categoryKind(cat)==='basic' ? pickB : pickC).push(...src.slice(0,q));
-    }
-    const rs = x=>x.sort((a,b)=>b.f.pinned-a.f.pinned || b.score-a.score);
-    rs(pickB); rs(pickC);
-  } else {
-    pickB = rankedB.slice(0, prev.basic);
-    pickC = rankedC.slice(0, prev.contracted);
-    if(V.mode==='exact'){
-      if(prev.basic > rankedB.length) diags.push({sev:'warn', key:'dShortBasic', args:[prev.basic, rankedB.length]});
-      if(prev.contracted > rankedC.length) diags.push({sev:'warn', key:'dShortContracted', args:[prev.contracted, rankedC.length]});
-    }
-  }
-  const seq = [];
-  const pattern = interleave(pickB.length, pickC.length);
-  let bi=0, ci=0;
-  for(const k of pattern){
-    const item = k==='basic' ? pickB[bi++] : pickC[ci++];
-    if(item) seq.push({kind:k, f:item.f, overdue:item.overdue, score:item.score, rank: k==='basic'? bi : ci});
-  }
-  const N = days.length, Vn = seq.length;
-  const load = new Array(N).fill(0);
-  const avail = days.map(poolAvailOn);
-  const seatUse = days.map(()=>({}));
-  const weekLoad = new Map();
-  const perWeek = V.perWeek;
-  const sp = set.spacing;
-  const placedOn = new Array(Vn).fill(-1);
-  const facilityDays = new Map();
-  function canPlace(v, d){
-    const ord = days[d], wd = wdOf(ord), c = dayCfg(ord);
-    if(v.f.weekdays && v.f.weekdays.length && !v.f.weekdays.includes(wd)) return false;
-    if(c.only && c.only.length && !c.only.includes(v.f.category)) return false;
-    if(load[d] >= dayCap(ord)) return false;
-    if(perWeek && (weekLoad.get(weekKey(ord))||0) >= perWeek) return false;
-    for(const pl of set.pools){ const need = seatsFor(pl, v.kind, v.f.category); if((seatUse[d][pl.id]||0) + need > (avail[d][pl.id]||0)) return false; }
-    const fd = facilityDays.get(v.f.id);
-    if(fd && fd.includes(d)) return false;
-    return true;
-  }
-  function dayPref(v, d){
-    const ord = days[d], c = dayCfg(ord);
-    let m = 1;
-    if(c.lean) m *= c.lean===v.kind ? 1.6 : 0.7;
-    if(c.dist){ const b = distBand(facilityKm(v.f)); m *= b===c.dist ? 1.5 : (b==='mid' ? 1 : 0.7); }
-    if(c.favor) m *= v.f.category===c.favor ? 1.4 : 1;
-    if(c.min && load[d] < c.min) m *= 1.8;
-    return m;
-  }
-  let last = 0;
-  for(let s=0; s<Vn; s++){
-    const v = seq[s];
-    const target = sp.mode==='pack' ? last : Math.floor(s*N/Math.max(1,Vn));
-    let bestD = -1, bestScore = -Infinity;
-    for(let pass=0; pass<2 && bestD<0; pass++){
-      const W = pass===0 ? 3 : N;
-      for(let d=Math.max(0, target-(pass?N:1)); d<=Math.min(N-1, target+W); d++){
-        if(!canPlace(v, d)) continue;
-        let score = 1/(1+Math.abs(d-target)*(sp.mode==='pack'?1.5:0.45));
-        if(sp.mode==='pack' && d<target) score *= 0.2;
-        score *= dayPref(v, d);
-        if(sp.mode==='gap' && load[d]===0){
-          for(let k=1;k<(sp.gap||2);k++){ if((d-k>=0 && load[d-k]>0 && days[d]-days[d-k] < (sp.gap||2)) || (d+k<N && load[d+k]>0 && days[d+k]-days[d] < (sp.gap||2))){ score *= 0.25; break; } }
-        }
-        if(score>bestScore){ bestScore = score; bestD = d; }
-      }
-    }
-    if(bestD<0){ diags.push({sev:'warn', key:'dNoRoom', args:[v.f.name]}); continue; }
-    placedOn[s] = bestD;
-    load[bestD]++;
-    for(const pl of set.pools) seatUse[bestD][pl.id] = (seatUse[bestD][pl.id]||0) + seatsFor(pl, v.kind, v.f.category);
-    const wk = weekKey(days[bestD]); weekLoad.set(wk, (weekLoad.get(wk)||0)+1);
-    if(!facilityDays.has(v.f.id)) facilityDays.set(v.f.id, []);
-    facilityDays.get(v.f.id).push(bestD);
-    last = bestD;
-  }
-  const visits = [];
-  seq.forEach((v, s)=>{ if(placedOn[s]>=0) visits.push({id:uid('v'), d:placedOn[s], date:isoOf(days[placedOn[s]]), facilityId:v.f.id, kind:v.kind, team:{}, open:{}, why:{overdue:v.overdue, score:Math.round(v.score), rank:v.rank}}); });
-  visits.sort((a,b)=>a.d-b.d);
-  const ctx = makeCtx(startOrd);
-  for(const v of visits){
-    const ord = days[v.d];
-    let res = assignTeam(v, ord, ctx);
-    if(res.openTotal>0){
-      const f = facilityById(v.facilityId);
-      const order = [];
-      for(let d=0; d<N; d++) if(d!==v.d) order.push(d);
-      order.sort((a,b)=>Math.abs(a-v.d)-Math.abs(b-v.d));
-      for(const d of order){
-        const o = days[d];
-        if(f.weekdays && f.weekdays.length && !f.weekdays.includes(wdOf(o))) continue;
-        const c = dayCfg(o);
-        if(c.only && c.only.length && !c.only.includes(f.category)) continue;
-        if(load[d] >= dayCap(o)) continue;
-        if(perWeek && (weekLoad.get(weekKey(o))||0) >= perWeek) continue;
-        if(visits.some(x=>x!==v && x.facilityId===v.facilityId && x.d===d)) continue;
-        const trial = assignTeam(v, o, ctx);
-        if(trial.openTotal===0){
-          load[v.d]--; const wo = weekKey(days[v.d]); weekLoad.set(wo, (weekLoad.get(wo)||1)-1);
-          load[d]++; const wn = weekKey(o); weekLoad.set(wn, (weekLoad.get(wn)||0)+1);
-          v.d = d; v.date = isoOf(o); res = trial; v.moved = true; break;
-        }
-      }
-    }
-    v.team = res.team; v.open = res.open;
-    commitTeam(v, days[v.d], ctx);
-  }
-  visits.sort((a,b)=>a.d-b.d);
-  repairGender(visits, days, ctx);
-  const plan = {
-    id: uid('plan'), cycle: (App.data.history.lastCycle||0)+1, createdAt: Date.now(),
-    approved:false, stale:false, start:isoOf(startOrd), end:isoOf(endOrd), days: days.map(isoOf),
-    goal:P.goal, requested: prev.total, visits: visits.map(v=>({id:v.id, date:v.date, facilityId:v.facilityId, kind:v.kind, team:v.team, open:v.open, why:v.why, moved:!!v.moved})),
-    carryover: [...rankedB.slice(pickB.length), ...rankedC.slice(pickC.length)].slice(0, 12).map(x=>x.f.id),
-    genDiags: diags
-  };
-  const pinnedOut = [...rankedB, ...rankedC].filter(x=>x.f.pinned && !plan.visits.some(v=>v.facilityId===x.f.id));
-  for(const x of pinnedOut) diags.push({sev:'warn', key:'dPinnedOut', args:[x.f.name]});
-  return {plan};
-}
 
 function repairGender(visits, days, ctx){
   for(const v of visits){
+    if(v.fixed) continue;
     const f = facilityById(v.facilityId);
     const rule = genderRuleFor(f, v.kind);
     if(!rule) continue;
@@ -516,7 +381,7 @@ function repairGender(visits, days, ctx){
     if(fixed) continue;
     for(const w of visits){
       if(fixed) break;
-      if(w===v || w.date===v.date) continue;
+      if(w===v || w.date===v.date || w.fixed) continue;
       const wf = facilityById(w.facilityId);
       for(const pl of S().pools){
         if(fixed) break;
@@ -599,9 +464,15 @@ function analyzePlan(plan){
     }
     const pb = pairBreaks(ids);
     if(pb){ rigidBad += pb; diags.push({sev:'warn', key:'dPair', args:[f.name, v.date], visit:v.id}); }
+    if(v.late) diags.push({sev:'warn', key:'dLate', args:[f.name, v.why && v.why.deadline], visit:v.id});
     for(const id of ids){
       const p = personById(id);
       if(!p) continue;
+      if(v.fixed){
+        if(!personAvailable(p, ordOf(v.date))) diags.push({sev:'info', key:'dFixedOff', args:[p.name, v.date], visit:v.id});
+        if((p.blocked||[]).includes(f.id)) diags.push({sev:'info', key:'dFixedBlocked', args:[p.name, f.name], visit:v.id});
+        continue;
+      }
       if(!personAvailable(p, ordOf(v.date))){ unavailable++; diags.push({sev:'error', key:'dUnavailable', args:[p.name, v.date], visit:v.id}); }
       if((p.blocked||[]).includes(f.id)){ blocked++; diags.push({sev:'error', key:'dBlocked', args:[p.name, f.name], visit:v.id}); }
     }
@@ -617,6 +488,9 @@ function analyzePlan(plan){
     if(unknown) diags.push({sev:'info', key:'dGenderUnknown', args:[unknown]});
   }
   if(plan.requested!=null && plan.visits.length < plan.requested) diags.push({sev:'warn', key:'dShort', args:[plan.visits.length, plan.requested]});
+  out.goals = goalProgress(plan);
+  const goalsBad = out.goals.filter(r=>r.state==='short' && r.must).length;
+  for(const r of out.goals) if(r.state==='short') diags.push({sev:r.must?'warn':'info', key:'dGoalShort', args:[r.title, r.inPlan, r.target]});
   for(const [wd, c] of Object.entries(set.days)){
     if(!c || !c.min) continue;
     const dates = plan.days.filter(iso=>wdOf(ordOf(iso))===+wd);
@@ -634,7 +508,8 @@ function analyzePlan(plan){
     {key:'cGender', ok:genderBad===0, n:genderBad, soft:true},
     {key:'cSenior', ok:seniorBad===0, n:seniorBad, soft:true},
     {key:'cPairs', ok:rigidBad===0, n:rigidBad, soft:true},
-    {key:'cRun', ok:runBad===0, n:runBad, soft:true}
+    {key:'cRun', ok:runBad===0, n:runBad, soft:true},
+    {key:'cGoals', ok:goalsBad===0, n:goalsBad, soft:true}
   ];
   out.blocking = out.checks.filter(c=>!c.ok && !c.soft).length;
   out.softFails = out.checks.filter(c=>!c.ok && c.soft).length;
@@ -709,6 +584,11 @@ function approvePlan(){
     }
   }
   H.lastCycle = plan.cycle;
+  snap.goalSince = {};
+  for(const g of S().goals){
+    const r = plan.goalReport && plan.goalReport[g.id];
+    if(r && r.rolled && r.since){ snap.goalSince[g.id] = g.since; g.since = r.since; }
+  }
   plan.approved = true; plan.stale = false; plan.snapshot = snap;
   save(); savePlan(); emit('plan');
 }
@@ -718,6 +598,7 @@ function unapprovePlan(){
   const s = plan.snapshot;
   for(const x of s.facilities){ const f = facilityById(x.id); if(f){ f.lastVisit = x.lastVisit; f.visitCount = x.visitCount; f.history = x.history; } }
   App.data.history.fpv = s.fpv; App.data.history.counts = s.counts; App.data.history.lastCycle = s.lastCycle;
+  for(const id in (s.goalSince||{})){ const g = goalById(id); if(g) g.since = s.goalSince[id]; }
   plan.approved = false; delete plan.snapshot;
   save(); savePlan(); emit('plan');
 }

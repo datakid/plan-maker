@@ -22,6 +22,8 @@ const onOff = v=>({text: v ? t('on') : t('off'), cls: v ? 'ok' : ''});
 function renderRules(root){
   const set = S();
   const sections = [
+    ['rule-goals', t('goalsTitle'), ICON.target],
+    ['rule-fixed', t('sFixed'), ICON.flag],
     ['rule-calendar', t('rCalendar'), ICON.cal],
     ['rule-volume', t('rVolume'), ICON.building],
     ['rule-days', t('rDays'), ICON.grid],
@@ -40,6 +42,9 @@ function renderRules(root){
   const main = el('div', {class:'stack'});
   const layout = el('div', {class:'layout-side'}, [nav, main]);
   root.appendChild(layout);
+
+  main.appendChild(ruleSection('rule-goals', t('goalsTitle'), t('goalsHint'), ()=>{ const n = set.goals.filter(g=>g.on).length; return n ? {text:String(n), cls:'ok'} : {text:t('off')}; }, paint=>[goalsEditor(paint)]));
+  main.appendChild(ruleSection('rule-fixed', t('sFixed'), t('fixedHint'), ()=>{ const n = set.overrides.filter(o=>o.on!==false && o.facilityId).length; return n ? {text:String(n), cls:'ok'} : null; }, ()=>[overridesEditor(()=>renderTab())]));
 
   main.appendChild(ruleSection('rule-calendar', t('rCalendar'), t('rCalendarHint'), ()=>({text:set.calendar.workdays.length+'/7'}), ()=>[
     setting(t('sWorkdays'), null, DaySet(set.calendar.workdays, v=>{ set.calendar.workdays = v; commit('settings'); })),

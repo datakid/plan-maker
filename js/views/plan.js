@@ -26,6 +26,13 @@ function tileSummaries(){
   out.visits = {v:(pv.total||0)+' '+(App.ui.lang==='ar'?'زيارة':'visits'), s: pv.overCapacity ? t('vOver', pv.total, pv.capacity) : t('vSummary', pv.basic||0, pv.contracted||0), warn:!!pv.overCapacity};
   const act = activePeople();
   out.team = {v:t('teamActive', act.length), s:S().pools.map(pl=>act.filter(p=>p.pool===pl.id).length+' '+poolName(pl)).join(' · ')};
+  const gOn = S().goals.filter(g=>g.on);
+  const gp = goalsPreview();
+  out.goals = {v: gOn.length ? (gOn.length===1 ? goalTitle(gOn[0]) : t('goalsN', gOn.length)) : t('goalsNoneShort'), s: gp ? t('goalsDemand', gp.must, gp.try) : '—'};
+  const ov = S().overrides.filter(o=>o.on!==false && o.facilityId);
+  const inWin = gp ? overridesIn(gp.win.start, gp.win.end).length : 0;
+  const bad = ov.filter(o=>overrideIssues(o).some(x=>x.sev!=='info')).length;
+  out.fixed = {v: ov.length ? t('fixedN', ov.length) : t('fixedNone'), s: bad ? t('fixedBad', bad) : (ov.length ? t('fixedInPlan', inWin) : t('fixedTap')), warn:!!bad};
   return out;
 }
 
@@ -36,12 +43,14 @@ function buildSetupStrip(){
     {k:'period', label:'sPeriod', icon:ICON.cal, build:periodPop},
     {k:'workdays', label:'sWorkdays', icon:ICON.grid, build:workdaysPop},
     {k:'visits', label:'sVisits', icon:ICON.building, build:visitsPop},
-    {k:'team', label:'sTeam', icon:ICON.users, build:teamPop}
+    {k:'team', label:'sTeam', icon:ICON.users, build:teamPop},
+    {k:'goals', label:'sGoals', icon:ICON.target, build:goalsPop},
+    {k:'fixed', label:'sFixed', icon:ICON.flag, build:fixedPop}
   ];
   for(const d of defs){
     const v = el('span', {class:'v'}), s = el('span', {class:'s'});
     const tile = el('button', {type:'button', class:'setup-tile', 'aria-haspopup':'dialog'}, [el('span', {class:'k'}, [el('span', {html:d.icon, style:{display:'flex'}}), t(d.label)]), v, s]);
-    tile.addEventListener('click', ()=>popover(tile, (close, refresh)=>[el('div', {class:'pop-title'}, t(d.label)), d.build(refresh)], {width:d.k==='visits'||d.k==='team'?400:380, noRefocus:false}));
+    tile.addEventListener('click', ()=>popover(tile, (close, refresh)=>[el('div', {class:'pop-title'}, t(d.label)), d.build(refresh)], {width:d.k==='visits'||d.k==='team'||d.k==='goals'||d.k==='fixed'?400:380, noRefocus:false}));
     tiles[d.k] = {tile, v, s};
     strip.appendChild(tile);
   }
@@ -211,10 +220,12 @@ function renderResults(){
   const plan = App.plan;
   if(!plan){
     const pv = volumePreview();
+    const gp = goalsPreview();
     root.appendChild(el('section', {class:'card hero', id:'plan-empty'}, [
       el('div', {class:'brand-mark', style:{width:'56px', height:'56px', borderRadius:'18px'}, html:WORDMARK}),
       el('button', {type:'button', class:'gen-btn', onclick:e=>runGenerate(e.currentTarget)}, [el('span', {html:ICON.sparkle, style:{display:'flex'}}), el('span', {class:'gl'}, t('generate'))]),
       el('p', null, pv.invalid ? t('errRange') : t('vSummary', pv.basic, pv.contracted)+' · '+t('workdaysN', pv.workdays)),
+      gp && (gp.must || gp.try || gp.fixed) ? el('p', null, t('goalsDemand', gp.must, gp.try)+(gp.fixed ? ' · '+t('fixedN', gp.fixed) : '')) : null,
       el('p', null, t('genHint'))
     ]));
     return;
@@ -280,7 +291,7 @@ function viewList(plan, A){
       const km = facilityKm(f), band = distBand(km);
       const dim = App.ui.focusPerson && !visitTeamIds(v).includes(App.ui.focusPerson);
       col.appendChild(el('button', {type:'button', class:'visit '+v.kind+(issues.has(v.id)?' has-issue':'')+(dim?' dim':''), 'data-v':v.id, onclick:()=>openVisit(v.id)}, [
-        el('span', {class:'fac'}, [el('b', null, f.name), el('span', null, [km!=null ? el('span', {class:'num'}, km+' '+t('km')) : null, f.pinned ? el('span', {html:ICON.pin}) : null, v.moved ? el('span', null, '· '+t('moved')) : null])]),
+        el('span', {class:'fac'}, [el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag, title:t('fixedTag')}) : null, f.name]), el('span', null, [km!=null ? el('span', {class:'num'}, km+' '+t('km')) : null, f.pinned ? el('span', {html:ICON.pin}) : null, v.fixed ? el('span', null, '· '+t('fixedTag')) : null, v.moved ? el('span', null, '· '+t('moved')) : null, v.late ? el('span', {style:{color:'var(--warn)'}}, '· '+t('lateTag')) : null])]),
         el('span', {class:'cat tag '+v.kind}, f.category || kindLabel(v.kind)),
         el('span', {class:'team'}, teamPills(v))
       ]));
@@ -328,12 +339,13 @@ function viewCalendar(plan, A){
     for(const v of (byDate.get(iso)||[])){
       const f = facilityById(v.facilityId) || {name:'—'};
       const dimmed = App.ui.focusPerson && !visitTeamIds(v).includes(App.ui.focusPerson);
-      const ev = el('button', {type:'button', class:'cal-ev '+v.kind+(issues.has(v.id)?' has-issue':'')+(dimmed?' dim':''), draggable: editable ? 'true' : null, title:f.name, onclick:()=>openVisit(v.id)}, [
-        el('b', null, f.name), el('span', null, visitTeamIds(v).map(id=>(personById(id)||{}).name).join('، '))
+      const ev = el('button', {type:'button', class:'cal-ev '+v.kind+(issues.has(v.id)?' has-issue':'')+(dimmed?' dim':'')+(v.fixed?' fixed':''), draggable: editable && !v.fixed ? 'true' : null, title:f.name, onclick:()=>openVisit(v.id)}, [
+        el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag}) : null, f.name]), el('span', null, visitTeamIds(v).map(id=>(personById(id)||{}).name).join('، '))
       ]);
-      if(editable) ev.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; });
+      if(editable && !v.fixed) ev.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; });
       cell.appendChild(ev);
     }
+    if(inMonth && editable) cell.appendChild(el('button', {type:'button', class:'cal-add', title:t('fixedAddOn', fmtDate(iso,'wdm')), 'aria-label':t('fixedAddOn', fmtDate(iso,'wdm')), html:ICON.plus, onclick:()=>addOverride({date:iso})}));
     if(inPlan && editable){
       cell.addEventListener('dragover', e=>{ e.preventDefault(); cell.classList.add('drop'); });
       cell.addEventListener('dragleave', ()=>cell.classList.remove('drop'));
@@ -453,6 +465,8 @@ function viewSummary(plan, A){
   }
   grid.appendChild(loadBox);
   const right = el('div', {class:'stack', style:{gap:'18px'}});
+  const gpb = goalsProgressBlock(plan);
+  if(gpb) right.appendChild(gpb);
   const checks = el('div');
   checks.appendChild(el('div', {class:'section-title'}, t('checksTitle')));
   for(const c of A.checks){
@@ -523,6 +537,14 @@ function doPrint(){
 function mutatePlan(fn){
   if(!App.plan || App.plan.approved){ toast(t('vdLocked')); return; }
   fn(App.plan);
+  let synced = false;
+  for(const v of App.plan.visits){
+    if(!v.fixed || !v.overrideId) continue;
+    const o = overrideById(v.overrideId); if(!o) continue;
+    const ids = visitTeamIds(v);
+    if(o.date!==v.date || o.facilityId!==v.facilityId || o.people.join()!==ids.join()){ o.date = v.date; o.facilityId = v.facilityId; o.people = ids; o.fill = false; synced = true; }
+  }
+  if(synced) save();
   savePlan();
   renderResults();
   if(sheet.current) sheet.current.render();
@@ -556,9 +578,13 @@ function openVisit(id){
       const out = [];
       const why = el('section', {class:'sheet-sec'});
       why.appendChild(el('div', {class:'section-title'}, t('vdWhy')));
+      const gNames = (v.why && v.why.goals || []).map(id=>{ if(id==='pinned') return t('fPinned'); if(id==='period') return t('goalCoverage'); const g = goalById(id); return g ? goalTitle(g) : null; }).filter(Boolean);
       why.appendChild(el('div', {class:'row wrap', style:{gap:'8px'}}, [
+        v.fixed ? el('span', {class:'tag warn', html:ICON.flag+' '+t('fixedTag')}) : null,
+        ...gNames.map(n=>el('span', {class:'tag ok', html:ICON.target+' '}, n)),
+        v.why && v.why.deadline ? el('span', {class:'tag'+(v.late?' warn':'')}, t('vdDeadline', fmtDate(v.why.deadline,'dm'))) : null,
         v.why ? el('span', {class:'tag'}, t('vdOverdue', v.why.overdue)) : null,
-        v.why ? el('span', {class:'tag'}, t('vdRank', v.why.rank, kindLabel(v.kind))) : null,
+        v.why && v.why.rank!=null ? el('span', {class:'tag'}, t('vdRank', v.why.rank, kindLabel(v.kind))) : null,
         el('span', {class:'imp-meter', style:{'--p':(f.importance||0)+'%'}}, [t('fImportance'), el('i'), String(f.importance||0)]),
         f.pinned ? el('span', {class:'tag warn', html:ICON.pin+' '+t('fPinned')}) : null
       ]));
@@ -603,7 +629,9 @@ function openVisit(id){
         const repBtn = el('button', {type:'button', class:'btn outline'}, [el('span', {html:ICON.building, style:{display:'flex'}}), t('vdReplace')]);
         repBtn.addEventListener('click', ()=>menu(repBtn, replacementFacilities(plan, v).map(x=>({label:x.f.name, meta:x.f.category+' · '+t('vdOverdue', x.overdue), onClick:()=>mutatePlan(()=>{ v.facilityId = x.f.id; v.why = {overdue:x.overdue, score:Math.round(x.score), rank:'—'}; })})), {search:true, width:340}));
         const delBtn = el('button', {type:'button', class:'btn ghost', style:{color:'var(--danger)'}, onclick:()=>confirmDialog(t('vdRemove'), f.name, {danger:true, label:t('del'), onConfirm:()=>{ mutatePlan(p=>{ p.visits = p.visits.filter(x=>x.id!==v.id); }); api.close(); }})}, [el('span', {html:ICON.trash, style:{display:'flex'}}), t('vdRemove')]);
-        act.appendChild(el('div', {class:'row wrap'}, [moveBtn, repBtn, delBtn]));
+        const fixBtn = el('button', {type:'button', class:'btn outline', onclick:()=>{ fixVisitAsOverride(v); api.render(); }}, [el('span', {html:ICON.flag, style:{display:'flex'}}), v.fixed ? t('vdEditFixed') : t('vdFix')]);
+        act.appendChild(el('div', {class:'row wrap'}, [fixBtn, moveBtn, repBtn, delBtn]));
+        if(v.fixed) act.appendChild(el('div', {class:'hint', style:{marginTop:'8px'}}, t('vdFixedHint')));
         out.push(act);
       }
       const hist = el('section', {class:'sheet-sec'});

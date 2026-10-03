@@ -1,56 +1,53 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="css/app.css"></head><body>
 <header class="topbar" id="topbar"></header><main class="page stack" id="page"></main><div id="printSurface"></div>
-<script src="js/core.js"></script><script src="js/seed.js"></script><script src="js/store.js"></script><script src="js/i18n.js"></script><script src="js/engine.js"></script><script src="js/ui.js"></script><script src="js/io.js"></script><script src="js/views/plan.js"></script><script src="js/views/facilities.js"></script><script src="js/views/team.js"></script><script src="js/views/rules.js"></script><script src="js/views/data.js"></script><script src="js/app.js"></script>
+<script src="js/core.js"></script><script src="js/seed.js"></script><script src="js/store.js"></script><script src="js/i18n.js"></script><script src="js/engine.js"></script><script src="js/goals.js"></script><script src="js/planner.js"></script><script src="js/ui.js"></script><script src="js/io.js"></script><script src="js/views/plan.js"></script><script src="js/views/facilities.js"></script><script src="js/views/team.js"></script><script src="js/views/goals.js"></script><script src="js/views/rules.js"></script><script src="js/views/data.js"></script><script src="js/app.js"></script>
 <script>
-window.FINAL_TAB = 'plan'; window.FINAL_VIEW = 'calendar';
+localStorage.clear();
 window.addEventListener('error', e=>console.log('WINERR', e.message, e.filename, e.lineno));
 window.addEventListener('load', ()=>{
   setTimeout(()=>{
-    const step = (name, fn)=>{ try{ const r = fn(); console.log('OK', name, r===undefined?'':r); }catch(e){ console.log('FAIL', name, e.message, (e.stack||'').split('\n').slice(0,3).join(' | ')); } };
-    step('generate', ()=>{ const r = generatePlan(); App.plan = r.plan; savePlan(); emit('plan'); return r.plan.visits.length; });
-    for(const vw of ['list','calendar','matrix','summary']) step('view '+vw, ()=>{ App.ui.view = vw; renderResults(); return document.getElementById('plan-card').querySelectorAll('*').length; });
-    step('matrix fac', ()=>{ App.ui.matrixMode='facilities'; App.ui.view='matrix'; renderResults(); App.ui.matrixMode='people'; });
-    step('focus', ()=>{ App.ui.focusPerson = 'p_mariam'; App.ui.view='list'; renderResults(); return document.querySelectorAll('.visit.dim').length; });
-    App.ui.focusPerson = null;
-    step('visit sheet', ()=>{ openVisit(App.plan.visits[0].id); const n = document.querySelector('.sheet-body').children.length; return n; });
-    step('swap menu', ()=>{ const b = [...document.querySelectorAll('.sheet-body .btn.sm.outline')][0]; b.click(); const n = document.querySelectorAll('.pop .menu-item').length; closePop(); return n; });
-    step('move menu', ()=>{ const b = [...document.querySelectorAll('.sheet-body .btn.outline')].find(x=>x.textContent.includes(t('vdMove'))); b.click(); const n = document.querySelectorAll('.pop .menu-item').length; closePop(); return n; });
-    step('replace menu', ()=>{ const b = [...document.querySelectorAll('.sheet-body .btn.outline')].find(x=>x.textContent.includes(t('vdReplace'))); b.click(); const n = document.querySelectorAll('.pop .menu-item').length; const s = document.querySelector('.pop .menu-search'); closePop(); return n+' search:'+!!s; });
-    step('swap do', ()=>{ const v = App.plan.visits[0]; const pl = S().pools[0].id; const c = candidatesForSeat(App.plan, v, pl, v.team[pl][0]).find(x=>!x.reason); if(!c) return 'none'; mutatePlan(()=>{ v.team[pl][0] = c.p.id; }); return c.p.name; });
-    step('move do', ()=>{ const v = App.plan.visits[0]; const tg = moveTargets(App.plan, v).find(x=>!x.conflicts && !x.full); if(!tg) return 'none'; moveVisit(v.id, tg.date); return tg.date; });
-    step('close sheet', ()=>{ if(sheet.current) sheet.current.close(true); });
-    const tiles = document.querySelectorAll('.setup-tile');
-    tiles.forEach((b,i)=>step('tile '+i, ()=>{ b.click(); const p = document.querySelector('.pop'); const n = p ? p.querySelectorAll('*').length : 0; closePop(); return n; }));
-    step('period custom', ()=>{ tiles[0].click(); const seg = [...document.querySelectorAll('.pop .seg button')].find(x=>x.textContent===t('pCustom')); seg.click(); const n = document.querySelectorAll('.pop .input').length; closePop(); S().period.preset='month'; return n; });
-    step('date popover nested', ()=>{ tiles[1].click(); const add = [...document.querySelectorAll('.pop .chip')].find(x=>x.textContent.includes(t('add'))); add.click(); const n = document.querySelectorAll('.pop').length; closePop(); return n; });
-    step('visits exact', ()=>{ tiles[2].click(); const seg = [...document.querySelectorAll('.pop .seg button')].find(x=>x.textContent===t('vQuota')); seg.click(); const n = document.querySelectorAll('.pop .input-group').length; closePop(); S().volume.mode='fill'; return n; });
-    step('export pop', ()=>{ const b = [...document.querySelectorAll('#plan-actionbar .btn')].find(x=>x.textContent.includes(t('exportBtn'))); b.click(); const n = document.querySelectorAll('.pop .menu-item').length; closePop(); return n; });
-    step('approve', ()=>{ approvePlan(); const r = App.plan.approved+' '+App.data.history.lastCycle; unapprovePlan(); return r+' -> '+App.plan.approved+' '+App.data.history.lastCycle; });
-    for(const tb of ['facilities','team','rules','data']) step('tab '+tb, ()=>{ goTab(tb); return document.getElementById('page').querySelectorAll('*').length; });
-    step('fac sheet', ()=>{ goTab('facilities'); openFacility(App.data.facilities[30].id); const n = document.querySelectorAll('.sheet .slider').length; sheet.current.close(true); return n; });
-    step('fac bulk', ()=>{ const cbs = document.querySelectorAll('.tbl tbody .cb'); cbs[0].click(); cbs[1].click(); return document.querySelector('.bulkbar').hidden+' '+App.ui.facSelected.size; });
-    step('fac add', ()=>{ addFacility(); const n = !!document.querySelector('.sheet'); sheet.current.close(true); return n; });
-    step('person sheet', ()=>{ goTab('team'); openPerson('p_mariam', null, ()=>{}); const cyc = [...document.querySelectorAll('.sheet .seg button')].find(x=>x.textContent===t('pAvailCycle')); cyc.click(); const n = document.querySelectorAll('.sheet .week-strip i.on').length; sheet.current.close(true); return 'cycle on-days in 14: '+n; });
-    step('rules', ()=>{ goTab('rules'); const n = document.querySelectorAll('.rule-sec').length; document.querySelectorAll('.side-nav a')[3].click(); return n+' active:'+(document.querySelector('.side-nav a.active')||{}).textContent; });
-    step('gender add', ()=>{ const b = [...document.querySelectorAll('#rule-gender .btn')].find(x=>x.textContent.includes(t('gAdd'))); b.click(); return document.querySelectorAll('#rule-gender .rule-card').length; });
-    step('pair add', ()=>{ const b = [...document.querySelectorAll('#rule-pairs .btn')].find(x=>x.textContent.includes(t('prAdd'))); b.click(); return document.querySelectorAll('#rule-pairs .rule-card').length; });
-    step('day only pop', ()=>{ const b = document.querySelector('#rule-days .chip'); b.click(); const n = document.querySelectorAll('.pop .chip').length; closePop(); return n; });
-    step('regenerate with rules', ()=>{ const r = generatePlan(); App.plan = r.plan; savePlan(); const A = analyzePlan(r.plan); return r.plan.visits.length+' checks '+A.checks.filter(c=>c.ok).length+'/'+A.checks.length+' diags '+A.diags.length; });
-    step('data import preview', ()=>{ goTab('data'); const rows = [['جهة المرور','المنطقة','الخطة','المرور','التاريخ','القائم بالمرور'],['ابو حمص','الثانية','12','أساسي','2026-08-02','أباظة-أماني-فلان']]; const pv = previewImport('history', rows); return pv.recs.length+' unknown '+pv.unknownPeople.length; });
-    step('xlsx roundtrip', ()=>{ const rows = exportPlanRows(App.plan,'full'); const x = buildXlsx([{name:'a', rows}, exportMatrixSheet(App.plan)]); readXlsx(x.buffer).then(r=>console.log('OK xlsx read', r.length, rows.length)).catch(e=>console.log('FAIL xlsx read', e.message)); return x.length; });
-    step('migrate v4', ()=>{ const legacy = {version:4, settings:{weekdays:[0,1,2], genderRule:{basic:'mixed',contracted:'off'}}, locations:[], facilities:[{id:'f_1', name:'x', category:'اشعة', kind:'contracted', weight:1, crit:75}], people:[{id:'p1', name:'a', pool:'fin', gender:'m', rankBasic:75, workWeekdays:[1,2]}, {id:'p2', name:'b', pool:'retired', gender:'f'}], history:{initialCounts:{fin:{p1:3}}}}; const mg = normalizeData(migrateV4(legacy)); return mg.settings.calendar.workdays.join(',')+' retired:'+mg.people[1].retired+' mode:'+mg.people[0].avail.mode+' counts:'+mg.history.counts.p1; });
-    step('coverage', ()=>{ S().period.goal='coverage'; S().period.scope={kind:'type', ids:['basic']}; const pv = volumePreview(); const r = generatePlan(); S().period.goal='range'; return pv.total+' visits, end '+(pv.end?isoOf(pv.end):'-')+' plan '+(r.plan?r.plan.visits.length:r.error); });
-    step('english all tabs', ()=>{ setLang('en'); for(const tb of ['plan','facilities','team','rules','data']) goTab(tb); App.ui.view='summary'; goTab('plan'); const txt = document.body.innerText; setLang('ar'); return /[\u0600-\u06FF]{3,}/.test(txt.replace(/[\u0600-\u06FF\s]+(?=)/g,'')) ; });
-    setTimeout(()=>{
-      const m = [];
-      m.push('iw'+innerWidth+' cw'+document.documentElement.clientWidth+' sw'+document.documentElement.scrollWidth+' sx'+Math.round(scrollX)+' bsw'+document.body.scrollWidth);
-      for(const s of ['.page','.layout-side','.side-nav','#rule-calendar','#rule-volume','#rule-days','#rule-gender','#rule-distance']){ const n = document.querySelector(s); if(n){ const b = n.getBoundingClientRect(); m.push(s+' L'+Math.round(b.left)+' R'+Math.round(b.right)+' sw'+n.scrollWidth); } }
-      const wide = [...document.querySelectorAll('.page *')].filter(n=>{ const b = n.getBoundingClientRect(); return b.width>0 && (b.right>innerWidth+2 || b.left<-2) && !n.closest('.side-nav'); }).slice(0,8).map(n=>n.tagName+'.'+(typeof n.className==='string'?n.className:'')+' '+Math.round(n.getBoundingClientRect().left)+'..'+Math.round(n.getBoundingClientRect().right));
-      m.push('W:'+wide.join(' ; '));
-      const box = document.createElement('pre'); box.style.cssText='position:fixed;top:60px;left:0;right:0;z-index:999;background:#000;color:#0f0;font:11px monospace;white-space:pre-wrap;direction:ltr;padding:6px;margin:0';
-      console.log(m.join('\n'));
-    }, 50);
-    step('final plan tab', ()=>{ goTab(window.FINAL_TAB||'plan'); App.ui.view=window.FINAL_VIEW||'list'; if(App.ui.tab==='plan') renderResults(); window.scrollTo(0,0); });
-  }, 400);
+    try{
+      const s = S();
+      console.log('workdays', JSON.stringify(s.calendar.workdays), 'share', s.volume.share, 'goals', s.goals.length);
+      console.log('cats', App.data.categories.filter(c=>c.kind!=='excluded').map(c=>c.name+':'+schedulableFacilities().filter(f=>f.category===c.name).length).join(' '));
+      const pv = volumePreview();
+      console.log('preview', pv.basic, pv.contracted, pv.workdays);
+      const w = planWindow();
+      const d1 = isoOf(w.work[2]);
+      const fac = schedulableFacilities().find(f=>facilityKind(f)==='contracted');
+      const ppl = activePeople().slice(0,2).map(p=>p.id);
+      s.overrides.push(newOverride({date:d1, facilityId:fac.id, people:ppl, fill:false}));
+      const fri = (()=>{ for(let o=w.start;o<=w.end;o++) if(wdOf(o)===5) return isoOf(o); })();
+      const fac2 = schedulableFacilities().find(f=>facilityKind(f)==='basic');
+      s.overrides.push(newOverride({date:fri, facilityId:fac2.id, people:[], fill:true}));
+      s.goals.push(Object.assign(newGoal('atLeast'), {n:3, strict:'must', scope:{kind:'category', ids:['اشعة']}}));
+      s.goals.push(Object.assign(newGoal('atMost'), {n:1, strict:'must', scope:{kind:'category', ids:['معمل']}}));
+      s.goals[1].on = true;
+      const r = generatePlan();
+      if(r.error){ console.log('ERR', r.error); return; }
+      const p = r.plan;
+      console.log('visits', p.visits.length, 'days', p.days.length, 'requested', p.requested);
+      const fx = p.visits.filter(v=>v.fixed);
+      console.log('fixed', fx.map(v=>v.date+' '+(facilityById(v.facilityId)||{}).name+' team='+visitTeamIds(v).length).join(' | '));
+      const ov1 = p.visits.find(v=>v.overrideId===s.overrides[0].id);
+      console.log('ov1 team exact', JSON.stringify(visitTeamIds(ov1))===JSON.stringify(ppl));
+      const busy = p.visits.filter(v=>v.date===d1 && !v.fixed).some(v=>visitTeamIds(v).some(id=>ppl.includes(id)));
+      console.log('fixed people double-booked', busy);
+      console.log('friday included', p.days.includes(fri), 'other visits on friday', p.visits.filter(v=>v.date===fri && !v.fixed).length);
+      const ph = p.visits.filter(v=>(facilityById(v.facilityId)||{}).category==='اشعة').length;
+      const lab = p.visits.filter(v=>(facilityById(v.facilityId)||{}).category==='معمل').length;
+      console.log('pharmacy', ph, 'lab', lab);
+      const A = analyzePlan(p);
+      console.log('checks', A.checks.map(c=>c.key+':'+(c.ok?'ok':c.n)).join(' '));
+      console.log('goals', A.goals.map(g=>g.title+' '+g.state+' '+g.label).join(' | '));
+      console.log('diags', A.diags.slice(0,8).map(d=>d.key).join(','));
+      App.plan = p; savePlan(); emit('plan');
+      approvePlan(); console.log('approved', App.plan.approved); unapprovePlan(); console.log('unapproved', !App.plan.approved);
+      App.ui.view = (location.hash==='#cal' ? 'calendar' : null) || window.TEST_VIEW || 'summary'; renderResults();
+      if(window.TEST_SHEET==='ov') openOverride(s.overrides[0].id);
+      if(window.TEST_SHEET==='goals') openGoals();
+      console.log('scrollW', document.documentElement.scrollWidth, 'clientW', document.documentElement.clientWidth);
+    }catch(e){ console.log('EXC', e.message, e.stack); }
+  }, 300);
 });
 </script></body></html>

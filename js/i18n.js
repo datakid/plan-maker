@@ -175,6 +175,68 @@ defs({
   statsTitle:['الأرقام','Numbers'], statsFac:['جهات قابلة للزيارة','Schedulable facilities'], statsPeople:['أشخاص نشطون','Active people'], statsCycle:['آخر دورة معتمدة','Last approved cycle'],
   appearance:['المظهر','Appearance'], thLight:['فاتح','Light'], thDark:['داكن','Dark'], thAuto:['تلقائي','Auto'], language:['اللغة','Language']
 });
+function defs2(obj){ for(const k in obj){ I18N.ar[k] = obj[k][0]; I18N.en[k] = obj[k][1]; } }
+defs({
+  sGoals:['الأهداف','Goals'], sFixed:['زيارات مثبّتة','Fixed visits'],
+  goalsTitle:['أهداف الخطة','Plan goals'], goalsHint:['ما تريد تحقيقه. «إلزامي» يُقدَّم أولًا، و«قدر الإمكان» يملأ ما تبقى.','What the plan should achieve. "Must" goes first, "Try" fills what is left.'],
+  goalsManage:['إدارة الأهداف','Manage goals'], goalAdd:['هدف جديد','New goal'], goalsNone:['لا أهداف. تعمل الخطة بالإعدادات العادية.','No goals. The plan uses the normal settings.'],
+  goalsNoneShort:['بدون أهداف','No goals'], goalProgressTitle:['تقدّم الأهداف','Goal progress'],
+  gTypeCover:['تغطية','Cover'], gTypeAtLeast:['حد أدنى','At least'], gTypeAtMost:['حد أقصى','At most'], gTypeMaxGap:['أقصى مدة بدون زيارة','Max gap'],
+  gHintCover:['زيارة كل جهة في النطاق عدد مرات معين، مع تاريخ إنهاء اختياري.','Visit every facility in scope N times, optionally by a deadline.'],
+  gHintAtLeast:['عدد أدنى من الزيارات للنطاق في كل خطة.','A minimum number of visits to the scope in each plan.'],
+  gHintAtMost:['لا يتجاوز عدد زيارات النطاق هذا الحد في الخطة.','Never exceed this many visits to the scope in a plan.'],
+  gHintMaxGap:['لا تمر على أي جهة في النطاق مدة أطول من هذه دون زيارة.','No facility in scope goes longer than this without a visit.'],
+  gMust:['إلزامي','Must'], gTry:['قدر الإمكان','Try'], gScope:['النطاق','Scope'], gTimes:['مرات لكل جهة','Times each'],
+  gSince:['يُحتسب من','Counting from'], gBy:['الإنهاء قبل','Finish by'], gNoDeadline:['بدون موعد','No deadline'], gRepeat:['يبدأ دورة جديدة عند الاكتمال','Start over when complete'],
+  gN:['العدد','Count'], gPerPlan:['في الخطة','per plan'], gDays:['المدة','Gap'], daysU:['يوم','days'],
+  gsAll:['كل الجهات','All facilities'], scopeFacility:['جهات','Facilities'], choose:['اختر…','Choose…'],
+  gp_met:['تحقق','Met'], gp_short:['لم يكتمل','Short'], gp_progress:['قيد التقدم','In progress'], gp_new:['جديد','New'], gPaced:['موزع حتى الموعد','Paced to deadline'],
+  cGoals:['الأهداف الإلزامية','Required goals'],
+  fixedTag:['مثبّتة','Fixed'], fixedNew:['زيارة مثبّتة جديدة','New fixed visit'], fixedAdd:['تثبيت زيارة','Fix a visit'], fixedNone:['لا يوجد','None'], fixedTap:['حدد يومًا وجهة وفريقًا','Pick a day, place and team'],
+  fixedHint:['حدد تاريخًا وجهة وأشخاصًا. تُوضع أولًا، ويُحجز أشخاصها في ذلك اليوم، وتُبنى بقية الخطة حولها.','Set a date, place and people. They go in first, their people are held that day, and the rest of the plan works around them.'],
+  fixedSaved:['حُفظت الزيارة المثبّتة','Fixed visit saved'],
+  ovDate:['التاريخ','Date'], ovFacility:['الجهة','Facility'], ovPeople:['الفريق','People'], ovAddPerson:['أضف شخصًا','Add person'],
+  ovPickFacility:['اختر الجهة','Choose facility'], ovAutoShort:['فريق تلقائي','Auto team'], ovNote:['ملاحظة','Note'],
+  ovFill:['أكمل باقي المقاعد تلقائيًا','Fill remaining seats automatically'], ovFillHint:['إن أوقفته يذهب الأشخاص المحددون فقط.','When off, only the people you picked go.'],
+  ovNoFacility:['لم تُحدد الجهة','No facility selected'], ovNoDate:['لم يُحدد التاريخ','No date set'],
+  ovExcluded:['الجهة مستبعدة عادةً — ستُزار في هذا اليوم فقط','Facility is normally excluded — visited on this day only'],
+  ovAddsDay:['اليوم ليس يوم عمل — سيُضاف لهذه الزيارة فقط','Not a workday — added just for this visit'],
+  ovGone:['شخص محذوف في الفريق','A deleted person is in the team'], ovAutoTeam:['بدون أشخاص: يُختار الفريق تلقائيًا','No people: the team is picked automatically'],
+  lateTag:['متأخرة','Late'], vdFix:['تثبيت هذه الزيارة','Fix this visit'], vdEditFixed:['تعديل المثبّتة','Edit fixed visit'],
+  vdFixedHint:['هذه الزيارة مثبّتة. تبقى في مكانها مع فريقها عند إعادة التوليد.','This visit is fixed: it keeps its date and team on regenerate.']
+});
+defs2({
+  gtCoverT:[(s,n)=>`تغطية ${s}${n>1?' ×'+n:''}`, (s,n)=>`Cover ${s}${n>1?' ×'+n:''}`],
+  gtAtLeastT:[(n,s)=>`${n} على الأقل: ${s}`, (n,s)=>`At least ${n}: ${s}`],
+  gtAtMostT:[(n,s)=>`${n} كحد أقصى: ${s}`, (n,s)=>`At most ${n}: ${s}`],
+  gtMaxGapT:[(s,d)=>`${s} كل ${d} يوم`, (s,d)=>`${s} every ${d} days`],
+  gStCover:[(a,b)=>`${a}/${b} منجزة`, (a,b)=>`${a}/${b} done`],
+  gStGap:[(a,b)=>`${a} من ${b} متأخرة`, (a,b)=>`${a} of ${b} overdue`],
+  gStPool:[n=>`${n} جهة`, n=>`${n} facilities`],
+  goalsN:[n=>`${n} أهداف`, n=>`${n} goals`],
+  goalsDemand:[(m,tr)=>`${m} إلزامي · ${tr} مرغوب`, (m,tr)=>`${m} required · ${tr} wanted`],
+  fixedN:[n=>`${n} مثبّتة`, n=>`${n} fixed`],
+  fixedBad:[n=>`${n} بها تعارض`, n=>`${n} with conflicts`],
+  fixedInPlan:[n=>`${n} في فترة الخطة`, n=>`${n} in plan period`],
+  fixedAddOn:[d=>`تثبيت زيارة يوم ${d}`, d=>`Fix a visit on ${d}`],
+  vdDeadline:[d=>`مطلوبة قبل ${d}`, d=>`Due by ${d}`],
+  ovPeopleN:[n=>`${n} أشخاص`, n=>`${n} people`],
+  ovUsualTeam:[s=>`الفريق المعتاد: ${s}`, s=>`Usual team: ${s}`],
+  ovInactive:[p=>`${p} غير مشارك حاليًا`, p=>`${p} is not active`],
+  ovPersonOff:[p=>`${p} غير متاح في هذا اليوم`, p=>`${p} is unavailable that day`],
+  ovPersonBlocked:[p=>`${p} محظور من هذه الجهة`, p=>`${p} is blocked from this facility`],
+  ovPersonTwice:[p=>`${p} في زيارة مثبّتة أخرى نفس اليوم`, p=>`${p} is in another fixed visit that day`],
+  ovBigTeam:[(a,b)=>`الفريق ${a} أكبر من المعتاد ${b}`, (a,b)=>`Team of ${a} is larger than usual ${b}`],
+  dGoalShortPool:[(g,n,h)=>`«${g}»: المتاح ${h} من ${n}`, (g,n,h)=>`"${g}": only ${h} of ${n} available`],
+  dGoalShort:[(g,a,b)=>`هدف «${g}»: ${a} من ${b}`, (g,a,b)=>`Goal "${g}": ${a} of ${b}`],
+  dGoalNoRoom:[f=>`لا يوجد يوم متاح لـ ${f} (مطلوبة لهدف)`, f=>`No free day for ${f} (needed by a goal)`],
+  dGoalOverCap:[(n,c)=>`الأهداف تطلب ${n} زيارة زيادة عن سعة الفترة (${c}) — أُجّلت للدورة القادمة`, (n,c)=>`Goals ask for ${n} more visits than the period holds (${c}) — moved to next cycle`],
+  dCapBlocked:[f=>`${f}: منعها حد أقصى`, f=>`${f}: held back by an at-most goal`],
+  dFixedTwice:[(p,d)=>`${p} في زيارتين مثبّتتين ${fmtDate(d,'short')}`, (p,d)=>`${p} is in two fixed visits ${fmtDate(d,'short')}`],
+  dFixedOff:[(p,d)=>`${p} مثبّت رغم عدم توفره ${fmtDate(d,'short')}`, (p,d)=>`${p} fixed although unavailable ${fmtDate(d,'short')}`],
+  dFixedBlocked:[(p,f)=>`${p} مثبّت في جهة محظورة ${f}`, (p,f)=>`${p} fixed at blocked facility ${f}`],
+  dLate:[(f,d)=>`${f}: بعد الموعد ${d?fmtDate(d,'dm'):''}`, (f,d)=>`${f}: after its due date ${d?fmtDate(d,'dm'):''}`]
+});
 I18N.en.workdaysN = n=>`${n} workdays`;
 I18N.en.covUntil = (d,n)=>`Until ${d} · ${n} workdays`;
 I18N.en.vSummary = (b,c)=>`${b} basic · ${c} contracted`;
