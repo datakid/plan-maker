@@ -10,6 +10,7 @@ js/core.js            dates (ordinal-day math), parsing, DOM helper, icons
 js/seed.js            seed facilities, locations, categories, people, pools
 js/store.js           data model, v4→v5 migration, persistence, domain helpers
 js/i18n.js            Arabic / English strings
+js/people-rules.js    compiles person goals, pair goals and per-plan quotas into one rule index (deny / count / together)
 js/engine.js          capacity, scoring, team assignment (with preset people), gender repair, analysis, approve/undo
 js/goals.js           goal & fixed-visit models, demand builder, goal progress, fixed-visit conflict checks
 js/planner.js         generation pipeline: window → fixed visits → goal demand → selection → placement → teams → repair
@@ -21,7 +22,8 @@ js/views/team.js      people cards, person sheet, groups & seats
 js/views/goals.js     goals editor (sheet + rules section), fixed-visit sheet, plan-strip popovers, progress block
 js/views/rules.js     all rules with a sticky section nav (scroll-spy) and on/off status per section
 js/views/data.js      import, unresolved names, backup/restore, appearance, reset
-test.html             dev self-test (not needed in production)
+test.html             dev self-test runner (loads js/selftest.js; not needed in production)
+js/selftest.js        assertions for people goals, quotas, special visits, migration
 ```
 
 ## Goals (v3.1)
@@ -33,6 +35,22 @@ A list of goals, each switchable and marked **Must** (served first) or **Try** (
 The default is one goal: *Cover all facilities ×1, no deadline, Try*. This makes rotation coverage-aware without changing how many visits a plan has.
 
 The engine merges all goals into a demand list (per facility: count, priority tier, deadline). Must goals come first, smaller goals before bigger ones, and the total is capped by the period's capacity. Leftover room is filled by the normal volume settings, which prefer facilities the goals still need. The Summary view shows progress for each goal. The Approve check flags unmet Must goals as a soft issue.
+
+## People goals (v3.2)
+Goals come in two groups. **Facility goals** are listed above. **People goals** are new:
+- **Person rule**: one or more people, with a rule and a scope. *Never* (e.g. never goes to contracted), *Only* (only goes to this scope), or *Exactly / At least / At most N* visits in this plan, counted inside the scope.
+- **Pair together**: two people should go out together in at least (or at most) X% of their visits, e.g. half the places. Optional scope. The % is taken from the visits of whichever of the two goes out less. *At most 0%* means they never meet.
+- **Special visit**: a chosen facility, N times, within a flexible date window. You can pick people (who are then held for that day) and fill the remaining seats automatically. The planner picks the best day, so this is a flexible version of a fixed visit.
+
+**Visits per plan (per person)**: in the person sheet you choose *Auto* (by share), *Exact N*, or a *Range min–max*. This replaces the old "fixed count". Saved data is migrated (`fixed:N` → `quota:{min:N,max:N}`).
+
+### How it works
+`compilePeopleRules()` turns all of these into one index that the engine uses:
+- **deny**: (person, scope) pairs. *Must* = hard filter in `hardOk`, *Try* = a soft penalty.
+- **counts**: per-person counters, each with an optional scope, a min and a max. *Must* max = hard cap; min pulls the person in, scaled by how far below it they are.
+- **together**: pair counters. Picking a person whose partner is already on the team gets a boost (or a penalty for *at most*).
+
+The planning context uses one tally helper (`ctxTally` / `ctxPairTally`) for every change, including the gender repair swaps, so the counters never go out of sync. Consecutive-day limits are checked on the real set of dates, not on placement order. After teams are assigned, `repairPeopleRules` swaps seats one by one when that lowers the total violation score, and never breaks hard rules, gender rules or rigid pairs. `analyzePlan` adds a **People rules** check and a note for each break. Seat swaps in the visit sheet flag candidates that would break a rule or a quota.
 
 ## Fixed visits (overrides)
 For example: *2026-10-03, this facility, these people*. Each fixed visit:
@@ -70,6 +88,8 @@ Workdays are Sunday to Thursday (5 days). Visit mix is 3 basic : 2 contracted (b
 Everything is stored in `localStorage` (`alkhitta.v5`, `alkhitta.plan.v5`). Existing `alkhitta.v4` data is migrated automatically on first load. No backend.
 
 ## Verification
+- `test.html`: never-contracted, exactly-3, quota-5, together ≥50%, special ×2 inside its window, no double booking, no open seats, quota migration, and cleanup when a person is deleted. All pass.
+- Goals sheet and person sheet checked on desktop and mobile (390px).
 - Automated pass over 43 steps: generation, all four views, visit sheet (swap/move/replace), setup tiles and nested popovers, export, approve/undo, every tab, facility/person sheets, rules add/edit, re-generation with rules (8/8 checks), import preview, XLSX write→read round-trip, v4 migration, coverage goal, English mode.
 - Mobile (390px): no horizontal overflow on any tab, view or sheet; popovers clamped to the screen.
 
@@ -77,5 +97,7 @@ Everything is stored in `localStorage` (`alkhitta.v5`, `alkhitta.plan.v5`). Exis
 This is a static site with no build step. On Vercel, serve the repo root. You can drop `test.html`.
 
 ## Possible next steps
+- A feasibility pre-check that sums all exact quotas against total seats before generating.
+- People goals measured across several plans (e.g. "at most 2 far trips a month").
 - Goal templates (e.g. "all hospitals monthly"); recurring fixed visits (every first Sunday).
 - Undo history for manual plan edits; comparing several plans side by side.

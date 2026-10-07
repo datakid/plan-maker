@@ -84,9 +84,10 @@ function menu(anchor, items, opts){
       if(!shown.length) list.appendChild(el('div', {class:'menu-item muted'}, (opts&&opts.empty) || '—'));
       for(const it of shown.slice(0, 200)){
         if(it.sep){ list.appendChild(el('div', {style:{height:'1px', background:'var(--line)', margin:'4px 0'}})); continue; }
-        list.appendChild(el('button', {type:'button', class:'menu-item'+(it.selected?' sel':''), role:'menuitem', disabled:it.disabled, onclick:()=>{ close(); it.onClick && it.onClick(); }}, [
+        if(it.header){ list.appendChild(el('div', {class:'menu-head'}, [it.icon ? el('span', {html:it.icon, style:{display:'flex'}}) : null, it.label])); continue; }
+        list.appendChild(el('button', {type:'button', class:'menu-item'+(it.selected?' sel':'')+(it.desc?' has-desc':''), role:'menuitem', disabled:it.disabled, onclick:()=>{ close(); it.onClick && it.onClick(); }}, [
           it.icon ? el('span', {html:it.icon}) : null,
-          el('span', null, it.label),
+          it.desc ? el('span', {class:'mi-text'}, [el('b', null, it.label), el('small', null, it.desc)]) : el('span', null, it.label),
           it.meta ? el('span', {class:'meta'}, it.meta) : null,
           it.selected ? el('span', {class:'meta', html:ICON.check}) : null
         ]));

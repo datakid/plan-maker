@@ -451,8 +451,22 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 
 .empty{padding:40px 20px; text-align:center; color:var(--ink-3); font-size:13px}
 
-.goal-ic{display:flex; color:var(--primary)}
+.goal-ic{display:flex; color:var(--primary); flex-shrink:0}
 .goal-card .scope-seg{flex-wrap:wrap}
+.goal-card .rc-head{flex-wrap:wrap}
+.goal-card .rc-head .gl-main{min-width:140px}
+.goal-card.people{border-inline-start:3px solid var(--contracted)}
+.goal-card.people .goal-ic{color:var(--contracted)}
+.goal-card.flash{animation:goal-flash 1.4s var(--ease)}
+@keyframes goal-flash{0%,40%{box-shadow:0 0 0 3px var(--focus)}100%{box-shadow:0 0 0 0 transparent}}
+.goal-card .rc-row .seg.wrap-seg{flex-wrap:wrap}
+.goal-group-h{font-size:11.5px; font-weight:600; color:var(--ink-3); letter-spacing:.02em; padding:8px 2px 0}
+.person-select{min-width:140px; max-width:220px}
+.menu-head{display:flex; align-items:center; gap:8px; padding:8px 10px 4px; font-size:11.5px; font-weight:600; color:var(--ink-3)}
+.menu-item.has-desc{align-items:flex-start}
+.mi-text{display:flex; flex-direction:column; gap:2px; min-width:0}
+.mi-text b{font-weight:600}
+.mi-text small{font-size:11.5px; color:var(--ink-3); line-height:1.45; white-space:normal}
 .goal-row, .goal-prow, .fixed-row{display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:10px; text-align:start; width:100%}
 .goal-row.off{opacity:.55}
 .fixed-row:hover{background:var(--hover)}

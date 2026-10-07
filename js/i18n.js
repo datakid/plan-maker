@@ -205,6 +205,39 @@ defs({
   lateTag:['متأخرة','Late'], vdFix:['تثبيت هذه الزيارة','Fix this visit'], vdEditFixed:['تعديل المثبّتة','Edit fixed visit'],
   vdFixedHint:['هذه الزيارة مثبّتة. تبقى في مكانها مع فريقها عند إعادة التوليد.','This visit is fixed: it keeps its date and team on regenerate.']
 });
+defs({
+  gTypePerson:['قاعدة لشخص','Person rule'], gTypeTogether:['ثنائي معًا','Pair together'], gTypeSpecial:['زيارة خاصة','Special visit'],
+  gHintPerson:['مثل: لا يخرج إلى المتعاقدة أبدًا، أو يخرج ٦ زيارات بالضبط في هذه الخطة.','e.g. never goes to contracted, or makes exactly 6 visits this plan.'],
+  gHintTogether:['يخرج شخصان معًا في نسبة من زياراتهما، مثل نصف الأماكن.','Two people share a share of their visits, e.g. half the places.'],
+  gHintSpecial:['زيارة لجهة معينة خلال فترة مرنة، مع أشخاص محددين إن أردت. يختار المخطط أنسب يوم.','A visit to a chosen place within a flexible window, optionally with set people. The planner picks the best day.'],
+  gGroupFac:['أهداف الجهات','Facility goals'], gGroupPeople:['أهداف الأشخاص','People goals'],
+  gWho:['الأشخاص','People'], gRel:['القاعدة','Rule'], gVisitsN:['عدد الزيارات','Visits'], gWhere:['في','At'], gOnlyWhere:['فقط في','Only at'], gCountWhere:['تُحتسب في','Counted at'],
+  rel_never:['لا يخرج أبدًا','Never'], rel_only:['فقط','Only'], rel_exactly:['بالضبط','Exactly'], rel_atLeast:['على الأقل','At least'], rel_atMost:['على الأكثر','At most'],
+  trel_atLeast:['معًا على الأقل','Together at least'], trel_atMost:['معًا على الأكثر','Together at most'],
+  gPair:['الثنائي','Pair'], gShare:['النسبة','Share'], gTogetherHow:['النسبة من زيارات الأقل خروجًا منهما. ١٠٠٪ = دائمًا معًا، ٠٪ على الأكثر = لا يجتمعان.','Share of the visits of whichever goes out less. 100% = always together; at most 0% = never together.'],
+  gBetween:['خلال','Between'], gPlanStart:['بداية الخطة','Plan start'], gPlanEnd:['نهاية الخطة','Plan end'],
+  gNeedPeople:['اختر أشخاصًا','Pick people'], gNeedPair:['اختر شخصين','Pick two people'], choosePerson:['اختر شخصًا','Choose person'],
+  gpClean:['لا مخالفات','No breaks'], specialTag:['خاصة','Special'],
+  pLoad:['الحمل','Workload'], pPerPlan:['الزيارات في كل خطة','Visits per plan'], pPerPlanHint:['تلقائي = حسب النصيب. أو حدد عددًا بالضبط أو نطاقًا.','Auto = by share. Or set an exact number or a range.'],
+  pPerPlanShort:['/خطة','/plan'], pQAuto:['تلقائي','Auto'], pQExact:['بالضبط','Exact'], pQRange:['نطاق','Range'], pQMin:['الحد الأدنى','Minimum'], pQMax:['الحد الأقصى','Maximum'],
+  pGoals:['قواعد هذا الشخص','Rules for this person'], gAddFor_person:['قاعدة','Rule'], gAddFor_together:['ثنائي','Pair'], gAddFor_special:['زيارة خاصة','Special visit'],
+  rRule:['قاعدة','rule'], rQuota:['بلغ الحد','at limit'], cPeople:['قواعد الأشخاص','People rules']
+});
+defs2({
+  gtPersonT:[(p,r,n,s)=>`${p}: ${({never:'لا يخرج',only:'فقط',exactly:n+' بالضبط',atLeast:n+' على الأقل',atMost:n+' على الأكثر'})[r]}${s?' · '+s:''}`, (p,r,n,s)=>`${p}: ${({never:'never',only:'only',exactly:'exactly '+n,atLeast:'at least '+n,atMost:'at most '+n})[r]}${s?' · '+s:''}`],
+  gtTogetherT:[(a,b,r,p,s)=>`${a} + ${b}: ${r==='atLeast'?'≥':'≤'}${p}٪ معًا${s?' · '+s:''}`, (a,b,r,p,s)=>`${a} + ${b}: ${r==='atLeast'?'≥':'≤'}${p}% together${s?' · '+s:''}`],
+  gtSpecialT:[(f,n)=>`زيارة خاصة: ${f}${n>1?' ×'+n:''}`, (f,n)=>`Special: ${f}${n>1?' ×'+n:''}`],
+  gpBreaks:[n=>`${n} مخالفة`, n=>`${n} breaks`],
+  gpTogether:[(b,n,p)=>`${b} من ${n} معًا (${p}٪)`, (b,n,p)=>`${b} of ${n} together (${p}%)`],
+  dPersonRule:[(p,f)=>`${p} في ${f} رغم قاعدته`, (p,f)=>`${p} at ${f} despite a rule`],
+  dQuotaPerson:[(p,q,l)=>`${p}: ${q} زيارة (المطلوب ${l})`, (p,q,l)=>`${p}: ${q} visits (wanted ${l})`],
+  dPersonFewDays:[(p,n,a)=>`${p}: مطلوب ${n} ومتاح ${a} يوم فقط`, (p,n,a)=>`${p}: ${n} wanted but only ${a} days available`],
+  dPersonEmptyScope:[g=>`«${g}»: النطاق فارغ`, g=>`"${g}": the scope is empty`],
+  dTogetherNoSeats:[g=>`«${g}»: لا توجد جهة تتسع لهما معًا`, g=>`"${g}": no place has seats for both`],
+  dSpecialNoFacility:[g=>`«${g}»: لم تُحدد الجهة`, g=>`"${g}": no facility set`],
+  dSpecialPeopleGone:[g=>`«${g}»: بعض الأشخاص غير نشطين`, g=>`"${g}": some people are inactive`],
+  dSpecialNoDay:[g=>`«${g}»: لا يوجد يوم مناسب في الفترة`, g=>`"${g}": no suitable day in the window`]
+});
 defs2({
   gtCoverT:[(s,n)=>`تغطية ${s}${n>1?' ×'+n:''}`, (s,n)=>`Cover ${s}${n>1?' ×'+n:''}`],
   gtAtLeastT:[(n,s)=>`${n} على الأقل: ${s}`, (n,s)=>`At least ${n}: ${s}`],

@@ -31,8 +31,85 @@ function ScopePicker(scope, onChange, opts){
   return box;
 }
 
-function goalTypeLabel(type){ return t({cover:'gTypeCover', atLeast:'gTypeAtLeast', atMost:'gTypeAtMost', maxGap:'gTypeMaxGap'}[type]); }
-function goalTypeHint(type){ return t({cover:'gHintCover', atLeast:'gHintAtLeast', atMost:'gHintAtMost', maxGap:'gHintMaxGap'}[type]); }
+const GOAL_KEY = {cover:'Cover', atLeast:'AtLeast', atMost:'AtMost', maxGap:'MaxGap', person:'Person', together:'Together', special:'Special'};
+function goalTypeLabel(type){ return t('gType'+GOAL_KEY[type]); }
+function goalTypeHint(type){ return t('gHint'+GOAL_KEY[type]); }
+
+function PersonSelect(id, onChange, opts){
+  opts = opts||{};
+  const b = el('button', {type:'button', class:'select person-select'}, el('span', {class:'select-lbl'}, id && personById(id) ? personById(id).name : t('choosePerson')));
+  b.addEventListener('click', ()=>{
+    const items = [];
+    for(const pl of S().pools){
+      const members = activePeople().filter(p=>p.pool===pl.id && !(opts.exclude||[]).includes(p.id));
+      if(!members.length) continue;
+      if(items.length) items.push({sep:true});
+      for(const p of members) items.push({label:p.name, meta:poolName(pl), selected:p.id===id, onClick:()=>{ id = p.id; b.firstChild.textContent = p.name; onChange(p.id); }});
+    }
+    menu(b, items, {search:items.length>8, width:280});
+  });
+  return b;
+}
+
+function FacilitySelect(id, onChange){
+  const f = facilityById(id);
+  const b = el('button', {type:'button', class:'select', style:{width:'100%'}}, el('span', {class:'select-lbl'}, f ? f.name+' · '+f.category : t('ovPickFacility')));
+  b.addEventListener('click', ()=>{
+    const list = schedulableFacilities().slice().sort((a,b)=>norm(a.name)<norm(b.name)?-1:1);
+    menu(b, list.map(x=>({label:x.name, meta:x.category, selected:x.id===id, onClick:()=>{ id = x.id; b.firstChild.textContent = x.name+' · '+x.category; onChange(x.id); }})), {search:true, width:360});
+  });
+  return b;
+}
+
+function goalStatusText(g){
+  const st = goalStatusLine(g);
+  if(g.type==='cover') return t('gStCover', st.done, st.total);
+  if(g.type==='maxGap') return t('gStGap', st.late, st.total);
+  if(g.type==='person') return st.people ? t('ovPeopleN', st.people) : t('gNeedPeople');
+  if(g.type==='together') return st.ok ? '' : t('gNeedPair');
+  if(g.type==='special') return st.ok ? '' : t('ovPickFacility');
+  return t('gStPool', st.total);
+}
+
+function goalFields(g, upd, paint){
+  const row = (lab, ctl)=>el('div', {class:'rc-row'}, [el('span', {class:'lab'}, lab), ctl]);
+  const out = [];
+  if(g.type==='person'){
+    out.push(row(t('gWho'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
+    out.push(row(t('gRel'), Seg(PERSON_RELS.map(r=>({value:r, label:t('rel_'+r)})), g.rel, v=>{ g.rel = v; upd(); paint(); }, {cls:'sm wrap-seg'})));
+    if(g.rel!=='never' && g.rel!=='only') out.push(row(t('gVisitsN'), Stepper(g.n, v=>{ g.n = v; upd(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
+    out.push(row(g.rel==='never' ? t('gWhere') : (g.rel==='only' ? t('gOnlyWhere') : t('gCountWhere')), ScopePicker(g.scope, upd)));
+  } else if(g.type==='together'){
+    out.push(row(t('gPair'), el('div', {class:'row wrap', style:{gap:'6px'}}, [
+      PersonSelect(g.a, v=>{ g.a = v; upd(); paint(); }, {exclude:[g.b]}),
+      el('span', {class:'muted'}, '+'),
+      PersonSelect(g.b, v=>{ g.b = v; upd(); paint(); }, {exclude:[g.a]})
+    ])));
+    out.push(row(t('gRel'), Seg(TOGETHER_RELS.map(r=>({value:r, label:t('trel_'+r)})), g.rel, v=>{ g.rel = v; upd(); paint(); }, {cls:'sm'})));
+    out.push(row(t('gShare'), Slider(g.pct, v=>{ g.pct = v; upd(); }, {min:0, max:100, step:5, format:v=>v+'%'})));
+    out.push(row(t('gCountWhere'), ScopePicker(g.scope, upd)));
+    out.push(el('div', {class:'hint', style:{fontSize:'12px'}}, t('gTogetherHow')));
+  } else if(g.type==='special'){
+    out.push(row(t('ovFacility'), FacilitySelect(g.facilityId, v=>{ g.facilityId = v; upd(); paint(); })));
+    out.push(row(t('gTimes'), Stepper(g.times, v=>{ g.times = v; upd(); }, {min:1, max:20, sm:true, unit:t('gPerPlan')})));
+    out.push(row(t('gBetween'), el('div', {class:'row wrap', style:{gap:'6px'}}, [OptDate(g.from, v=>{ g.from = v; upd(); }, t('gPlanStart')), el('span', {class:'muted'}, '–'), OptDate(g.to, v=>{ g.to = v; upd(); }, t('gPlanEnd'))])));
+    out.push(row(t('ovPeople'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
+    out.push(row(t('ovFill'), Switch(g.fill || !g.people.length, v=>{ g.fill = v; upd(); })));
+  } else {
+    out.push(row(t('gScope'), ScopePicker(g.scope, upd)));
+    if(g.type==='cover'){
+      out.push(row(t('gTimes'), Stepper(g.times||1, v=>{ g.times = v; upd(); }, {min:1, max:6, sm:true})));
+      out.push(row(t('gSince'), DateInput(g.since, v=>{ g.since = v; upd(); paint(); })));
+      out.push(row(t('gBy'), OptDate(g.by, v=>{ g.by = v; upd(); }, t('gNoDeadline'))));
+      out.push(row(t('gRepeat'), Switch(!!g.repeat, v=>{ g.repeat = v; upd(); })));
+    } else if(g.type==='atLeast' || g.type==='atMost'){
+      out.push(row(t('gN'), Stepper(g.n||0, v=>{ g.n = v; upd(); }, {min:0, max:300, sm:true, unit:t('gPerPlan')})));
+    } else if(g.type==='maxGap'){
+      out.push(row(t('gDays'), Stepper(g.days||30, v=>{ g.days = v; upd(); paint(); }, {min:7, max:730, step:1, sm:true, unit:t('daysU')})));
+    }
+  }
+  return out;
+}
 
 function OptDate(value, onChange, emptyLabel){
   const wrap = el('div', {class:'row', style:{gap:'4px'}});
@@ -45,56 +122,53 @@ function OptDate(value, onChange, emptyLabel){
   return wrap;
 }
 
-function goalCard(g, i, paint){
+function goalCard(g, paint){
   const set = S();
-  const upd = ()=>goalsChanged();
-  const st = goalStatusLine(g);
-  let stText = '';
-  if(g.type==='cover') stText = t('gStCover', st.done, st.total);
-  else if(g.type==='maxGap') stText = t('gStGap', st.late, st.total);
-  else stText = t('gStPool', st.total);
-  const card = el('div', {class:'rule-card goal-card'+(g.on?'':' off'), 'data-goal':g.id});
+  const upd = ()=>{ goalsChanged(); const tl = card.querySelector('.goal-title'); if(tl) tl.textContent = goalTitle(g); };
+  const card = el('div', {class:'rule-card goal-card'+(g.on?'':' off')+(isPeopleGoal(g)?' people':''), 'data-goal':g.id});
+  const stText = goalStatusText(g);
   card.appendChild(el('div', {class:'rc-head'}, [
     Switch(g.on, v=>{ g.on = v; upd(); paint(); }, t('on')),
-    el('span', {class:'goal-ic', html:ICON.target}),
-    el('b', null, goalTypeLabel(g.type)),
-    el('span', {class:'muted', style:{fontSize:'12px'}}, stText),
-    el('div', {class:'spacer'}),
+    el('span', {class:'goal-ic', html:isPeopleGoal(g) ? ICON.users : ICON.target}),
+    el('div', {class:'gl-main'}, [el('b', {class:'goal-title'}, goalTitle(g)), el('span', null, [goalTypeLabel(g.type), stText ? ' · '+stText : ''])]),
     Seg([{value:'must',label:t('gMust')},{value:'try',label:t('gTry')}], g.strict, v=>{ g.strict = v; upd(); }, {cls:'sm'}),
-    el('button', {type:'button', class:'icon-btn sm', html:ICON.trash, 'aria-label':t('del'), onclick:()=>{ set.goals.splice(i,1); upd(); paint(); }})
+    el('button', {type:'button', class:'icon-btn sm', html:ICON.trash, 'aria-label':t('del'), onclick:()=>{ set.goals = set.goals.filter(x=>x!==g); goalsChanged(); paint(); }})
   ]));
   card.appendChild(el('div', {class:'hint', style:{fontSize:'12px'}}, goalTypeHint(g.type)));
-  card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gScope')), ScopePicker(g.scope, ()=>{ upd(); }, {})]));
-  if(g.type==='cover'){
-    card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gTimes')), Stepper(g.times||1, v=>{ g.times = v; upd(); }, {min:1, max:6, sm:true})]));
-    card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gSince')), DateInput(g.since, v=>{ g.since = v; upd(); paint(); })]));
-    card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gBy')), OptDate(g.by, v=>{ g.by = v; upd(); }, t('gNoDeadline'))]));
-    card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gRepeat')), Switch(!!g.repeat, v=>{ g.repeat = v; upd(); })]));
-  } else if(g.type==='atLeast' || g.type==='atMost'){
-    card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gN')), Stepper(g.n||0, v=>{ g.n = v; upd(); }, {min:0, max:300, sm:true, unit:t('gPerPlan')})]));
-  } else if(g.type==='maxGap'){
-    card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gDays')), Stepper(g.days||30, v=>{ g.days = v; upd(); paint(); }, {min:7, max:730, step:1, sm:true, unit:t('daysU')})]));
-  }
+  appendKids(card, goalFields(g, upd, paint));
   return card;
 }
 
 function goalsEditor(paint){
   const list = el('div', {class:'rules-list'});
-  S().goals.forEach((g,i)=>list.appendChild(goalCard(g, i, paint)));
-  if(!S().goals.length) list.appendChild(el('div', {class:'empty', style:{padding:'18px'}}, t('goalsNone')));
+  const goals = S().goals;
+  const groups = [{k:'gGroupFac', items:goals.filter(g=>!isPeopleGoal(g))}, {k:'gGroupPeople', items:goals.filter(isPeopleGoal)}];
+  for(const gr of groups){
+    if(!gr.items.length) continue;
+    list.appendChild(el('div', {class:'goal-group-h'}, t(gr.k)));
+    for(const g of gr.items) list.appendChild(goalCard(g, paint));
+  }
+  if(!goals.length) list.appendChild(el('div', {class:'empty', style:{padding:'18px'}}, t('goalsNone')));
   const add = el('button', {type:'button', class:'btn sm outline', style:{alignSelf:'flex-start'}}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('goalAdd')]);
-  add.addEventListener('click', ()=>menu(add, GOAL_TYPES.map(type=>({label:goalTypeLabel(type), meta:goalTypeHint(type).slice(0,38)+'…', onClick:()=>{ S().goals.push(newGoal(type)); goalsChanged(); paint(); }})), {width:340}));
+  const item = type=>({label:goalTypeLabel(type), desc:goalTypeHint(type), onClick:()=>{ S().goals.push(newGoal(type)); goalsChanged(); paint(); }});
+  add.addEventListener('click', ()=>menu(add, [
+    {header:true, label:t('gGroupFac'), icon:ICON.target}, ...FACILITY_GOALS.map(item),
+    {sep:true},
+    {header:true, label:t('gGroupPeople'), icon:ICON.users}, ...PEOPLE_GOALS.map(item)
+  ], {width:380}));
   list.appendChild(add);
   return list;
 }
 
-function openGoals(){
-  sheet({
+function openGoals(focusId){
+  const api = sheet({
     title:()=>t('goalsTitle'),
     sub:()=>[el('span', null, t('goalsHint'))],
     body:api=>[goalsEditor(()=>api.render())],
-    foot:api=>[el('button', {type:'button', class:'btn ghost', onclick:()=>{ api.close(); goTab('rules', 'rule-goals'); }}, t('rTitle')+' →'), el('div', {class:'spacer'}), el('button', {type:'button', class:'btn primary', onclick:()=>api.close()}, t('done'))]
+    foot:api=>[el('button', {type:'button', class:'btn ghost', onclick:()=>{ api.close(); goTab('rules', 'rule-goals'); }}, t('rTitle')+' →'), el('div', {class:'spacer'}), el('button', {type:'button', class:'btn primary', onclick:()=>api.close()}, t('done'))],
+    onClose:()=>{ if(App.ui.tab==='team' || App.ui.tab==='rules') setTimeout(renderTab, 0); }
   });
+  if(focusId) setTimeout(()=>{ const c = api.body.querySelector('[data-goal="'+focusId+'"]'); if(c){ c.scrollIntoView({block:'center'}); c.classList.add('flash'); } }, 60);
 }
 
 function goalsPop(refresh){

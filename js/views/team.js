@@ -14,6 +14,13 @@ function weekStrip(p, days){
   return el('div', {class:'week-strip'}, cells);
 }
 
+function analyzeLoadGuess(p){
+  if(App.plan && !App.plan.stale){ const e = analyzePlan(App.plan).expected[p.id]; if(e!=null) return e; }
+  const pv = volumePreview(), pl = poolById(p.pool);
+  const seats = (pv.basic||0)*seatsFor(pl,'basic') + (pv.contracted||0)*seatsFor(pl,'contracted');
+  return seats / Math.max(1, activePeople().filter(x=>x.pool===p.pool).length);
+}
+
 function renderTeam(root){
   root.appendChild(Mount(node=>{
     const out = [];
@@ -44,12 +51,15 @@ function renderTeam(root){
 function personCard(p, counts, rerender){
   const sb = p.skill.basic, sc = p.skill.contracted;
   const tags = [];
-  if(p.fixed!=null) tags.push(el('span', {class:'tag'}, t('pFixed')+' '+p.fixed));
-  else if(p.share!=null && p.share!==1) tags.push(el('span', {class:'tag'}, t('pShare')+' '+Math.round(p.share*100)+'%'));
+  const ql = quotaLabel(p.quota);
+  if(ql) tags.push(el('span', {class:'tag ok'}, ql+' '+t('pPerPlanShort')));
+  if(p.share!=null && p.share!==1 && !(p.quota && p.quota.min!=null && p.quota.min===p.quota.max)) tags.push(el('span', {class:'tag'}, t('pShare')+' '+Math.round(p.share*100)+'%'));
   if(p.maxRun) tags.push(el('span', {class:'tag'}, '≤'+p.maxRun+' '+(App.ui.lang==='ar'?'متتالية':'in a row')));
   if(p.maxPerWeek) tags.push(el('span', {class:'tag'}, '≤'+p.maxPerWeek+'/'+(App.ui.lang==='ar'?'أسبوع':'wk')));
   if(p.distPref) tags.push(el('span', {class:'tag '+p.distPref}, t(p.distPref==='near'?'pDistNear':'pDistFar')));
   if((p.blocked||[]).length) tags.push(el('span', {class:'tag danger'}, (p.blocked||[]).length+' '+t('rBlocked')));
+  const pg = S().goals.filter(g=>g.on && ((g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)))).length;
+  if(pg) tags.push(el('span', {class:'tag', html:ICON.target+' '+pg}));
   const upcomingOff = (p.off||[]).filter(r=>r.to>=todayISO()).length;
   if(upcomingOff) tags.push(el('span', {class:'tag warn'}, upcomingOff+' '+t('pOff')));
   const origin = locationById(p.origin);
@@ -103,11 +113,34 @@ function openPerson(id, draft, rerender){
       addCat.addEventListener('click', ()=>menu(addCat, App.data.categories.filter(c=>c.kind!=='excluded' && bc[c.name]==null).map(c=>({label:c.name, meta:kindLabel(c.kind), onClick:()=>{ p.skill.byCategory = Object.assign(bc, {[c.name]:skillOf(p, c.kind)}); saveP(); R(); }}))));
       skill.appendChild(addCat);
 
-      const load = el('section', {class:'sheet-sec'}, [
-        el('div', {class:'section-title'}, t('pShare')),
-        setting(t('pShare'), t('pShareHint'), Seg([{value:'share', label:t('pFixedOff')},{value:'fixed', label:t('pFixed')}], p.fixed!=null?'fixed':'share', v=>{ p.fixed = v==='fixed' ? 4 : null; saveP(); R(); }, {cls:'sm'}),
-          {full: p.fixed!=null ? Stepper(p.fixed, v=>{ p.fixed = v; saveP(); }, {min:0, max:99}) : Slider(Math.round((p.share==null?1:p.share)*100), v=>{ p.share = v/100; saveP(); }, {min:0, max:200, step:10, format:v=>v+'%'})})
-      ]);
+      const load = el('section', {class:'sheet-sec'}, [el('div', {class:'section-title'}, t('pLoad'))]);
+      const q = p.quota;
+      const qMode = q.min==null && q.max==null ? 'auto' : (q.min!=null && q.min===q.max ? 'exact' : 'range');
+      load.appendChild(setting(t('pPerPlan'), t('pPerPlanHint'), Seg([{value:'auto', label:t('pQAuto')},{value:'exact', label:t('pQExact')},{value:'range', label:t('pQRange')}], qMode, v=>{
+        const cur = Math.round(analyzeLoadGuess(p));
+        if(v==='auto') p.quota = {min:null, max:null};
+        else if(v==='exact') p.quota = {min:q.min!=null ? q.min : cur, max:q.min!=null ? q.min : cur};
+        else p.quota = {min:q.min, max:q.max!=null ? q.max : cur+2};
+        saveP(); R();
+      }, {cls:'sm'}), {full: qMode==='auto' ? null : qMode==='exact'
+        ? Stepper(q.min, v=>{ p.quota = {min:v, max:v}; saveP(); }, {min:0, max:99, unit:t('gPerPlan')})
+        : el('div', {class:'grid-2'}, [
+            el('div', {class:'field'}, [el('label', null, t('pQMin')), Stepper(q.min, v=>{ p.quota = normalizeQuota({min:v, max:p.quota.max}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})]),
+            el('div', {class:'field'}, [el('label', null, t('pQMax')), Stepper(q.max, v=>{ p.quota = normalizeQuota({min:p.quota.min, max:v}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})])
+          ])}));
+      if(qMode!=='exact') load.appendChild(setting(t('pShare'), t('pShareHint'), null, {full:Slider(Math.round((p.share==null?1:p.share)*100), v=>{ p.share = v/100; saveP(); }, {min:0, max:200, step:10, format:v=>v+'%'})}));
+      const myGoals = S().goals.filter(g=>(g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)) || (g.type==='special' && g.people.includes(p.id)));
+      const gBox = el('div', {class:'stack', style:{gap:'6px', marginTop:'10px'}});
+      for(const g of myGoals) gBox.appendChild(el('div', {class:'goal-row'+(g.on?'':' off')}, [el('span', {class:'goal-ic', html:ICON.target}), el('div', {class:'gl-main'}, [el('b', null, goalTitle(g)), el('span', null, [el('span', {class:'tag '+(g.strict==='must'?'warn':'')}, t(g.strict==='must'?'gMust':'gTry')), ' '+goalTypeLabel(g.type)])])]));
+      const addG = type=>el('button', {type:'button', class:'btn sm ghost'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('gAddFor_'+type)]);
+      const b1 = addG('person'), b2 = addG('together'), b3 = addG('special');
+      const make = (type, fill)=>{ if(!App.data.people.includes(p)) { toast(t('pNewName')); return; } const g = newGoal(type); fill(g); S().goals.push(g); commit('settings'); api.close(); openGoals(g.id); };
+      b1.addEventListener('click', ()=>make('person', g=>{ g.people = [p.id]; }));
+      b2.addEventListener('click', ()=>make('together', g=>{ g.a = p.id; }));
+      b3.addEventListener('click', ()=>make('special', g=>{ g.people = [p.id]; g.fill = true; }));
+      gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b1, b2, b3]));
+      load.appendChild(el('div', {class:'section-title', style:{marginTop:'14px'}}, t('pGoals')));
+      load.appendChild(gBox);
 
       const a = p.avail;
       const availSec = el('section', {class:'sheet-sec'});
@@ -148,7 +181,7 @@ function openPerson(id, draft, rerender){
       const exists = App.data.people.includes(p);
       return [
         exists ? el('button', {type:'button', class:'btn ghost', onclick:()=>{ p.retired = !p.retired; saveP(); api.render(); }}, p.retired ? t('pRestore') : t('pRetire')) : null,
-        exists ? el('button', {type:'button', class:'btn ghost', style:{color:'var(--danger)'}, onclick:()=>confirmDialog(t('pDelete'), t('pDeleteQ'), {danger:true, label:t('del'), onConfirm:()=>{ App.data.people = App.data.people.filter(x=>x!==p); S().pairs = S().pairs.filter(r=>r.a!==p.id && r.b!==p.id); commit('data'); api.close(); if(rerender) rerender(); }})}, t('pDelete')) : null,
+        exists ? el('button', {type:'button', class:'btn ghost', style:{color:'var(--danger)'}, onclick:()=>confirmDialog(t('pDelete'), t('pDeleteQ'), {danger:true, label:t('del'), onConfirm:()=>{ App.data.people = App.data.people.filter(x=>x!==p); forgetPerson(p.id); commit('data'); api.close(); if(rerender) rerender(); }})}, t('pDelete')) : null,
         el('div', {class:'spacer'}),
         el('button', {type:'button', class:'btn primary', onclick:()=>{ if(isNew && !p.name.trim()){ toast(t('pNewName')); return; } saveP(); api.close(); }}, t('done'))
       ];

@@ -291,7 +291,7 @@ function viewList(plan, A){
       const km = facilityKm(f), band = distBand(km);
       const dim = App.ui.focusPerson && !visitTeamIds(v).includes(App.ui.focusPerson);
       col.appendChild(el('button', {type:'button', class:'visit '+v.kind+(issues.has(v.id)?' has-issue':'')+(dim?' dim':''), 'data-v':v.id, onclick:()=>openVisit(v.id)}, [
-        el('span', {class:'fac'}, [el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag, title:t('fixedTag')}) : null, f.name]), el('span', null, [km!=null ? el('span', {class:'num'}, km+' '+t('km')) : null, f.pinned ? el('span', {html:ICON.pin}) : null, v.fixed ? el('span', null, '· '+t('fixedTag')) : null, v.moved ? el('span', null, '· '+t('moved')) : null, v.late ? el('span', {style:{color:'var(--warn)'}}, '· '+t('lateTag')) : null])]),
+        el('span', {class:'fac'}, [el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag, title:t('fixedTag')}) : null, f.name]), el('span', null, [km!=null ? el('span', {class:'num'}, km+' '+t('km')) : null, f.pinned ? el('span', {html:ICON.pin}) : null, v.fixed ? el('span', null, '· '+t('fixedTag')) : null, v.special ? el('span', {style:{color:'var(--ok)'}}, '· '+t('specialTag')) : null, v.moved ? el('span', null, '· '+t('moved')) : null, v.late ? el('span', {style:{color:'var(--warn)'}}, '· '+t('lateTag')) : null])]),
         el('span', {class:'cat tag '+v.kind}, f.category || kindLabel(v.kind)),
         el('span', {class:'team'}, teamPills(v))
       ]));
@@ -581,6 +581,7 @@ function openVisit(id){
       const gNames = (v.why && v.why.goals || []).map(id=>{ if(id==='pinned') return t('fPinned'); if(id==='period') return t('goalCoverage'); const g = goalById(id); return g ? goalTitle(g) : null; }).filter(Boolean);
       why.appendChild(el('div', {class:'row wrap', style:{gap:'8px'}}, [
         v.fixed ? el('span', {class:'tag warn', html:ICON.flag+' '+t('fixedTag')}) : null,
+        v.special ? el('span', {class:'tag ok', html:ICON.sparkle.replace(/width="18" height="18"/,'width="13" height="13"')+' '+t('specialTag')}) : null,
         ...gNames.map(n=>el('span', {class:'tag ok', html:ICON.target+' '}, n)),
         v.why && v.why.deadline ? el('span', {class:'tag'+(v.late?' warn':'')}, t('vdDeadline', fmtDate(v.why.deadline,'dm'))) : null,
         v.why ? el('span', {class:'tag'}, t('vdOverdue', v.why.overdue)) : null,
@@ -609,7 +610,7 @@ function openVisit(id){
           const btn = el('button', {type:'button', class:'btn sm outline', disabled:locked}, [el('span', {html:ICON.swap, style:{display:'flex'}}), p ? t('vdSwap') : t('vdFill')]);
           btn.addEventListener('click', ()=>{
             const cands = candidatesForSeat(plan, v, pl.id, pid);
-            menu(btn, cands.map(c=>({label:c.p.name, meta:c.reason ? t({busy:'rBusy', off:'rOff', blocked:'rBlocked'}[c.reason]) : t('loadN', c.load), disabled:!!c.reason, onClick:()=>mutatePlan(()=>{
+            menu(btn, cands.map(c=>({label:c.p.name, meta:c.reason ? t({busy:'rBusy', off:'rOff', blocked:'rBlocked'}[c.reason]) : (c.warn ? '⚠ '+t(c.warn==='rule'?'rRule':'rQuota')+' · '+t('loadN', c.load) : t('loadN', c.load)), disabled:!!c.reason, onClick:()=>mutatePlan(()=>{
               v.team[pl.id] = v.team[pl.id] || [];
               if(pid) v.team[pl.id][i] = c.p.id; else { v.team[pl.id].push(c.p.id); if(v.open && v.open[pl.id]){ v.open[pl.id]--; if(!v.open[pl.id]) delete v.open[pl.id]; } }
             })})), {search:cands.length>8, width:280});

@@ -215,9 +215,22 @@ function makeCtx(startOrd){
     for(const p of members) carry[p.id] = clamp((counts[p.id]||0) - mean, -2, 2) + 2;
   }
   return {
-    startOrd, assigned:{}, carry, lastOrd:{}, run:{}, week:{}, dayUsed:new Map(),
-    pairs: buildPairIndex(), fpv: App.data.history.fpv || {}
+    startOrd, assigned:{}, carry, week:{}, far:{}, q:{}, both:{}, dates:{}, dayUsed:new Map(),
+    pairs: buildPairIndex(), fpv: App.data.history.fpv || {}, rules: compilePeopleRules()
   };
+}
+
+function tallyCtx(rules){ return {assigned:{}, week:{}, q:{}, both:{}, dates:{}, rules}; }
+function ctxTally(ctx, id, ord, f, d){
+  ctx.assigned[id] = (ctx.assigned[id]||0)+d;
+  const ds = ctx.dates[id] || (ctx.dates[id] = new Map());
+  const n = (ds.get(ord)||0)+d; if(n>0) ds.set(ord, n); else ds.delete(ord);
+  const wk = id+'|'+weekKey(ord); ctx.week[wk] = (ctx.week[wk]||0)+d;
+  for(const r of ctx.rules.countsOf(id)) if(inScopeOpt(f, r.scope)) ctx.q[r.key] = (ctx.q[r.key]||0)+d;
+}
+function ctxPairTally(ctx, ids, f, d){
+  const s = new Set(ids);
+  for(const r of ctx.rules.together) if(s.has(r.a) && s.has(r.b) && inScopeOpt(f, r.scope)) ctx.both[r.id] = (ctx.both[r.id]||0)+d;
 }
 
 function personTravelKm(p, f){
@@ -235,10 +248,59 @@ function hardOk(p, ord, f, ctx, used){
   if((p.blocked||[]).includes(f.id)) return 'blocked';
   const rb = S().repeatBlock;
   if(rb.on && (ctx.fpv[f.id+'|'+p.id]||0) >= rb.times) return 'repeat';
-  if(p.maxRun!=null && p.maxRun>0 && ctx.lastOrd[p.id]===ord-1 && (ctx.run[p.id]||0) >= p.maxRun) return 'run';
+  if(p.maxRun!=null && p.maxRun>0 && runAround(ctx.dates[p.id], ord) > p.maxRun) return 'run';
   if(p.maxPerWeek!=null && p.maxPerWeek>0 && (ctx.week[p.id+'|'+weekKey(ord)]||0) >= p.maxPerWeek) return 'week';
-  if(p.fixed!=null && (ctx.assigned[p.id]||0) >= p.fixed) return 'fixed';
+  if(ctx.rules.denied(p.id, f)==='must') return 'rule';
+  for(const r of ctx.rules.countsOf(p.id)) if(r.must && r.max!=null && inScopeOpt(f, r.scope) && (ctx.q[r.key]||0) >= r.max) return 'quota';
   return null;
+}
+
+function runAround(ds, ord){
+  if(!ds) return 1;
+  let n = 1;
+  for(let o=ord-1; ds.has(o); o--) n++;
+  for(let o=ord+1; ds.has(o); o++) n++;
+  return n;
+}
+function quotaBroken(ctx, pid){
+  for(const r of ctx.rules.countsOf(pid)) if(r.must && r.max!=null && (ctx.q[r.key]||0) > r.max) return true;
+  return false;
+}
+function peopleViolation(ctx){
+  let v = 0;
+  for(const r of ctx.rules.list){
+    const q = ctx.q[r.key]||0, w = r.must ? 10 : 1;
+    if(r.min!=null && q<r.min) v += w*(r.min-q);
+    if(r.max!=null && q>r.max) v += w*(q-r.max);
+  }
+  for(const r of ctx.rules.together) v += (r.must ? 10 : 1) * togetherTarget(r, ctx).gap;
+  return v;
+}
+
+function candidateTerms(p, f, ord, ctx, used, inTeam){
+  const R = ctx.rules;
+  let pref = 1, soft = 0;
+  if(R.denied(p.id, f)==='try') soft++;
+  for(const r of R.countsOf(p.id)){
+    if(!inScopeOpt(f, r.scope)) continue;
+    const q = ctx.q[r.key]||0;
+    if(r.max!=null && q>=r.max) soft++;
+    else if(r.min!=null && q<r.min) pref *= 1 + (r.must?3:1.5)*(r.min-q)/Math.max(1, r.min);
+  }
+  for(const r of R.togetherOf(p.id)){
+    if(!inScopeOpt(f, r.scope)) continue;
+    const other = r.a===p.id ? r.b : r.a;
+    const st = togetherTarget(r, ctx);
+    const ratio = st.base ? st.both/st.base : 0, goal = r.pct/100;
+    if(inTeam(other)){
+      if(r.rel==='atLeast'){ if(ratio < goal+1e-9) pref *= r.must?6:3; }
+      else if(ratio >= goal-1e-9){ if(r.must) soft++; else pref *= 0.3; }
+    } else if(r.rel==='atLeast' && ratio < goal+1e-9 && !used.has(other)){
+      const op = personById(other);
+      if(op && !hardOk(op, ord, f, ctx, used)) pref *= r.must?2:1.4;
+    }
+  }
+  return {pref, soft};
 }
 
 function assignTeam(visit, ord, ctx, opts){
@@ -252,6 +314,7 @@ function assignTeam(visit, ord, ctx, opts){
   const needSenior = sen.on && sen.mode==='require' && (f.importance||0) >= sen.threshold;
   const team = {}, chosen = [];
   const pairs = ctx.pairs;
+  const exactShare = p=>p.quota && p.quota.min!=null && p.quota.min===p.quota.max;
   const preset = (opts && opts.preset) || [];
   const auto = !opts || !opts.preset || opts.auto;
   for(const pl of set.pools) team[pl.id] = [];
@@ -269,7 +332,7 @@ function assignTeam(visit, ord, ctx, opts){
       const g = teamGender(chosen);
       const hasSenior = chosen.some(id=>skillOf(personById(id), kind, f.category) >= (f.importance||0));
       const lastSeatOverall = remaining===1;
-      let best=null, bestKey=Infinity, fallback=null, fallbackKey=Infinity;
+      let best=null, bestRank=Infinity, bestKey=Infinity;
       let seniorBar = null;
       if(needSenior && lastSeatOverall && !hasSenior){
         let top = -1;
@@ -292,9 +355,10 @@ function assignTeam(visit, ord, ctx, opts){
         if(rigidBlock) continue;
         const skill = skillOf(p, kind, f.category);
         if(seniorBar!=null && skill < seniorBar) continue;
-        const share = p.fixed!=null ? 1 : (p.share==null ? 1 : p.share);
+        const share = exactShare(p) ? 1 : (p.share==null ? 1 : p.share);
         if(share<=0) continue;
-        let pref = soft;
+        const terms = candidateTerms(p, f, ord, ctx, used, inTeam);
+        let pref = soft * terms.pref;
         if(set.rotation.on){ const v = Math.min(ctx.fpv[f.id+'|'+p.id]||0, 6); pref *= 1/(1+set.rotation.strength*v); }
         if(sen.on && sen.match){ const crit = (f.importance||50)/100; pref *= Math.max(0.1, 1 + sen.match*4*(crit-0.5)*(skill/100-0.5)); }
         const band = distBand(personTravelKm(p, f));
@@ -302,17 +366,17 @@ function assignTeam(visit, ord, ctx, opts){
         pref *= genderPrefFactor(p, ord, kind, band);
         if(set.distance.shortTrips){ pref *= band==='near' ? 1.3 : (band==='far' ? 0.75 : 1); }
         if(set.distance.balanceFar && band==='far'){ const fc = ctx.far ? (ctx.far[p.id]||0) : 0; pref *= 1/(1+0.5*fc); }
-        if(ctx.lastOrd[p.id]===ord-1) pref *= 0.85;
+        if(ctx.dates[p.id] && ctx.dates[p.id].has(ord-1)) pref *= 0.85;
         let gOk = true;
         if(rule && p.gender){
           const m2 = g.m + (p.gender==='m'?1:0), f2 = g.f + (p.gender==='f'?1:0);
           gOk = genderFeasible(rule, m2, f2, g.u, remaining-1, n);
         }
-        const key = ((ctx.assigned[p.id]||0) + (ctx.carry[p.id]||0) + 0.5) / (share * Math.min(4, Math.max(0.25, pref)));
-        if(gOk){ if(key<bestKey){ bestKey=key; best=p; } }
-        else if(key<fallbackKey){ fallbackKey=key; fallback=p; }
+        const key = ((ctx.assigned[p.id]||0) + (ctx.carry[p.id]||0) + 0.5) / (share * clamp(pref, 0.1, 10));
+        const rank = terms.soft*2 + (gOk?0:1);
+        if(rank<bestRank || (rank===bestRank && key<bestKey)){ bestRank = rank; bestKey = key; best = p; }
       }
-      const pick = best || fallback;
+      const pick = best;
       if(pick){
         team[pool.id].push(pick.id); chosen.push(pick.id); used.add(pick.id);
       }
@@ -322,33 +386,26 @@ function assignTeam(visit, ord, ctx, opts){
   const open = {};
   let openTotal = 0;
   if(auto) for(const pl of set.pools){ const need = seatsFor(pl, kind, f.category); const got = (team[pl.id]||[]).length; if(need>got){ open[pl.id] = need-got; openTotal += need-got; } }
-  if(opts && opts.trial) return {team, open, openTotal};
   return {team, open, openTotal};
 }
 
 function commitTeam(visit, ord, ctx, counted){
-  const all = [].concat(...Object.values(visit.team));
+  const all = visitTeamIds(visit);
   if(!ctx.dayUsed.has(ord)) ctx.dayUsed.set(ord, new Set());
   const f = facilityById(visit.facilityId);
   const farBand = distBand(facilityKm(f))==='far';
-  ctx.far = ctx.far || {};
   for(const id of all){
     ctx.dayUsed.get(ord).add(id);
-    const pre = counted && counted.has(id);
-    if(!pre) ctx.assigned[id] = (ctx.assigned[id]||0)+1;
-    if(ctx.lastOrd[id]!==ord){
-      ctx.run[id] = ctx.lastOrd[id]===ord-1 ? (ctx.run[id]||0)+1 : 1;
-      ctx.lastOrd[id] = ord;
-    }
-    if(!pre){ const wk = id+'|'+weekKey(ord); ctx.week[wk] = (ctx.week[wk]||0)+1; }
+    if(!(counted && counted.has(id))) ctxTally(ctx, id, ord, f, 1);
     if(farBand) ctx.far[id] = (ctx.far[id]||0)+1;
   }
+  ctxPairTally(ctx, all, f, 1);
 }
 
 
 function repairGender(visits, days, ctx){
   for(const v of visits){
-    if(v.fixed) continue;
+    if(v.fixed || (v.preset && v.preset.length)) continue;
     const f = facilityById(v.facilityId);
     const rule = genderRuleFor(f, v.kind);
     if(!rule) continue;
@@ -372,8 +429,10 @@ function repairGender(visits, days, ctx){
           const g2 = teamGender(next);
           if(!genderValid(rule, g2.m, g2.f, n)) continue;
           if(pairBreaks(next) > pairBreaks(ids)) continue;
+          ctxPairTally(ctx, ids, f, -1);
           list[i] = c.id;
-          ctx.assigned[cur.id]--; ctx.assigned[c.id] = (ctx.assigned[c.id]||0)+1;
+          ctxTally(ctx, cur.id, ord, f, -1); ctxTally(ctx, c.id, ord, f, 1);
+          ctxPairTally(ctx, next, f, 1);
           fixed = true; break;
         }
       }
@@ -381,7 +440,7 @@ function repairGender(visits, days, ctx){
     if(fixed) continue;
     for(const w of visits){
       if(fixed) break;
-      if(w===v || w.date===v.date || w.fixed) continue;
+      if(w===v || w.date===v.date || w.fixed || (w.preset && w.preset.length)) continue;
       const wf = facilityById(w.facilityId);
       for(const pl of S().pools){
         if(fixed) break;
@@ -392,8 +451,8 @@ function repairGender(visits, days, ctx){
           const wIds = new Set(visits.filter(x=>x.date===w.date).flatMap(x=>[].concat(...Object.values(x.team))));
           const vIds = new Set(visits.filter(x=>x.date===v.date).flatMap(x=>[].concat(...Object.values(x.team))));
           if(vIds.has(pb.id) || wIds.has(pa.id)) continue;
-          if(hardOk(pb, ord, f, ctx, new Set()) && hardOk(pb, ord, f, ctx, new Set())!=='fixed') continue;
-          if(hardOk(pa, ordOf(w.date), wf, ctx, new Set()) && hardOk(pa, ordOf(w.date), wf, ctx, new Set())!=='fixed') continue;
+          const hb = hardOk(pb, ord, f, ctx, new Set()), ha = hardOk(pa, ordOf(w.date), wf, ctx, new Set());
+          if((hb && hb!=='quota') || (ha && ha!=='quota')) continue;
           const nv = ids.map(x=>x===pa.id ? pb.id : x);
           const wAll = [].concat(...Object.values(w.team));
           const nw = wAll.map(x=>x===pb.id ? pa.id : x);
@@ -402,11 +461,77 @@ function repairGender(visits, days, ctx){
           if(!genderValid(rule, gv.m, gv.f, n)) continue;
           if(wRule && gw.u===0 && !genderValid(wRule, gw.m, gw.f, wn)) continue;
           if(pairBreaks(nv)+pairBreaks(nw) > pairBreaks(ids)+pairBreaks(wAll)) continue;
+          const wOrd = ordOf(w.date);
+          const apply = s=>{
+            ctxPairTally(ctx, s>0 ? ids : nv, f, -1); ctxPairTally(ctx, s>0 ? wAll : nw, wf, -1);
+            ctxTally(ctx, pa.id, ord, f, -s); ctxTally(ctx, pa.id, wOrd, wf, s);
+            ctxTally(ctx, pb.id, wOrd, wf, -s); ctxTally(ctx, pb.id, ord, f, s);
+            ctxPairTally(ctx, s>0 ? nv : ids, f, 1); ctxPairTally(ctx, s>0 ? nw : wAll, wf, 1);
+          };
+          apply(1);
+          if(quotaBroken(ctx, pa.id) || quotaBroken(ctx, pb.id)){ apply(-1); continue; }
           a[i] = pb.id; b[j] = pa.id; fixed = true;
         }
       }
     }
   }
+}
+
+function repairPeopleRules(visits, ctx){
+  if(!ctx.rules.list.some(r=>r.min!=null || r.max!=null) && !ctx.rules.together.length) return;
+  const pools = S().pools;
+  const dayIds = new Map();
+  for(const v of visits){ if(!dayIds.has(v.date)) dayIds.set(v.date, new Set()); for(const id of visitTeamIds(v)) dayIds.get(v.date).add(id); }
+  const editable = visits.filter(v=>!v.fixed && !(v.preset && v.preset.length));
+  let score = peopleViolation(ctx);
+  for(let pass=0; pass<4 && score>0; pass++){
+    let improved = false;
+    for(const v of editable){
+      if(score<=0) break;
+      const f = facilityById(v.facilityId), ord = ordOf(v.date), n = teamSizeFor(v.kind, f.category);
+      const rule = genderRuleFor(f, v.kind);
+      const busy = dayIds.get(v.date);
+      for(const pl of pools){
+        const list = v.team[pl.id] || [];
+        for(let i=0;i<list.length;i++){
+          const cur = personById(list[i]); if(!cur) continue;
+          const ids = visitTeamIds(v);
+          const g0 = teamGender(ids), gOk0 = !rule || g0.u>0 || genderValid(rule, g0.m, g0.f, n), pb0 = pairBreaks(ids);
+          let best = null, bestScore = score;
+          for(const c of activePeople()){
+            if(c.pool!==pl.id || busy.has(c.id)) continue;
+            if(hardOk(c, ord, f, ctx, new Set())) continue;
+            const next = ids.map(x=>x===cur.id ? c.id : x);
+            const g = teamGender(next);
+            if(rule && gOk0 && g.u===0 && !genderValid(rule, g.m, g.f, n)) continue;
+            if(pairBreaks(next) > pb0) continue;
+            ctxPairTally(ctx, ids, f, -1); ctxTally(ctx, cur.id, ord, f, -1); ctxTally(ctx, c.id, ord, f, 1); ctxPairTally(ctx, next, f, 1);
+            const s = quotaBroken(ctx, c.id) ? Infinity : peopleViolation(ctx);
+            ctxPairTally(ctx, next, f, -1); ctxTally(ctx, c.id, ord, f, -1); ctxTally(ctx, cur.id, ord, f, 1); ctxPairTally(ctx, ids, f, 1);
+            if(s < bestScore - 1e-9){ bestScore = s; best = c; }
+          }
+          if(best){
+            const next = ids.map(x=>x===cur.id ? best.id : x);
+            ctxPairTally(ctx, ids, f, -1); ctxTally(ctx, cur.id, ord, f, -1); ctxTally(ctx, best.id, ord, f, 1); ctxPairTally(ctx, next, f, 1);
+            busy.delete(cur.id); busy.add(best.id);
+            list[i] = best.id; score = bestScore; improved = true;
+          }
+        }
+      }
+    }
+    if(!improved) break;
+  }
+}
+
+function planTally(plan){
+  const ctx = tallyCtx(compilePeopleRules());
+  for(const v of plan.visits){
+    const f = facilityById(v.facilityId); if(!f) continue;
+    const ids = visitTeamIds(v), ord = ordOf(v.date);
+    for(const id of ids) ctxTally(ctx, id, ord, f, 1);
+    ctxPairTally(ctx, ids, f, 1);
+  }
+  return ctx;
 }
 
 function pairBreaks(ids){
@@ -488,7 +613,25 @@ function analyzePlan(plan){
     if(unknown) diags.push({sev:'info', key:'dGenderUnknown', args:[unknown]});
   }
   if(plan.requested!=null && plan.visits.length < plan.requested) diags.push({sev:'warn', key:'dShort', args:[plan.visits.length, plan.requested]});
-  out.goals = goalProgress(plan);
+  const T = planTally(plan);
+  out.tally = T;
+  let peopleBad = 0;
+  for(const v of plan.visits){
+    const f = facilityById(v.facilityId); if(!f) continue;
+    for(const id of visitTeamIds(v)){
+      const d = T.rules.denied(id, f);
+      if(d){ const p = personById(id); if(d==='must') peopleBad++; diags.push({sev:d==='must'?'warn':'info', key:'dPersonRule', args:[p?p.name:'?', f.name], visit:v.id}); }
+    }
+  }
+  for(const r of T.rules.list){
+    if(r.src==='together') continue;
+    const q = T.q[r.key]||0, p = personById(r.pid);
+    if((r.min!=null && q<r.min) || (r.max!=null && q>r.max)){
+      if(r.must) peopleBad++;
+      diags.push({sev:r.must?'warn':'info', key:'dQuotaPerson', args:[p?p.name:'?', q, quotaLabel(r)]});
+    }
+  }
+  out.goals = goalProgress(plan, T);
   const goalsBad = out.goals.filter(r=>r.state==='short' && r.must).length;
   for(const r of out.goals) if(r.state==='short') diags.push({sev:r.must?'warn':'info', key:'dGoalShort', args:[r.title, r.inPlan, r.target]});
   for(const [wd, c] of Object.entries(set.days)){
@@ -509,6 +652,7 @@ function analyzePlan(plan){
     {key:'cSenior', ok:seniorBad===0, n:seniorBad, soft:true},
     {key:'cPairs', ok:rigidBad===0, n:rigidBad, soft:true},
     {key:'cRun', ok:runBad===0, n:runBad, soft:true},
+    {key:'cPeople', ok:peopleBad===0, n:peopleBad, soft:true},
     {key:'cGoals', ok:goalsBad===0, n:goalsBad, soft:true}
   ];
   out.blocking = out.checks.filter(c=>!c.ok && !c.soft).length;
@@ -517,13 +661,20 @@ function analyzePlan(plan){
     const seatsTotal = sum(plan.visits, v=>{ const f = facilityById(v.facilityId); return f ? seatsFor(pool, v.kind, f.category) : 0; });
     const av = {};
     for(const p of members) av[p.id] = plan.days.filter(iso=>personAvailable(p, ordOf(iso))).length;
-    const fixed = members.filter(p=>p.fixed!=null);
-    const fixedSum = sum(fixed, p=>Math.min(p.fixed, av[p.id]));
-    const rest = members.filter(p=>p.fixed==null);
-    const wsum = sum(rest, p=>(p.share==null?1:p.share)*av[p.id]);
-    for(const p of members){
-      out.expected[p.id] = p.fixed!=null ? Math.min(p.fixed, av[p.id]) : (wsum>0 ? Math.max(0, seatsTotal-fixedSum)*(p.share==null?1:p.share)*av[p.id]/wsum : 0);
+    const bound = p=>{ const q = p.quota||{}; return {lo:Math.min(q.min!=null ? q.min : 0, av[p.id]), hi:Math.min(q.max!=null ? q.max : Infinity, av[p.id])}; };
+    const exp = {}, free = new Set(members);
+    let left = seatsTotal;
+    for(let it=0; it<members.length+1 && free.size; it++){
+      const wsum = sum([...free], p=>(p.share==null?1:p.share)*av[p.id]);
+      let changed = false;
+      for(const p of free){
+        const raw = wsum>0 ? Math.max(0, left)*(p.share==null?1:p.share)*av[p.id]/wsum : 0, b = bound(p);
+        if(raw<b.lo || raw>b.hi){ exp[p.id] = raw<b.lo ? b.lo : b.hi; free.delete(p); left -= exp[p.id]; changed = true; }
+        else exp[p.id] = raw;
+      }
+      if(!changed) break;
     }
+    for(const p of members) out.expected[p.id] = exp[p.id]||0;
   }
   return out;
 }
@@ -533,14 +684,16 @@ function candidatesForSeat(plan, visit, poolId, currentId){
   const ord = ordOf(visit.date);
   const busy = new Set(plan.visits.filter(v=>v.date===visit.date && v.id!==visit.id).flatMap(visitTeamIds));
   const inTeam = new Set(visitTeamIds(visit));
-  const loads = analyzePlan(plan).loads;
+  const T = planTally(plan);
   return activePeople().filter(p=>p.pool===poolId && p.id!==currentId && !inTeam.has(p.id)).map(p=>{
-    let reason = null;
+    let reason = null, warn = null;
     if(busy.has(p.id)) reason = 'busy';
     else if(!personAvailable(p, ord)) reason = 'off';
     else if((p.blocked||[]).includes(f.id)) reason = 'blocked';
-    return {p, reason, load: loads[p.id] ? loads[p.id].total : 0};
-  }).sort((a,b)=>(!!a.reason - !!b.reason) || a.load-b.load);
+    else if(T.rules.denied(p.id, f)) warn = 'rule';
+    else if(T.rules.countsOf(p.id).some(r=>r.max!=null && inScopeOpt(f, r.scope) && (T.q[r.key]||0) >= r.max)) warn = 'quota';
+    return {p, reason, warn, load: T.assigned[p.id]||0};
+  }).sort((a,b)=>(!!a.reason - !!b.reason) || (!!a.warn - !!b.warn) || a.load-b.load);
 }
 
 function replacementFacilities(plan, visit){

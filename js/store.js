@@ -63,7 +63,7 @@ function seedData(){
 function freshPerson(p){
   const base = {
     id: uid('p'), name:'', pool:'fin', gender:null, title:null, retired:false, active:true,
-    skill:{basic:50, contracted:50, byCategory:{}}, share:1, fixed:null, origin:null, distPref:null,
+    skill:{basic:50, contracted:50, byCategory:{}}, share:1, quota:{min:null, max:null}, origin:null, distPref:null,
     avail:{mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}},
     maxRun:null, maxPerWeek:null, off:[], blocked:[]
   };
@@ -71,7 +71,16 @@ function freshPerson(p){
   out.skill = Object.assign({basic:50, contracted:50, byCategory:{}}, (p&&p.skill)||{});
   out.avail = Object.assign({mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}}, (p&&p.avail)||{});
   out.avail.cycle = Object.assign({on:2, off:2, anchor:todayISO()}, out.avail.cycle||{});
+  out.quota = normalizeQuota(p && p.quota, p && p.fixed);
+  delete out.fixed;
   return out;
+}
+function normalizeQuota(q, legacyFixed){
+  const num = v=>v==null || v==='' || !isFinite(+v) ? null : Math.max(0, Math.round(+v));
+  if((!q || (q.min==null && q.max==null)) && legacyFixed!=null && isFinite(+legacyFixed)) return {min:num(legacyFixed), max:num(legacyFixed)};
+  let min = num(q && q.min), max = num(q && q.max);
+  if(min!=null && max!=null && min>max) max = min;
+  return {min, max};
 }
 
 function migrateV4(raw){
@@ -188,6 +197,12 @@ function normalizeData(d){
   d.settings.genderPrefs = {m:Object.assign(fresh.genderPrefs.m, gp.m||{}), f:Object.assign(fresh.genderPrefs.f, gp.f||{})};
   d.locations = d.locations||[]; d.categories = d.categories||[]; d.facilities = d.facilities||[];
   d.people = (d.people||[]).map(freshPerson);
+  const ids = new Set(d.people.map(p=>p.id));
+  for(const g of d.settings.goals){
+    if(Array.isArray(g.people)) g.people = g.people.filter(id=>ids.has(id));
+    if(g.a && !ids.has(g.a)) g.a = null;
+    if(g.b && !ids.has(g.b)) g.b = null;
+  }
   d.history = Object.assign({fpv:{}, counts:{}, lastCycle:0}, d.history||{});
   d.aliases = d.aliases || {people:{}};
   d.unresolved = d.unresolved || [];

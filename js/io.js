@@ -239,7 +239,7 @@ function applyImport(pv){
       if(r.active){ const a = norm(r.active); p.active = !(a===norm('لا') || a==='0' || a==='no' || a==='false'); }
       if(r.skillB!=='' && !isNaN(+r.skillB)) p.skill.basic = clamp(+r.skillB, 0, 100);
       if(r.skillC!=='' && !isNaN(+r.skillC)) p.skill.contracted = clamp(+r.skillC, 0, 100);
-      if(r.fixed!=='' && !isNaN(+r.fixed)) p.fixed = +r.fixed;
+      if(r.fixed!=='' && !isNaN(+r.fixed)) p.quota = normalizeQuota(null, +r.fixed);
     };
     for(const r of pv.added){ const p = freshPerson({name:r.name, pool:poolFor(r.pool), origin:locIdFor('دمنهور')}); apply(p, r); D.people.push(p); }
     for(const r of pv.changed) apply(r.ex, r);
