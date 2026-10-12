@@ -3,6 +3,7 @@ const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
 const LEGACY_PLAN_KEY = 'alkhitta.plan.v1';
 const SETTINGS_REV = 6;
+const RULES_REV = 7;
 
 const App = {
   data: null,
@@ -22,10 +23,11 @@ function defaultSettings(){
   return {
     period: {goal:'range', preset:'month', start:null, end:null, scope:{kind:'all', ids:[]}, times:1},
     calendar: {workdays:[0,1,2,3,4], holidays:[], extra:[]},
-    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null},
+    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, requireEveryEligibleDay:false},
     goals: defaultGoals(),
     overrides: [],
-    spacing: {mode:'even', gap:2},
+    spacing: {mode:'even', gap:2, strict:'try'},
+    patterns: defaultPatterns(),
     days: {},
     genderRules: [
       {id:'g_basic', on:true, kinds:['basic'], categories:[], facilities:[], minEach:25, avoidEven:true},
@@ -42,6 +44,59 @@ function defaultSettings(){
   };
 }
 
+function defaultPattern(){ return {minRest:0, maxRun:null, cycle:null}; }
+function defaultPatterns(){
+  return {
+    activity: {on:false, strict:'must', pattern:defaultPattern()},
+    person: {on:false, strict:'must', pattern:defaultPattern()}
+  };
+}
+function cleanInt(v, lo, hi, dflt){
+  if(v==null || v==='' || typeof v==='boolean') return dflt;
+  const n = +v;
+  if(!isFinite(n)) return dflt;
+  return clamp(Math.round(n), lo, hi);
+}
+function cleanNum(v, lo, hi, dflt){
+  if(v==null || v==='' || typeof v==='boolean') return dflt;
+  const n = +v;
+  if(!isFinite(n)) return dflt;
+  return clamp(n, lo, hi);
+}
+function cleanIso(v, dflt){
+  if(v==null || v==='') return dflt===undefined ? null : dflt;
+  const d = parseDate(v);
+  return d || (dflt===undefined ? null : dflt);
+}
+function normalizeCycle(c){
+  if(!c || typeof c!=='object') return null;
+  return {on:cleanInt(c.on, 1, 60, 1), off:cleanInt(c.off, 0, 60, 1), anchor:cleanIso(c.anchor, todayISO())};
+}
+function normalizePattern(x){
+  const out = defaultPattern();
+  if(!x || typeof x!=='object') return out;
+  out.minRest = cleanInt(x.minRest, 0, 60, 0);
+  out.maxRun = x.maxRun==null || x.maxRun==='' ? null : cleanInt(x.maxRun, 1, 60, null);
+  out.cycle = normalizeCycle(x.cycle);
+  return out;
+}
+function patternIsEmpty(pt){ return !pt || (!(pt.minRest>0) && !pt.maxRun && !pt.cycle); }
+function normalizePatterns(x){
+  const out = defaultPatterns();
+  for(const k of ['activity','person']){
+    const src = x && x[k];
+    if(!src) continue;
+    out[k].on = !!src.on;
+    out[k].strict = src.strict==='try' ? 'try' : 'must';
+    out[k].pattern = normalizePattern(src.pattern);
+  }
+  return out;
+}
+function normalizePersonPattern(x){
+  const mode = x && (x.mode==='custom' || x.mode==='none') ? x.mode : 'inherit';
+  return {mode, minRest:cleanInt(x && x.minRest, 0, 60, 0)};
+}
+
 function seedData(){
   const locations = Object.keys(SEED_LOCATIONS).map(name=>({id:locIdFor(name), name, km:SEED_LOCATIONS[name]}));
   const categories = Object.keys(SEED_CATEGORIES).map(name=>({name, kind:SEED_CATEGORIES[name]}));
@@ -56,7 +111,7 @@ function seedData(){
     };
   });
   const people = SEED_PEOPLE.map(p=>freshPerson(Object.assign({}, p, {origin: locIdFor(p.origin||'دمنهور')})));
-  return {version:5, rev:SETTINGS_REV, settings:defaultSettings(), locations, categories, facilities, people,
+  return {version:5, rev:SETTINGS_REV, rulesRev:RULES_REV, settings:defaultSettings(), locations, categories, facilities, people,
     history:{fpv:{}, counts:{}, lastCycle:0}, aliases:{people:{}}, unresolved:[]};
 }
 
@@ -65,13 +120,23 @@ function freshPerson(p){
     id: uid('p'), name:'', pool:'fin', gender:null, title:null, retired:false, active:true,
     skill:{basic:50, contracted:50, byCategory:{}}, share:1, quota:{min:null, max:null}, origin:null, distPref:null,
     avail:{mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}},
-    maxRun:null, maxPerWeek:null, off:[], blocked:[]
+    maxRun:null, maxPerWeek:null, off:[], blocked:[], pattern:{mode:'inherit', minRest:0}
   };
   const out = Object.assign(base, p||{});
   out.skill = Object.assign({basic:50, contracted:50, byCategory:{}}, (p&&p.skill)||{});
   out.avail = Object.assign({mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}}, (p&&p.avail)||{});
   out.avail.cycle = Object.assign({on:2, off:2, anchor:todayISO()}, out.avail.cycle||{});
   out.quota = normalizeQuota(p && p.quota, p && p.fixed);
+  out.skill.basic = cleanNum(out.skill.basic, 0, 100, 50);
+  out.skill.contracted = cleanNum(out.skill.contracted, 0, 100, 50);
+  if(!out.skill.byCategory || typeof out.skill.byCategory!=='object') out.skill.byCategory = {};
+  for(const k of Object.keys(out.skill.byCategory)) out.skill.byCategory[k] = cleanNum(out.skill.byCategory[k], 0, 100, 50);
+  out.share = cleanNum(out.share, 0, 5, 1);
+  out.avail.cycle.on = cleanInt(out.avail.cycle.on, 1, 60, 2);
+  out.avail.cycle.off = cleanInt(out.avail.cycle.off, 0, 60, 2);
+  out.maxRun = out.maxRun==null || out.maxRun==='' ? null : cleanInt(out.maxRun, 1, 60, null);
+  out.maxPerWeek = out.maxPerWeek==null || out.maxPerWeek==='' ? null : cleanInt(out.maxPerWeek, 1, 60, null);
+  out.pattern = normalizePersonPattern(out.pattern);
   delete out.fixed;
   return out;
 }
@@ -179,7 +244,18 @@ function normalizeData(d){
   d.settings = Object.assign(defaultSettings(), d.settings||{});
   for(const k of ['period','calendar','volume','spacing','seniority','fairness','rotation','repeatBlock','distance']) d.settings[k] = Object.assign(fresh[k], d.settings[k]||{});
   d.settings.volume.exact = Object.assign({basic:0, contracted:0}, d.settings.volume.exact||{});
+  d.settings.volume.exact.basic = cleanInt(d.settings.volume.exact.basic, 0, 500, 0);
+  d.settings.volume.exact.contracted = cleanInt(d.settings.volume.exact.contracted, 0, 500, 0);
+  d.settings.volume.share = cleanNum(d.settings.volume.share, 0, 1, 0.6);
+  d.settings.distance.nearKm = cleanNum(d.settings.distance.nearKm, 0, 2000, 20);
+  d.settings.distance.farKm = Math.max(d.settings.distance.nearKm, cleanNum(d.settings.distance.farKm, 0, 2000, 45));
+  d.settings.volume.perDay = cleanInt(d.settings.volume.perDay, 1, 10, 1);
+  d.settings.volume.perWeek = d.settings.volume.perWeek==null || d.settings.volume.perWeek==='' ? null : cleanInt(d.settings.volume.perWeek, 1, 60, null);
+  d.settings.volume.requireEveryEligibleDay = !!d.settings.volume.requireEveryEligibleDay;
   d.settings.volume.quotas = d.settings.volume.quotas || {};
+  d.settings.spacing.strict = d.settings.spacing.strict==='must' ? 'must' : 'try';
+  d.settings.spacing.gap = cleanInt(d.settings.spacing.gap, 2, 30, 2);
+  d.settings.patterns = normalizePatterns(d.settings.patterns);
   d.settings.period.scope = d.settings.period.scope || {kind:'all', ids:[]};
   if(!Array.isArray(d.settings.pools) || !d.settings.pools.length) d.settings.pools = deepClone(SEED_POOLS);
   d.settings.days = d.settings.days || {};
@@ -192,6 +268,10 @@ function normalizeData(d){
     d.settings.volume.share = 0.6;
     if(!d.settings.goals.length) d.settings.goals = defaultGoals();
     d.rev = SETTINGS_REV;
+  }
+  if((d.rulesRev||0) < RULES_REV){
+    migrateRules(d);
+    d.rulesRev = RULES_REV;
   }
   const gp = d.settings.genderPrefs || {};
   d.settings.genderPrefs = {m:Object.assign(fresh.genderPrefs.m, gp.m||{}), f:Object.assign(fresh.genderPrefs.f, gp.f||{})};
@@ -211,6 +291,14 @@ function normalizeData(d){
   const locIds = new Set(d.locations.map(l=>l.id));
   for(const f of d.facilities) if(f.locationId && !locIds.has(f.locationId)){ d.locations.push({id:f.locationId, name:f.locationId.replace(/^loc_/,'').replace(/_/g,' '), km:0}); locIds.add(f.locationId); }
   return d;
+}
+
+function migrateRules(d){
+  const sp = d.settings.spacing;
+  sp.strict = 'try';
+  d.settings.volume.requireEveryEligibleDay = false;
+  d.settings.patterns = normalizePatterns(d.settings.patterns);
+  for(const p of d.people) p.pattern = normalizePersonPattern(p.pattern);
 }
 
 let saveTimer = null, saveFailed = false;
@@ -289,10 +377,13 @@ function personPatternOn(p, ord){
   return cal.workdays.includes(wdOf(ord));
 }
 function isOverrideDate(iso){ const ov = S().overrides; return !!ov && ov.some(o=>o.on!==false && o.date===iso && o.facilityId); }
-function personAvailable(p, ord){
+function personBaseAvailable(p, ord){
   if(!p || p.retired || p.active===false) return false;
   if(isOff(p, isoOf(ord))) return false;
   return personPatternOn(p, ord);
+}
+function personAvailable(p, ord){
+  return personBaseAvailable(p, ord) && patternCyclesAllow(p, ord);
 }
 function normalizeOff(spans){
   const c = (spans||[]).map(s=>s.from<=s.to ? {from:s.from, to:s.to} : {from:s.to, to:s.from}).sort((a,b)=>a.from<b.from?-1:1);

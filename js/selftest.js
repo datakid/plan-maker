@@ -1,10 +1,5 @@
-localStorage.clear();
-const TEST = {pass:0, fail:0, errors:[]};
 window.addEventListener('error', e=>{ TEST.errors.push(e.message+' @'+(e.filename||'').split('/').pop()+':'+e.lineno); });
 window.addEventListener('unhandledrejection', e=>{ TEST.errors.push('promise: '+(e.reason && e.reason.message || e.reason)); });
-function ok(name, cond, extra){ if(cond) TEST.pass++; else TEST.fail++; console.log((cond?'PASS ':'FAIL ')+name+(extra!=null?' · '+extra:'')); }
-function step(name, fn){ try{ const r = fn(); ok(name, r!==false, typeof r==='string' ? r : null); }catch(e){ ok(name, false, 'EXC '+e.message+' '+(e.stack||'').split('\n')[1]); } }
-const sleep = ms=>new Promise(r=>setTimeout(r, ms));
 const $ = s=>document.querySelector(s), $$ = s=>[...document.querySelectorAll(s)];
 const noOverflow = ()=>document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1;
 const visitsOf = (p, id)=>p.visits.filter(v=>visitTeamIds(v).includes(id));
@@ -18,6 +13,7 @@ function withFresh(fn){
 }
 
 window.addEventListener('load', async ()=>{
+  if(!window.__TEST_ISOLATED__){ console.log('RESULT refused · test storage is not isolated'); return; }
   await sleep(300);
   SEED_JSON = JSON.stringify(App.data);
   try{
@@ -80,23 +76,24 @@ window.addEventListener('load', async ()=>{
     const v0 = p.visits.find(v=>!v.fixed && !v.special);
     step('visit sheet opens', ()=>{ openVisit(v0.id); return !!$('.sheet') && $('.sheet').textContent.includes(t('vdTeam')); });
     step('visit sheet: swap menu has candidates', ()=>{ const b = [...$$('.sheet .btn.sm.outline')].find(x=>x.textContent.includes(t('vdSwap'))); b.click(); const n = $$('.pop .menu-item').length; closePop(); return n>0 ? n+' items' : false; });
-    step('visit swap mutates plan', ()=>{ const pl = Object.keys(v0.team).find(k=>v0.team[k].length); const c = candidatesForSeat(App.plan, v0, pl, v0.team[pl][0]).find(c=>!c.reason); if(!c) return 'no free candidate'; mutatePlan(()=>{ v0.team[pl][0] = c.p.id; }); return visitTeamIds(v0).includes(c.p.id); });
+    step('visit swap mutates plan', ()=>{ const pl = Object.keys(v0.team).find(k=>v0.team[k].length); const c = candidatesForSeat(App.plan, v0, pl, v0.team[pl][0]).find(c=>!c.reason); if(!c) return 'no free candidate'; mutatePlan(p=>{ visitIn(p, v0.id).team[pl][0] = c.p.id; }, {force:true}); return visitTeamIds(visitIn(App.plan, v0.id)).includes(c.p.id); });
     step('special visit sheet tag', ()=>{ const sv = App.plan.visits.find(v=>v.special); openVisit(sv.id); const r = $('.sheet').textContent.includes(t('specialTag')); sheet.current.close(true); return r; });
-    step('move visit', ()=>{ const ts = moveTargets(App.plan, v0); if(!ts.length) return false; const tgt = ts.find(x=>!x.conflicts && !x.full && !x.wdBad); if(tgt){ moveVisit(v0.id, tgt.date); return v0.date===tgt.date ? 'clean move' : false; } const d = ts[0].date; mutatePlan(()=>{ v0.date = d; }); return v0.date===d ? 'forced move' : false; });
-    step('fix visit as override', ()=>{ const before = s.overrides.length; fixVisitAsOverride(v0); return s.overrides.length===before+1 && v0.fixed; });
+    step('move visit', ()=>{ const ts = moveTargets(App.plan, v0); if(!ts.length) return false; const tgt = ts.find(x=>!x.conflicts && !x.full && !x.wdBad); if(tgt){ mutatePlan(p=>{ visitIn(p, v0.id).date = tgt.date; }, {force:true}); return visitIn(App.plan, v0.id).date===tgt.date ? 'clean move' : false; } const d = ts[0].date; mutatePlan(p=>{ visitIn(p, v0.id).date = d; }, {force:true}); return visitIn(App.plan, v0.id).date===d ? 'forced move' : false; });
+    step('fix visit as override', ()=>{ const before = s.overrides.length; fixVisitAsOverride(v0); return s.overrides.length===before+1 && visitIn(App.plan, v0.id).fixed; });
 
     step('export rows', ()=>{ const r = exportPlanRows(App.plan, 'full'); return r.length===App.plan.visits.length+1; });
     step('export matrix', ()=>exportMatrixSheet(App.plan).rows.length>2);
     step('xlsx write→read', ()=>{ if(typeof buildXlsx!=='function') return 'skipped'; const z = buildXlsx([{name:'Plan', rows:exportPlanRows(App.plan,'full')}]); return !!z && (z.size||z.length||z.byteLength)>100; });
 
-    step('approve', ()=>{ approvePlan(); return App.plan.approved && B0.id in App.data.history.counts; });
+    step('approve is refused while the edited plan has hard violations', ()=>{ const r = approvePlan(); return !r.ok && r.blockers.length>0 && !App.plan.approved; });
+    step('approve a clean regenerated plan', ()=>{ const r0 = generatePlan(); if(r0.error) return false; App.plan = r0.plan; const r = approvePlan(); if(!r.ok) throw new Error('blockers '+JSON.stringify(r.blockers.map(b=>[b.key, b.n, (b.violations||[]).slice(0,4).map(v=>v.key)]))); return App.plan.approved && B0.id in App.data.history.counts; });
     step('unapprove restores', ()=>{ const before = JSON.stringify(App.plan.snapshot.counts); unapprovePlan(); return !App.plan.approved && JSON.stringify(App.data.history.counts)===before; });
 
     for(const tab of ['facilities','team','rules','data','plan']){
       step('tab '+tab, ()=>{ goTab(tab); return $('#page').children.length>0 && !$('#page').textContent.includes('undefined') && noOverflow(); });
     }
     step('rules tab: goals section has people group', ()=>{ goTab('rules'); return $('#rule-goals') && $('#rule-goals').textContent.includes(t('gGroupPeople')) && $$('#rule-goals .goal-card.people').length===6; });
-    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .btn.sm.outline')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===7 ? '7 types' : false; });
+    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .btn.sm.outline')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===8 ? '8 types' : false; });
     step('add each goal type via menu', ()=>{ const n0 = s.goals.length; for(let i=0;i<7;i++){ const b = [...$$('#rule-goals .btn.sm.outline')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); $$('.pop .menu-item')[i].click(); } return s.goals.length===n0+7; });
     step('unconfigured new goals are inert', ()=>withFresh(()=>{
       const before = generatePlan().plan.visits.length;
@@ -119,11 +116,11 @@ window.addEventListener('load', async ()=>{
 
     step('delete person cleans goals', ()=>{ const id = X1.id; App.data.people = App.data.people.filter(x=>x.id!==id); forgetPerson(id); const clean = s.goals.every(g=>g.a!==id && g.b!==id && !(g.people||[]).includes(id)) && s.overrides.every(o=>!o.people.includes(id)); const r = generatePlan(); return clean && !r.error; });
 
-    step('stress: impossible quotas flagged, no crash', ()=>withFresh(()=>{
+    step('stress: impossible quotas are proven infeasible, drafted and flagged, no crash', ()=>withFresh(()=>{
       for(const q of activePeople()) q.quota = {min:40, max:40};
       const r = generatePlan(); if(r.error) return false;
       const An = analyzePlan(r.plan), c = An.checks.find(c=>c.key==='cPeople');
-      return !c.ok && An.blocking===0 ? c.n+' flagged, 0 blocking' : false;
+      return r.status==='infeasible' && r.conflicts.length>0 && !c.ok && An.blocking>0 ? c.n+' flagged, '+r.conflicts.length+' conflicts' : false;
     }));
     step('stress: everyone exact 0 → empty teams flagged as open seats, no crash', ()=>withFresh(()=>{
       for(const q of activePeople()) q.quota = {min:0, max:0};
@@ -138,9 +135,65 @@ window.addEventListener('load', async ()=>{
     }));
     step('stress: no workdays → clean error', ()=>withFresh(()=>{ S().calendar.workdays = []; const r = generatePlan(); return !!r.error ? r.error : false; }));
 
+    step('summary: quantities block shows requested, scheduled, staffed', ()=>{ const keep = App.plan; const r = generatePlan(); if(r.error) return false; App.plan = r.plan; goTab('plan'); App.ui.view = 'summary'; renderResults(); const txt = $('#page').textContent; const okTxt = [t('qRequested'), t('qScheduled'), t('qStaffedValid')].every(x=>txt.includes(x)) && !txt.includes('undefined'); App.plan = keep; App.ui.view = 'list'; renderResults(); return okTxt; });
+    step('banner: an infeasible draft names its proven conflicts', ()=>withFresh(()=>{
+      const keep = App.plan;
+      for(const q of activePeople()) q.quota = {min:40, max:40};
+      const r = generatePlan(); if(r.error) return false;
+      App.plan = r.plan; goTab('plan'); App.ui.view = 'list'; renderResults();
+      const b = $('.banner.danger'), n = $$('.conflict-list li').length;
+      const okB = !!b && n>0 && !$('#page').textContent.includes('undefined');
+      App.plan = keep; renderResults();
+      return okB ? n+' conflicts shown' : false;
+    }));
+    step('approve button explains blockers instead of failing silently', ()=>withFresh(()=>{
+      const keep = App.plan;
+      for(const q of activePeople()) q.quota = {min:40, max:40};
+      const r = generatePlan(); if(r.error) return false;
+      App.plan = r.plan; goTab('plan'); renderResults();
+      const btn = $('#plan-actionbar .btn.primary'); if(!btn) return false;
+      btn.click();
+      const dlg = $('.dialog'); const okD = !!dlg && dlg.textContent.includes(t('approveBlockedTitle')) && !App.plan.approved;
+      if(dlg){ const c = [...dlg.querySelectorAll('button')].find(x=>x.textContent===t('cancel')); if(c) c.click(); }
+      App.plan = keep; renderResults();
+      return okD;
+    }));
+    step('stepper rejects non-numeric input and keeps the last value', ()=>{
+      let calls = 0; const st = Stepper(3, ()=>{ calls++; }, {min:0, max:9}); const inp = st.querySelector('input');
+      const bad = ['abc', '--', '..', 'NaN'];
+      for(const v of bad){ inp.value = v; inp.dispatchEvent(new Event('change')); if(inp.value!=='3') return 'value became '+inp.value; }
+      inp.value = '7'; inp.dispatchEvent(new Event('change'));
+      return calls===1 && inp.value==='7';
+    });
+    step('pattern goal editor renders and edits without NaN', ()=>{
+      const keep = S().goals.length; const g = newGoal('pattern'); g.people = [activePeople()[0].id]; S().goals.push(g); commit('settings');
+      openGoals(g.id);
+      const card = document.querySelector('[data-goal="'+g.id+'"]'); const okC = !!card && !!card.querySelector('.pattern-editor') && !card.textContent.includes('undefined') && !card.textContent.includes('NaN');
+      const chip = card && [...card.querySelectorAll('.pattern-editor .chip')].find(x=>x.textContent===t('patPresetMaxRun2')); if(chip) chip.click();
+      const after = S().goals.find(x=>x.id===g.id);
+      const okE = after.pattern.maxRun===2 && after.pattern.minRest===0;
+      sheet.current.close(true);
+      S().goals = S().goals.filter(x=>x.id!==g.id); commit('settings');
+      return okC && okE && S().goals.length===keep;
+    });
+    step('rules tab: work/rest section and every-day toggle', ()=>{ goTab('rules'); const sec = $('#rule-rest'); const vol = $('#rule-volume'); const okR = !!sec && sec.textContent.includes(t('rrActivity')) && sec.textContent.includes(t('rrPerson')) && !!vol && vol.textContent.includes(t('requireEvery')); goTab('plan'); return okR; });
+    step('person sheet shows the work/rest rules section', ()=>{ const p0 = activePeople()[0]; openPerson(p0.id); const okS = $('.sheet').textContent.includes(t('prTitle')) && $('.sheet').textContent.includes(t('prHint')); sheet.current.close(true); return okS; });
+    step('editing a visit that breaks a hard rule asks before applying', ()=>withFresh(()=>{
+      const keep = App.plan; const r = generatePlan(); if(r.error) return false; App.plan = r.plan; goTab('plan'); renderResults();
+      const v = App.plan.visits[0], other = App.plan.visits.find(x=>x.date!==v.date && !x.fixed);
+      const before = JSON.stringify(App.plan.visits.map(x=>[x.id, x.date]));
+      const dupId = visitTeamIds(other)[0];
+      const applied = mutatePlan(p=>{ const x = visitIn(p, v.id); const pl = Object.keys(x.team)[0]; x.team[pl] = [dupId].concat(x.team[pl].slice(1)); x.date = other.date; });
+      const dlg = $('.dialog'); const asked = !applied && !!dlg && dlg.textContent.includes(violationText(evaluateEdit(App.plan, p=>{ const x = visitIn(p, v.id); const pl = Object.keys(x.team)[0]; x.team[pl] = [dupId].concat(x.team[pl].slice(1)); x.date = other.date; }).introduced[0]).slice(0, 8));
+      const untouched = JSON.stringify(App.plan.visits.map(x=>[x.id, x.date]))===before;
+      if(dlg){ const c = [...dlg.querySelectorAll('button')].find(x=>x.textContent===t('cancel')); if(c) c.click(); }
+      App.plan = keep; renderResults();
+      return asked && untouched;
+    }));
     step('english mode', ()=>{ setLang('en'); goTab('rules'); const r = $('#rule-goals').textContent.includes('People goals'); goTab('plan'); App.ui.view = 'summary'; renderResults(); setLang('ar'); return r; });
     step('persist + reload data', ()=>{ saveNow(); const raw = JSON.parse(localStorage.getItem(STORE_KEY)); return raw.settings.goals.length===s.goals.length; });
 
+    try{ runRegress(null); }catch(e){ ok('regression suite ran', false, 'EXC '+e.message); }
     await sleep(200);
     ok('no uncaught errors', TEST.errors.length===0, TEST.errors.join(' | '));
     console.log('RESULT pass='+TEST.pass+' fail='+TEST.fail);

@@ -26,6 +26,7 @@ function renderRules(root){
     ['rule-fixed', t('sFixed'), ICON.flag],
     ['rule-calendar', t('rCalendar'), ICON.cal],
     ['rule-volume', t('rVolume'), ICON.building],
+    ['rule-rest', t('rRest'), ICON.cal],
     ['rule-days', t('rDays'), ICON.grid],
     ['rule-gender', t('rGender'), ICON.users],
     ['rule-seniority', t('rSeniority'), ICON.chart],
@@ -62,8 +63,24 @@ function renderRules(root){
       setting(t('vPerDay'), null, Stepper(V.perDay||1, v=>{ V.perDay = v; commit('settings'); }, {min:1, max:10})),
       setting(t('vPerWeek'), null, Stepper(V.perWeek, v=>{ V.perWeek = v; commit('settings'); }, {min:1, max:60, nullable:true, placeholder:t('noLimit')})),
       setting(t('rSpacing'), null, Seg([{value:'even',label:t('spEven')},{value:'pack',label:t('spPack')},{value:'gap',label:t('spGap')}], sp.mode, v=>{ sp.mode = v; commit('settings'); paint(); })),
-      sp.mode==='gap' ? setting(t('spGapDays'), null, Stepper(sp.gap||2, v=>{ sp.gap = v; commit('settings'); }, {min:2, max:14})) : null
+      sp.mode==='gap' ? setting(t('spGapDays'), null, Stepper(sp.gap||2, v=>{ sp.gap = v; commit('settings'); }, {min:2, max:14})) : null,
+      sp.mode==='gap' ? setting(t('spStrict'), t('spStrictHint'), Seg([{value:'must', label:t('gMust')}, {value:'try', label:t('gTry')}], sp.strict==='try' ? 'try' : 'must', v=>{ sp.strict = v; commit('settings'); }, {cls:'sm'})) : null,
+      setting(t('requireEvery'), t('requireEveryHint'), Switch(!!V.requireEveryEligibleDay, v=>{ V.requireEveryEligibleDay = v; commit('settings'); }))
     ];
+  }));
+
+  main.appendChild(ruleSection('rule-rest', t('rRest'), t('rRestHint'), ()=>{ const P = set.patterns; const n = [P.activity.on, P.person.on].filter(Boolean).length; return n ? {text:String(n), cls:'ok'} : {text:t('off')}; }, paint=>{
+    const P = set.patterns;
+    const block = (key, titleKey, hintKey)=>{
+      const c = P[key];
+      const box = el('div', {class:'rule-card'+(c.on ? '' : ' off')}, [
+        el('div', {class:'rc-head'}, [Switch(c.on, v=>{ c.on = v; commit('settings'); paint(); }), el('div', {class:'gl-main'}, [el('b', null, t(titleKey)), el('span', null, t(hintKey))]), el('div', {class:'spacer'}),
+          Seg([{value:'must', label:t('gMust')}, {value:'try', label:t('gTry')}], c.strict==='try' ? 'try' : 'must', v=>{ c.strict = v; commit('settings'); }, {cls:'sm'})])
+      ]);
+      if(c.on) box.appendChild(PatternEditor(c.pattern, ()=>commit('settings')));
+      return box;
+    };
+    return [block('activity', 'rrActivity', 'rrActivityHint'), block('person', 'rrPerson', 'rrPersonHint')];
   }));
 
   main.appendChild(ruleSection('rule-days', t('rDays'), t('rDaysHint'), ()=>{ const n = Object.values(set.days).filter(c=>c && Object.values(c).some(x=>x!=null && !(Array.isArray(x)&&!x.length))).length; return n ? {text:String(n), cls:'ok'} : null; }, paint=>{

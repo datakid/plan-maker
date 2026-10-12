@@ -31,7 +31,7 @@ function ScopePicker(scope, onChange, opts){
   return box;
 }
 
-const GOAL_KEY = {cover:'Cover', atLeast:'AtLeast', atMost:'AtMost', maxGap:'MaxGap', person:'Person', together:'Together', special:'Special'};
+const GOAL_KEY = {cover:'Cover', atLeast:'AtLeast', atMost:'AtMost', maxGap:'MaxGap', person:'Person', together:'Together', special:'Special', pattern:'Pattern'};
 function goalTypeLabel(type){ return t('gType'+GOAL_KEY[type]); }
 function goalTypeHint(type){ return t('gHint'+GOAL_KEY[type]); }
 
@@ -68,6 +68,7 @@ function goalStatusText(g){
   if(g.type==='person') return st.people ? t('ovPeopleN', st.people) : t('gNeedPeople');
   if(g.type==='together') return st.ok ? '' : t('gNeedPair');
   if(g.type==='special') return st.ok ? '' : t('ovPickFacility');
+  if(g.type==='pattern') return st.people ? t('ovPeopleN', st.people) : t('gNeedPeople');
   return t('gStPool', st.total);
 }
 
@@ -89,12 +90,16 @@ function goalFields(g, upd, paint){
     out.push(row(t('gShare'), Slider(g.pct, v=>{ g.pct = v; upd(); }, {min:0, max:100, step:5, format:v=>v+'%'})));
     out.push(row(t('gCountWhere'), ScopePicker(g.scope, upd)));
     out.push(el('div', {class:'hint', style:{fontSize:'12px'}}, t('gTogetherHow')));
+  } else if(g.type==='pattern'){
+    out.push(row(t('gWho'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
+    out.push(PatternEditor(g.pattern, ()=>upd()));
+    out.push(row(t('gBetween'), el('div', {class:'row wrap', style:{gap:'6px'}}, [OptDate(g.from, v=>{ g.from = v; upd(); }, t('gPlanStart')), el('span', {class:'muted'}, '–'), OptDate(g.to, v=>{ g.to = v; upd(); }, t('gPlanEnd'))])));
   } else if(g.type==='special'){
     out.push(row(t('ovFacility'), FacilitySelect(g.facilityId, v=>{ g.facilityId = v; upd(); paint(); })));
     out.push(row(t('gTimes'), Stepper(g.times, v=>{ g.times = v; upd(); }, {min:1, max:20, sm:true, unit:t('gPerPlan')})));
     out.push(row(t('gBetween'), el('div', {class:'row wrap', style:{gap:'6px'}}, [OptDate(g.from, v=>{ g.from = v; upd(); }, t('gPlanStart')), el('span', {class:'muted'}, '–'), OptDate(g.to, v=>{ g.to = v; upd(); }, t('gPlanEnd'))])));
     out.push(row(t('ovPeople'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
-    out.push(row(t('ovFill'), Switch(g.fill || !g.people.length, v=>{ g.fill = v; upd(); })));
+    out.push(row(t('ovFill'), Switch(g.fill || !g.people.length, v=>{ g.fill = v; upd(); }, null, {disabled:!g.people.length})));
   } else {
     out.push(row(t('gScope'), ScopePicker(g.scope, upd)));
     if(g.type==='cover'){
@@ -104,6 +109,7 @@ function goalFields(g, upd, paint){
       out.push(row(t('gRepeat'), Switch(!!g.repeat, v=>{ g.repeat = v; upd(); })));
     } else if(g.type==='atLeast' || g.type==='atMost'){
       out.push(row(t('gN'), Stepper(g.n||0, v=>{ g.n = v; upd(); }, {min:0, max:300, sm:true, unit:t('gPerPlan')})));
+      if(g.type==='atLeast') out.push(row(t('gAtLeastRepeat'), Switch(!!g.repeat, v=>{ g.repeat = v; upd(); })));
     } else if(g.type==='maxGap'){
       out.push(row(t('gDays'), Stepper(g.days||30, v=>{ g.days = v; upd(); paint(); }, {min:7, max:730, step:1, sm:true, unit:t('daysU')})));
     }
@@ -124,13 +130,13 @@ function OptDate(value, onChange, emptyLabel){
 
 function goalCard(g, paint){
   const set = S();
-  const upd = ()=>{ goalsChanged(); const tl = card.querySelector('.goal-title'); if(tl) tl.textContent = goalTitle(g); };
+  const upd = ()=>{ goalsChanged(); const tl = card.querySelector('.goal-title'); if(tl) tl.textContent = goalTitle(g); const st = card.querySelector('.goal-sub'); if(st){ const txt = goalStatusText(g); st.textContent = goalTypeLabel(g.type)+(txt ? ' · '+txt : ''); } };
   const card = el('div', {class:'rule-card goal-card'+(g.on?'':' off')+(isPeopleGoal(g)?' people':''), 'data-goal':g.id});
   const stText = goalStatusText(g);
   card.appendChild(el('div', {class:'rc-head'}, [
     Switch(g.on, v=>{ g.on = v; upd(); paint(); }, t('on')),
     el('span', {class:'goal-ic', html:isPeopleGoal(g) ? ICON.users : ICON.target}),
-    el('div', {class:'gl-main'}, [el('b', {class:'goal-title'}, goalTitle(g)), el('span', null, [goalTypeLabel(g.type), stText ? ' · '+stText : ''])]),
+    el('div', {class:'gl-main'}, [el('b', {class:'goal-title'}, goalTitle(g)), el('span', {class:'goal-sub'}, goalTypeLabel(g.type)+(stText ? ' · '+stText : ''))]),
     Seg([{value:'must',label:t('gMust')},{value:'try',label:t('gTry')}], g.strict, v=>{ g.strict = v; upd(); }, {cls:'sm'}),
     el('button', {type:'button', class:'icon-btn sm', html:ICON.trash, 'aria-label':t('del'), onclick:()=>{ set.goals = set.goals.filter(x=>x!==g); goalsChanged(); paint(); }})
   ]));
@@ -194,18 +200,26 @@ function goalMeter(r){
   return el('span', {class:'goal-meter '+r.state, title:r.label}, [el('i', {style:{'--p':Math.max(0, Math.min(100, r.pct||0))+'%'}}), el('span', {class:'num'}, (r.pct||0)+'%')]);
 }
 
+function goalRowEl(r){
+  const ic = r.state==='met' ? ICON.ok : (r.state==='short' || r.state==='exceeded' ? ICON.alert : ICON.target);
+  return el('div', {class:'goal-prow '+r.state}, [
+    el('span', {html:ic, style:{display:'flex'}}),
+    el('div', {class:'gl-main'}, [el('b', null, r.title), el('span', null, t('gp_'+r.state)+' · '+r.label+(r.paced?' · '+t('gPaced'):''))]),
+    goalMeter(r)
+  ]);
+}
 function goalsProgressBlock(plan){
-  const rows = goalProgress(plan);
-  if(!rows.length) return null;
   const box = el('div', {class:'goal-progress'});
+  const cur = goalProgress(plan, null, {source:'current'});
+  const snap = plan.gen && plan.stale ? goalProgress(plan, null, {source:'snapshot'}) : [];
+  if(!cur.length && !snap.length) return null;
   box.appendChild(el('div', {class:'section-title'}, t('goalProgressTitle')));
-  for(const r of rows){
-    box.appendChild(el('div', {class:'goal-prow '+r.state}, [
-      el('span', {html:r.state==='met'?ICON.ok:(r.state==='short'?ICON.alert:ICON.target), style:{display:'flex'}}),
-      el('div', {class:'gl-main'}, [el('b', null, r.title), el('span', null, t('gp_'+r.state)+' · '+r.label+(r.paced?' · '+t('gPaced'):''))]),
-      goalMeter(r)
-    ]));
+  if(snap.length){
+    box.appendChild(el('div', {class:'hint'}, t('goalSnapshotHint')));
+    for(const r of snap) box.appendChild(goalRowEl(r));
+    box.appendChild(el('div', {class:'section-title', style:{marginTop:'10px'}}, t('goalCurrentTitle')));
   }
+  for(const r of cur) box.appendChild(goalRowEl(r));
   return box;
 }
 
@@ -329,13 +343,15 @@ function overridesEditor(paint){
   return list;
 }
 
-function fixVisitAsOverride(v){
+function fixVisitAsOverride(v0){
+  const v = (App.plan && App.plan.visits.find(x=>x.id===v0.id)) || v0;
   const exists = S().overrides.find(o=>o.id===v.overrideId);
   if(exists){ openOverride(exists.id); return; }
-  const o = newOverride({date:v.date, facilityId:v.facilityId, people:visitTeamIds(v), fill:false});
+  const ids = visitTeamIds(v);
+  const o = newOverride({date:v.date, facilityId:v.facilityId, people:ids, fill:false});
   S().overrides.push(o);
   commit('settings', {keepPlan:true});
-  if(App.plan){ v.fixed = true; v.overrideId = o.id; savePlan(); renderResults(); }
+  if(App.plan){ v.fixed = true; v.overrideId = o.id; v.locked = ids.slice(); v.auto = false; savePlan(); renderResults(); }
   if(PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update();
   toast(t('fixedSaved'));
 }

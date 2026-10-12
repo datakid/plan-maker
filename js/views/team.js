@@ -129,16 +129,17 @@ function openPerson(id, draft, rerender){
             el('div', {class:'field'}, [el('label', null, t('pQMax')), Stepper(q.max, v=>{ p.quota = normalizeQuota({min:p.quota.min, max:v}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})])
           ])}));
       if(qMode!=='exact') load.appendChild(setting(t('pShare'), t('pShareHint'), null, {full:Slider(Math.round((p.share==null?1:p.share)*100), v=>{ p.share = v/100; saveP(); }, {min:0, max:200, step:10, format:v=>v+'%'})}));
-      const myGoals = S().goals.filter(g=>(g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)) || (g.type==='special' && g.people.includes(p.id)));
+      const myGoals = S().goals.filter(g=>(g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)) || ((g.type==='special' || g.type==='pattern') && g.people.includes(p.id)));
       const gBox = el('div', {class:'stack', style:{gap:'6px', marginTop:'10px'}});
       for(const g of myGoals) gBox.appendChild(el('div', {class:'goal-row'+(g.on?'':' off')}, [el('span', {class:'goal-ic', html:ICON.target}), el('div', {class:'gl-main'}, [el('b', null, goalTitle(g)), el('span', null, [el('span', {class:'tag '+(g.strict==='must'?'warn':'')}, t(g.strict==='must'?'gMust':'gTry')), ' '+goalTypeLabel(g.type)])])]));
       const addG = type=>el('button', {type:'button', class:'btn sm ghost'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('gAddFor_'+type)]);
-      const b1 = addG('person'), b2 = addG('together'), b3 = addG('special');
+      const b1 = addG('person'), b2 = addG('together'), b3 = addG('special'), b4 = addG('pattern');
       const make = (type, fill)=>{ if(!App.data.people.includes(p)) { toast(t('pNewName')); return; } const g = newGoal(type); fill(g); S().goals.push(g); commit('settings'); api.close(); openGoals(g.id); };
       b1.addEventListener('click', ()=>make('person', g=>{ g.people = [p.id]; }));
       b2.addEventListener('click', ()=>make('together', g=>{ g.a = p.id; }));
       b3.addEventListener('click', ()=>make('special', g=>{ g.people = [p.id]; g.fill = true; }));
-      gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b1, b2, b3]));
+      b4.addEventListener('click', ()=>make('pattern', g=>{ g.people = [p.id]; }));
+      gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b1, b2, b3, b4]));
       load.appendChild(el('div', {class:'section-title', style:{marginTop:'14px'}}, t('pGoals')));
       load.appendChild(gBox);
 
@@ -160,6 +161,24 @@ function openPerson(id, draft, rerender){
         el('div', {class:'field'}, [el('label', null, t('pMaxWeek')), Stepper(p.maxPerWeek, v=>{ p.maxPerWeek = v; saveP(); }, {min:1, max:14, nullable:true, placeholder:t('noLimit')})])
       ]));
 
+      const pat = p.pattern = p.pattern || {mode:'inherit', minRest:0};
+      const prSec = el('section', {class:'sheet-sec stack', style:{gap:'8px'}});
+      prSec.appendChild(el('div', {class:'section-title'}, t('prTitle')));
+      prSec.appendChild(el('div', {class:'hint'}, t('prHint')));
+      prSec.appendChild(Seg([{value:'inherit', label:t('prInherit')}, {value:'custom', label:t('prCustom')}, {value:'none', label:t('prNone')}], pat.mode, v=>{ pat.mode = v; if(v==='custom' && !(pat.minRest>0)) pat.minRest = 1; saveP(); R(); }, {cls:'block'}));
+      if(pat.mode==='custom'){
+        prSec.appendChild(el('div', {class:'chips'}, [
+          el('button', {type:'button', class:'chip'+(pat.minRest===1 ? ' on' : ''), onclick:()=>{ pat.minRest = 1; saveP(); R(); }}, t('patPresetNoRun'))
+        ]));
+        prSec.appendChild(setting(t('patMinRest'), null, Stepper(pat.minRest||0, v=>{ pat.minRest = v; saveP(); R(); }, {min:0, max:60, sm:true, unit:t('daysU')})));
+      }
+      const w = planWindow();
+      if(!w.error){
+        const eligible = w.days.filter(o=>(normalWorkday(o) || isOverrideDate(isoOf(o))) && personAvailable(p, o)).length;
+        const assigned = App.plan ? App.plan.visits.filter(v=>visitTeamIds(v).includes(p.id)).length : 0;
+        prSec.appendChild(el('div', {class:'muted', style:{fontSize:'12px'}}, t('prPreview', eligible, assigned)));
+      }
+
       const offSec = el('section', {class:'sheet-sec'});
       offSec.appendChild(el('div', {class:'row'}, [el('div', {class:'section-title', style:{margin:'0'}}, t('pOff')), el('div', {class:'spacer'}), (p.off||[]).length ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ p.off = []; saveP(); R(); }}, t('pOffClear')) : null]));
       offSec.appendChild(el('div', {class:'hint', style:{margin:'4px 0 10px'}}, t('pOffHint')));
@@ -175,7 +194,7 @@ function openPerson(id, draft, rerender){
         setting(t('pDistPref'), null, Seg([{value:'near',label:t('pDistNear')},{value:'',label:t('pDistAny')},{value:'far',label:t('pDistFar')}], p.distPref||'', v=>{ p.distPref = v||null; saveP(); }, {cls:'sm'})),
         el('div', {class:'field', style:{paddingTop:'10px'}}, [el('label', null, t('pBlocked')), FacilityPicker(p.blocked, ids=>{ p.blocked = ids; saveP(); }, {filter:f=>{ const k = facilityKind(f); return k==='basic'||k==='contracted'; }})])
       ]);
-      return [basics, skill, load, availSec, offSec, origin];
+      return [basics, skill, load, availSec, prSec, offSec, origin];
     },
     foot:api=>{
       const exists = App.data.people.includes(p);

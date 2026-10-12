@@ -211,6 +211,7 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 
 .banner{display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--r-md); font-size:13px; font-weight:500}
 .banner.warn{background:var(--warn-soft); color:var(--warn)}
+.banner.danger{background:var(--danger-soft); color:var(--danger)}
 .banner.info{background:var(--primary-soft); color:var(--primary)}
 .banner .btn{margin-inline-start:auto}
 
@@ -299,14 +300,14 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 .kpi .l{font-size:12px; color:var(--ink-3); margin-top:4px}
 .kpi .split{display:flex; gap:10px; margin-top:6px; font-size:12px; color:var(--ink-3)}
 .bars{display:flex; flex-direction:column; gap:6px}
-.bar-row{display:grid; grid-template-columns:120px minmax(0,1fr) 110px; align-items:center; gap:12px; font-size:12.5px; padding:3px 6px; border-radius:8px; cursor:pointer}
+.bar-row{display:grid; grid-template-columns:120px minmax(0,1fr) minmax(110px,auto); align-items:center; gap:12px; font-size:12.5px; padding:3px 6px; border-radius:8px; cursor:pointer}
 .bar-row:hover{background:var(--hover)}
 .bar-row .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500}
 .bar{position:relative; height:10px; border-radius:5px; background:var(--sunken); overflow:hidden; display:flex}
 .bar i{display:block; height:100%}
 .bar i.b{background:var(--basic)} .bar i.c{background:var(--contracted)}
 .bar .exp{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink); opacity:.55; border-radius:1px}
-.bar-row .v{font-family:var(--font-num); font-size:12px; text-align:end; color:var(--ink-3)}
+.bar-row .v{font-family:var(--font-num); font-size:12px; text-align:end; color:var(--ink-3); white-space:nowrap}
 .bar-row .v b{color:var(--ink); font-weight:600}
 .dev-pos{color:var(--ok)} .dev-neg{color:var(--danger)}
 .check{display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; font-size:13px}
@@ -385,7 +386,8 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 
 .rule-card{border:1px solid var(--line); border-radius:var(--r-md); background:var(--raised); padding:12px 14px; display:flex; flex-direction:column; gap:10px}
 .rule-card.off{opacity:.6}
-.rule-card .rc-head{display:flex; align-items:center; gap:10px}
+.rule-card .rc-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.rule-card .rc-head .gl-main{flex:1 1 150px; min-width:0}
 .rule-card .rc-head b{font-weight:600; font-size:13.5px}
 .rule-card .rc-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .rule-card .rc-row > .lab{font-size:12px; color:var(--ink-3); min-width:92px}
@@ -478,6 +480,8 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 .goal-prow.met > span:first-child{color:var(--ok)}
 .goal-prow.short > span:first-child{color:var(--warn)}
 .goal-prow.progress > span:first-child{color:var(--primary)}
+.goal-prow.exceeded > span:first-child{color:var(--danger)}
+.goal-meter.exceeded i::after{background:var(--danger)}
 .goal-meter{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-family:var(--font-num); color:var(--ink-3); flex-shrink:0}
 .goal-meter i{display:block; width:56px; height:6px; border-radius:3px; background:var(--sunken); position:relative; overflow:hidden}
 .goal-meter i::after{content:""; position:absolute; inset:0; width:var(--p); background:var(--primary); border-radius:3px}
@@ -556,7 +560,7 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
   .cal-ev{padding:3px 4px; font-size:10px}
   .cal-ev span{display:none}
   .cal-wd{padding:5px 2px; font-size:10.5px}
-  .bar-row{grid-template-columns:84px minmax(0,1fr) 72px; gap:8px}
+  .bar-row{grid-template-columns:84px minmax(0,1fr) auto; gap:8px}
   .tbl .hide-sm{display:none}
   .tbl-wrap{overflow-x:auto}
   .tbl th{position:static}
@@ -571,3 +575,7 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
   .rule-sec .card-body{padding:4px 14px 8px}
   .toolbar{padding:12px}
 }
+
+.qty-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:8px}
+.qty{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--r-md); font-size:13px}
+.qty .l{color:var(--muted)}

@@ -188,9 +188,10 @@ function Seg(options, value, onChange, opts){
   seg.set = paint;
   return seg;
 }
-function Switch(value, onChange, label){
+function Switch(value, onChange, label, opts){
   const b = el('button', {type:'button', class:'switch', role:'switch', 'aria-checked':value?'true':'false', 'aria-label':label||null});
-  b.addEventListener('click', ()=>{ const v = b.getAttribute('aria-checked')!=='true'; b.setAttribute('aria-checked', v?'true':'false'); onChange(v); });
+  if(opts && opts.disabled) b.disabled = true;
+  b.addEventListener('click', ()=>{ if(b.disabled) return; const v = b.getAttribute('aria-checked')!=='true'; b.setAttribute('aria-checked', v?'true':'false'); onChange(v); });
   return b;
 }
 function Stepper(value, onChange, opts){
@@ -201,7 +202,8 @@ function Stepper(value, onChange, opts){
   const dec = el('button', {type:'button', 'aria-label':'−', html:ICON.minus});
   const inc = el('button', {type:'button', 'aria-label':'+', html:ICON.plus});
   function set(v, fire){
-    if(v==null || v===''){ if(opts.nullable){ cur = null; input.value=''; paint(); if(fire) onChange(null); } return; }
+    if(v==null || v===''){ if(opts.nullable){ cur = null; input.value=''; paint(); if(fire) onChange(null); } else input.value = cur==null ? '' : String(cur); return; }
+    if(typeof v!=='number' || !isFinite(v)){ input.value = cur==null ? '' : String(cur); return; }
     v = clamp(Math.round(v/step)*step, min, max);
     cur = v; input.value = String(v); paint();
     if(fire) onChange(v);
@@ -209,7 +211,7 @@ function Stepper(value, onChange, opts){
   function paint(){ dec.disabled = opts.nullable ? cur==null : (cur!=null && cur<=min); inc.disabled = cur!=null && cur>=max; }
   dec.addEventListener('click', ()=>{ if(cur==null) set(max<999?max:min, true); else if(opts.nullable && cur<=min) set(null, true); else set(cur-step, true); });
   inc.addEventListener('click', ()=>set(cur==null ? min : cur+step, true));
-  input.addEventListener('change', ()=>{ const raw = toAsciiDigits(input.value).replace(/[^\d.-]/g,''); if(raw==='') set(null, true); else set(parseFloat(raw), true); });
+  input.addEventListener('change', ()=>{ const raw = toAsciiDigits(input.value).replace(/[^\d.-]/g,''); if(raw==='') set(null, true); else { const n = Number(raw); if(isFinite(n)) set(n, true); else input.value = cur==null ? '' : String(cur); } });
   input.addEventListener('keydown', e=>{ if(e.key==='ArrowUp'){ e.preventDefault(); inc.click(); } if(e.key==='ArrowDown'){ e.preventDefault(); dec.click(); } });
   paint();
   const g = el('div', {class:'input-group'+(opts.sm?' sm':'')}, [dec, input, opts.unit ? el('span', {class:'unit'}, opts.unit) : null, inc]);
@@ -397,4 +399,33 @@ function downloadBlob(bytes, name, mime){
 function copyText(text){
   if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(()=>toast(t('copied')));
   const ta = el('textarea', {value:text, style:{position:'fixed', opacity:'0'}}); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast(t('copied'));
+}
+
+function PatternEditor(pt, onChange, opts){
+  opts = opts || {};
+  const wrap = el('div', {class:'stack pattern-editor', style:{gap:'8px'}});
+  const row = (lab, ctl)=>el('div', {class:'rc-row'}, [el('span', {class:'lab'}, lab), ctl]);
+  const anchorDefault = ()=>{ const w = planWindow(); return w && !w.error ? isoOf(w.start) : todayISO(); };
+  const changed = ()=>{ onChange(pt); paint(); };
+  function preset(label, fn, on){
+    return el('button', {type:'button', class:'chip'+(on ? ' on' : ''), onclick:()=>{ fn(); changed(); }}, label);
+  }
+  function paint(){
+    clear(wrap);
+    wrap.appendChild(el('div', {class:'chips'}, [
+      preset(t('patPresetNoRun'), ()=>{ pt.minRest = 1; pt.maxRun = null; pt.cycle = null; }, pt.minRest===1 && !pt.maxRun && !pt.cycle),
+      preset(t('patPresetMaxRun2'), ()=>{ pt.minRest = 0; pt.maxRun = 2; pt.cycle = null; }, !pt.minRest && pt.maxRun===2 && !pt.cycle),
+      preset(t('patPresetNone'), ()=>{ pt.minRest = 0; pt.maxRun = null; pt.cycle = null; }, !pt.minRest && !pt.maxRun && !pt.cycle)
+    ]));
+    wrap.appendChild(row(t('patMinRest'), Stepper(pt.minRest||0, v=>{ pt.minRest = v; onChange(pt); }, {min:0, max:60, sm:true, unit:t('daysU')})));
+    wrap.appendChild(row(t('patMaxRun'), Stepper(pt.maxRun, v=>{ pt.maxRun = v; onChange(pt); }, {min:1, max:60, sm:true, nullable:true, placeholder:t('patNoLimit')})));
+    wrap.appendChild(row(t('patCycle'), Switch(!!pt.cycle, v=>{ pt.cycle = v ? {on:5, off:2, anchor:anchorDefault()} : null; changed(); })));
+    if(pt.cycle){
+      wrap.appendChild(row(t('patCycleOn'), Stepper(pt.cycle.on, v=>{ pt.cycle.on = v; onChange(pt); }, {min:1, max:60, sm:true, unit:t('daysU')})));
+      wrap.appendChild(row(t('patCycleOff'), Stepper(pt.cycle.off, v=>{ pt.cycle.off = v; onChange(pt); }, {min:0, max:60, sm:true, unit:t('daysU')})));
+      wrap.appendChild(row(t('patCycleFrom'), DateInput(pt.cycle.anchor, v=>{ if(v){ pt.cycle.anchor = v; onChange(pt); } })));
+    }
+  }
+  paint();
+  return wrap;
 }

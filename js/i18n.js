@@ -77,7 +77,6 @@ defs({
   dPair:(f,d)=>`${f} · ${fmtDate(d,'short')}: قاعدة ثنائية لم تُحترم`,
   dUnavailable:(p,d)=>`${p} غير متاح ${fmtDate(d,'short')}`,
   dBlocked:(p,f)=>`${p} محظور من ${f}`,
-  dRun:(p,d)=>`${p} تجاوز حد الأيام المتتالية ${fmtDate(d,'short')}`,
   dGenderUnknown:n=>`${n} بلا نوع محدد — لا تُطبَّق عليهم قواعد النوع`,
   dShort:(a,b)=>`جُدول ${a} من ${b} مطلوبة`,
   dQuotaShort:(c,q,n)=>`«${c}»: طُلب ${q} والمتاح ${n}`,
@@ -313,3 +312,113 @@ I18N.en.bandCounts = (a,b,c)=>`${a} near · ${b} mid · ${c} far`;
 I18N.en.impRows = (a,b)=>`${a} of ${b} rows`;
 I18N.en.impMissingCols = c=>`Missing columns: ${c}`;
 I18N.ar.workdaysN = n=>`${n} يوم عمل`;
+
+const D = d=>fmtDate(d, 'short');
+defs({
+  dRun:[(p,a,b)=>`${p}: تجاوز حد الأيام المتتالية (${D(a)} → ${D(b)})`, (p,a,b)=>`${p}: too many consecutive days (${D(a)} → ${D(b)})`],
+  dRest:[(p,a,b)=>`${p}: راحة غير كافية بين ${D(a)} و${D(b)}`, (p,a,b)=>`${p}: not enough rest between ${D(a)} and ${D(b)}`],
+  dPatternDay:[(p,d)=>`${p}: ${D(d)} خارج دورة عمله`, (p,d)=>`${p}: ${D(d)} is outside the work cycle`],
+  dPatternGoalCycle:[(p,n)=>`${p}: ${n} يوم خارج دورة العمل`, (p,n)=>`${p}: ${n} day(s) outside the work cycle`],
+  dPatternDaySoft:[(p,d)=>`${p}: يفضّل عدم العمل في ${D(d)} حسب دورته`, (p,d)=>`${p}: prefers not to work on ${D(d)} per the cycle`],
+  dWeek:[(p,n,m)=>`${p}: ${n} زيارات في أسبوع واحد (الحد ${m})`, (p,n,m)=>`${p}: ${n} visits in one week (limit ${m})`],
+  dRepeatBlock:[(p,f)=>`${p} زار ${f} بما يكفي — منع التكرار`, (p,f)=>`${p} has visited ${f} enough times — repeat block`],
+  dTeamUnknown:[(id,f,d)=>`${f} · ${D(d)}: عضو غير معروف (${id})`, (id,f,d)=>`${f} · ${D(d)}: unknown team member (${id})`],
+  dTeamPoolUnknown:[(f,d)=>`${f} · ${D(d)}: فريق من مجموعة غير معرّفة`, (f,d)=>`${f} · ${D(d)}: team uses an unknown pool`],
+  dTeamDup:[(p,f,d)=>`${f} · ${D(d)}: ${p} مكرر في الفريق`, (p,f,d)=>`${f} · ${D(d)}: ${p} listed twice in the team`],
+  dTeamInactive:[(p,f,d)=>`${f} · ${D(d)}: ${p} غير نشط`, (p,f,d)=>`${f} · ${D(d)}: ${p} is inactive`],
+  dTeamPool:[(p,f,d)=>`${f} · ${D(d)}: ${p} في مقعد مجموعة أخرى`, (p,f,d)=>`${f} · ${D(d)}: ${p} sits in another pool's seat`],
+  dTeamOversize:[(f,d,n)=>`${f} · ${D(d)}: ${n} زيادة عن المقاعد`, (f,d,n)=>`${f} · ${D(d)}: ${n} more than the seats`],
+  dLockedMissing:[(p,f,d)=>`${f} · ${D(d)}: ${p} مثبّت لكنه غير موجود في الفريق`, (p,f,d)=>`${f} · ${D(d)}: ${p} is locked but missing from the team`],
+  dOutOfPlan:[(f,d)=>`${f} · ${D(d)}: خارج فترة الخطة`, (f,d)=>`${f} · ${D(d)}: outside the plan period`],
+  dNotWorkday:[(f,d)=>`${f} · ${D(d)}: ليس يوم عمل`, (f,d)=>`${f} · ${D(d)}: not a workday`],
+  dActivityRest:[(f,d)=>`${f} · ${D(d)}: يوم راحة حسب نمط العمل العام`, (f,d)=>`${f} · ${D(d)}: rest day under the plan work pattern`],
+  dActivityCycleSoft:[(f,d)=>`${f} · ${D(d)}: يوم غير مفضّل حسب نمط العمل العام`, (f,d)=>`${f} · ${D(d)}: a non-preferred day under the plan work pattern`],
+  dWeekday:[(f,d)=>`${f} · ${D(d)}: يوم غير مسموح لهذه الجهة`, (f,d)=>`${f} · ${D(d)}: not an allowed weekday for this facility`],
+  dDayOnly:[(f,d)=>`${f} · ${D(d)}: هذا اليوم مخصص لفئة أخرى`, (f,d)=>`${f} · ${D(d)}: the day is reserved for another category`],
+  dSeniorNone:[(f,d)=>`${f} · ${D(d)}: لا يوجد صاحب خبرة كافية في الفريق المتاح`, (f,d)=>`${f} · ${D(d)}: no one skilled enough exists in the available pool`],
+  dDayDup:[(p,d)=>`${p}: في أكثر من زيارة يوم ${D(d)}`, (p,d)=>`${p}: on more than one visit on ${D(d)}`],
+  dFacDup:[(f,d)=>`${f}: زيارتان في ${D(d)}`, (f,d)=>`${f}: visited twice on ${D(d)}`],
+  dCapDay:[(d,n,m)=>`${D(d)}: ${n} زيارات (الحد ${m})`, (d,n,m)=>`${D(d)}: ${n} visits (limit ${m})`],
+  dCapWeek:[(w,n,m)=>`أسبوع ${D(w)}: ${n} زيارات (الحد ${m})`, (w,n,m)=>`Week of ${D(w)}: ${n} visits (limit ${m})`],
+  dSpacing:[(a,b,g)=>`${D(a)} و${D(b)}: ${g} يوم فقط بين يومي نشاط`, (a,b,g)=>`${D(a)} and ${D(b)}: only ${g} day(s) between active days`],
+  dActivityRest2:[(a,b,g)=>`${D(a)} و${D(b)}: راحة غير كافية في نمط الخطة`, (a,b,g)=>`${D(a)} and ${D(b)}: not enough rest in the plan pattern`],
+  dActivityRun:[(a,b)=>`${D(a)} → ${D(b)}: أيام نشاط متتالية أكثر من المسموح`, (a,b)=>`${D(a)} → ${D(b)}: more consecutive active days than allowed`],
+  dEveryDay:[d=>`${D(d)}: يوم مؤهل بلا زيارة`, d=>`${D(d)}: an eligible day with no visit`],
+  dCoverShort:[(t,n,m)=>`${t}: ${n} من ${m}`, (t,n,m)=>`${t}: ${n} of ${m}`],
+  dAtLeastShort:[(t,n,m)=>`${t}: ${n} من ${m}`, (t,n,m)=>`${t}: ${n} of ${m}`],
+  dSpecialShort:[(t,n,m)=>`${t}: ${n} من ${m}`, (t,n,m)=>`${t}: ${n} of ${m}`],
+  dTogetherShort:[(t,n,m)=>`${t}: ${n}% (المطلوب ${m}%)`, (t,n,m)=>`${t}: ${n}% (wanted ${m}%)`],
+  dCapMust:[(t,n,m)=>`${t}: ${n} زيارات، الحد الأقصى ${m}`, (t,n,m)=>`${t}: ${n} visits, maximum ${m}`],
+  dCapPref:[(t,n,m)=>`${t}: ${n} زيارات، تجاوز المفضّل ${m}`, (t,n,m)=>`${t}: ${n} visits, preferred maximum ${m} exceeded`],
+  dGapNone:[(f)=>`${f}: لا سجل زيارة سابق، لذلك تلزم زيارة أولى`, (f)=>`${f}: no earlier visit on record, so a first visit is required`],
+  dGapOverdue:[(f,due)=>`${f}: تأخرت الزيارة عن ${D(due)}`, (f,due)=>`${f}: overdue since ${D(due)}`],
+  dGapLate:[(f,due,vis)=>`${f}: كان يجب الزيارة قبل ${D(due)} وتمت ${D(vis)}`, (f,due,vis)=>`${f}: due by ${D(due)} but visited ${D(vis)}`],
+  dGapTail:[(f,due)=>`${f}: تحتاج زيارة قبل ${D(due)} داخل الخطة`, (f,due)=>`${f}: needs a visit by ${D(due)} inside the plan`],
+  dHistoryUnresolved:[n=>`${n} سجلات سابقة بلا ربط — لم تُحتسب في القواعد`, n=>`${n} earlier history entries could not be matched — not counted by the rules`],
+  cTeam:['فرق سليمة','Valid teams'], cCalendar:['التقويم وأيام الجهات','Calendar and facility days'], cCaps:['حدود اليوم والأسبوع','Day and week limits'],
+  cWeek:['حد الأسبوع للأشخاص','Per-person week limits'], cRest:['الراحة ودورات العمل','Rest and work cycles'], cSpacing:['التباعد بين أيام النشاط','Spacing between active days'],
+  cDays:['زيارة في كل يوم مؤهل','A visit on every eligible day'],
+  xBoundsEmpty:[(p,lo,hi)=>`${p}: حدّ أدنى ${lo} أعلى من الأقصى ${hi}`, (p,lo,hi)=>`${p}: minimum ${lo} is above maximum ${hi}`],
+  xQuotaDays:[(p,lo,can)=>`${p}: يلزم ${lo} زيارة لكن أقصى ما تسمح به أيام العمل والقواعد ${can}`, (p,lo,can)=>`${p}: needs ${lo} visits but days and rules allow at most ${can}`],
+  xHardOverVolume:[(n,m)=>`الالتزامات الإلزامية ${n} أكثر من الحجم المحدد ${m}`, (n,m)=>`${n} mandatory visits exceed the set volume of ${m}`],
+  xPoolSeatsHigh:[(p,s,c)=>`«${p}»: المقاعد ${s} أكثر مما يستطيع الفريق تغطيته (${c})`, (p,s,c)=>`"${p}": ${s} seats exceed what the team can cover (${c})`],
+  xPoolSeatsLow:[(p,s,c)=>`«${p}»: المقاعد ${s} أقل من مجموع الحدود الدنيا (${c})`, (p,s,c)=>`"${p}": ${s} seats are below the sum of minimums (${c})`],
+  xAtLeastPool:[(g,n,m)=>`${g}: يلزم ${n} لكن النطاق يحوي ${m} جهة فقط`, (g,n,m)=>`${g}: needs ${n} but the scope has only ${m} facilities`],
+  xOnlyEmpty:[g=>`${g}: لا توجد جهة مسموحة لهذه القاعدة`, g=>`${g}: no facility is allowed by this rule`],
+  xCapVsMin:[(a,b)=>`«${a}» يتعارض مع «${b}» لأن الحد الأقصى أقل من الحد الأدنى`, (a,b)=>`"${a}" conflicts with "${b}": the maximum is below the minimum`],
+  xRigidSeats:[(a,b)=>`${a} و${b} ثنائي صارم لكن لا توجد جهة بمقاعد تكفيهما`, (a,b)=>`${a} and ${b} are a rigid pair but no facility has seats for both`],
+  xRigidDays:[(a,b)=>`${a} و${b} ثنائي صارم لكن لا يتوافقان في يوم واحد`, (a,b)=>`${a} and ${b} are a rigid pair but never share an available day`],
+  xEveryDayVolume:[(n,d)=>`زيارة في كل يوم مؤهل تحتاج ${d} زيارة والحجم ${n}`, (n,d)=>`A visit on every eligible day needs ${d} visits but the volume is ${n}`],
+  xEveryDayWeekCap:[(n,c,w)=>`أسبوع ${D(w)}: ${n} يوم مؤهل والحد الأسبوعي ${c}`, (n,c,w)=>`Week of ${D(w)}: ${n} eligible days but the weekly cap is ${c}`],
+  xEveryDayCap:[d=>`${D(d)}: حد اليوم لا يسمح بزيارة`, d=>`${D(d)}: the day cap leaves no room for a visit`],
+  xEveryDayRest:[()=>`قاعدة الراحة تمنع العمل في أيام مؤهلة متتالية`, ()=>`The rest rule prevents working on consecutive eligible days`],
+  xEveryDayRun:[(src,m,w)=>`حد الأيام المتتالية ${m} أقل من ${w} يوم مؤهل متتالية`, (src,m,w)=>`The consecutive-day limit ${m} is below ${w} consecutive eligible days`],
+  xEveryDayStaff:[d=>`${D(d)}: لا يوجد من يكفي للعمل في هذا اليوم`, d=>`${D(d)}: not enough people can work on this day`]
+});
+
+defs({
+  statusInfeasible:[n=>`لا توجد خطة صالحة بهذه القواعد — ${n} مخالفة إلزامية في المسودة`, n=>`No valid plan exists under these rules — ${n} hard violation(s) in the draft`],
+  statusExhausted:[n=>`توقف البحث قبل إيجاد خطة صالحة — ${n} مخالفة إلزامية، والإمكانية غير مؤكدة`, n=>`Search stopped before finding a valid plan — ${n} hard violation(s); feasibility unknown`],
+  statusInvalid:[n=>`الخطة بها ${n} مخالفة إلزامية`, n=>`The plan has ${n} hard violation(s)`],
+  statusInfeasibleHint:['تعارضات مثبتة بين القواعد أدناه. عدّل القواعد ثم أعد التوليد.','Proven conflicts between the rules below. Adjust the rules and regenerate.'],
+  statusExhaustedHint:['لم يثبت التعارض ولم تُوجد خطة ضمن حدود وقت البحث. جرّب تخفيف قاعدة أو أعد التوليد.','No conflict was proven and no plan was found within the search limits. Relax a rule or regenerate.'],
+  statusInvalidHint:['لا يمكن اعتماد الخطة قبل إصلاح المخالفات الإلزامية.','The plan cannot be approved until the hard violations are fixed.'],
+  toastInfeasible:['لا توجد خطة صالحة — راجع التعارضات','No valid plan exists — see the conflicts'], toastExhausted:['لم تُوجد خطة صالحة ضمن حدود البحث','No valid plan found within the search limits'], toastInvalid:['المسودة بها مخالفات إلزامية','The draft has hard violations'],
+  moreN:[n=>`و${n} أخرى`, n=>`+${n} more`],
+  editBreaksTitle:['هذا التعديل يخالف قواعد إلزامية','This edit breaks hard rules'], editApplyAnyway:['طبّق رغم ذلك','Apply anyway'],
+  approveBlockedTitle:['لا يمكن اعتماد الخطة','The plan cannot be approved']
+});
+
+defs({
+  qTitle:['الكميات','Quantities'], qRequested:['المطلوب (الحجم)','Requested volume'], qScheduled:['المجدول','Scheduled'], qStaffedValid:['مكتمل الفريق وصالح','Fully staffed and valid'],
+  qCarried:['مؤجل للدورة القادمة','Carried over'], qEligibleDays:['أيام مؤهلة','Eligible days'], qCoveredDays:['أيام فيها زيارة صالحة','Days with a valid visit'], qUncoveredDays:['أيام مؤهلة بلا زيارة','Eligible days uncovered'],
+  qRequiredN:[n=>`مطلوب ${n}`, n=>`required ${n}`], qRequiredRange:[(a,b)=>`مطلوب ${a}–${b}`, (a,b)=>`required ${a}–${b}`], qShareN:[n=>`نصيب عادل ${n}`, n=>`fair share ${n}`]
+});
+
+defs({
+  gTypePattern:['نمط عمل/راحة','Work/rest pattern'],
+  gHintPattern:['راحة دنيا بين أيام العمل، حد للأيام المتتالية، أو دورة عمل وراحة لأشخاص محددين.','A minimum rest between workdays, a limit on consecutive days, or a work/rest cycle for chosen people.'],
+  gtPatternT:[(p,l)=>`نمط ${p}: ${l}`, (p,l)=>`Pattern ${p}: ${l}`],
+  patRestN:[n=>`راحة ${n} يوم`, n=>`${n} rest day(s)`], patRunN:[n=>`حتى ${n} يوم متتالٍ`, n=>`up to ${n} days in a row`],
+  patCycleN:[(a,b)=>`دورة ${a} عمل / ${b} راحة`, (a,b)=>`${a} on / ${b} off cycle`], patNone:['بلا قيود','No limits'],
+  patPresetNoRun:['لا أيام متتالية','No consecutive days'], patPresetMaxRun2:['حتى يومين متتاليين','Up to 2 days in a row'], patPresetNone:['بلا قيود','No limits'],
+  patMinRest:['أيام الراحة الدنيا بين يومي عمل','Minimum rest days between workdays'], patMaxRun:['أقصى أيام عمل متتالية','Maximum consecutive workdays'],
+  patCycle:['دورة عمل وراحة','Work/rest cycle'], patCycleOn:['أيام العمل','Work days'], patCycleOff:['أيام الراحة','Rest days'], patCycleFrom:['تبدأ في','Anchored at'], patNoLimit:['بلا','None'],
+  prTitle:['قواعد العمل والراحة','Work/rest rules'], prInherit:['افتراضي الفريق','Team default'], prCustom:['مخصص','Custom'], prNone:['بلا قيود','No limits'],
+  prHint:['تُطبَّق على أيام عمل هذا الشخص داخل الخطة. «بلا قيود» يلغي القاعدة العامة له.','Applies to this person\'s workdays inside the plan. "No limits" overrides the global rule for them.'],
+  prPreview:[(a,b)=>`متاح ${a} يوم · مُسند ${b}`, (a,b)=>`${a} eligible days · ${b} assigned`]
+});
+
+defs({
+  gp_exceeded:['تجاوز','Exceeded'], gAtLeastRepeat:['يُحتسب تكرار الجهة','Count repeat visits to the same facility'],
+  goalSnapshotHint:['نتائج وقت التوليد (القواعد تغيّرت منذ ذلك الحين)','Results at generation time (rules changed since)'], goalCurrentTitle:['حسب القواعد الحالية','Under the current rules']
+});
+
+defs({
+  rRest:['العمل والراحة','Work and rest'], rRestHint:['قواعد راحة وأيام متتالية ودورات عمل — عامة للخطة أو افتراضية لكل شخص.','Rest, consecutive-day and work-cycle rules — for the whole plan, or as a default for each person.'],
+  rrActivity:['نمط أيام الخطة (للخطة كلها)','Plan activity pattern (whole plan)'], rrActivityHint:['يُطبَّق على الأيام التي فيها أي زيارة، بصرف النظر عن الأشخاص.','Applies to days with any visit, regardless of who goes.'],
+  rrPerson:['القاعدة الافتراضية لكل شخص','Default rule for each person'], rrPersonHint:['يُطبَّق على كل شخص إلا من له قاعدة مخصصة أو «بلا قيود».','Applies to each person unless they have a custom or "No limits" rule.'],
+  spStrict:['التباعد','Spacing is'], spStrictHint:['إلزامي يمنع الخطة المخالفة، والمفضّل يُحتسب كتفضيل فقط.','Must rejects plans that break it; Try only counts as a preference.'],
+  requireEvery:['زيارة في كل يوم مؤهل','Require a visit on every eligible plan day'], requireEveryHint:['إذا فُعّل صار كل يوم عمل مؤهل في الخطة يحتاج زيارة مكتملة الفريق. افتراضيًا مُعطّل.','When on, every eligible workday in the plan needs a fully staffed visit. Off by default.']
+});
+defs({gAddFor_pattern:['نمط عمل/راحة','Work/rest pattern']});

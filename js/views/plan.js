@@ -202,6 +202,7 @@ function doGenerate(btn){
     savePlan();
     PlanView.animate = true;
     emit('plan');
+    if(res.status && res.status!=='valid') toast(t({infeasible:'toastInfeasible', exhausted:'toastExhausted', invalid:'toastInvalid'}[res.status] || 'toastInvalid'));
   }, 30);
 }
 
@@ -235,6 +236,8 @@ function renderResults(){
   if(plan.stale && !plan.approved){
     root.appendChild(el('div', {class:'banner warn', role:'status'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), t('staleMsg'), el('button', {type:'button', class:'btn sm', onclick:()=>doGenerate(document.getElementById('generate-btn'))}, [el('span', {html:ICON.refresh, style:{display:'flex'}}), t('regenerate')])]));
   }
+  const sb = planStatusBanner(plan, A);
+  if(sb) root.appendChild(sb);
   const card = el('section', {class:'card', id:'plan-card'});
   const vl = (ic, key)=>({label:el('span', {class:'row vlab', style:{gap:'6px'}}, [el('span', {html:ic, style:{display:'flex'}}), el('span', {class:'vt'}, t(key))]), title:t(key)});
   const views = [Object.assign({value:'list'}, vl(ICON.list,'vList')), Object.assign({value:'calendar'}, vl(ICON.cal,'vCalendar')), Object.assign({value:'matrix'}, vl(ICON.grid,'vMatrix')), Object.assign({value:'summary'}, vl(ICON.chart,'vSummaryView'))];
@@ -257,6 +260,38 @@ function renderResults(){
   PlanView.animate = false;
 }
 
+function planStatusBanner(plan, A){
+  if(plan.approved) return null;
+  const hard = A.blocking;
+  if(!hard) return null;
+  const conflicts = plan.conflicts || [];
+  let kind = 'invalid';
+  if(plan.status==='infeasible' && conflicts.length) kind = 'infeasible';
+  else if(plan.status==='exhausted') kind = 'exhausted';
+  const title = t({infeasible:'statusInfeasible', exhausted:'statusExhausted', invalid:'statusInvalid'}[kind], hard);
+  const body = el('div', {class:'stack', style:{gap:'6px', flex:'1', minWidth:'0'}}, [
+    el('strong', null, title),
+    el('div', {class:'hint'}, t({infeasible:'statusInfeasibleHint', exhausted:'statusExhaustedHint', invalid:'statusInvalidHint'}[kind]))
+  ]);
+  if(kind==='infeasible'){
+    const list = el('ul', {class:'conflict-list', style:{margin:'4px 0 0', paddingInlineStart:'18px'}});
+    for(const c of conflicts.slice(0, 8)) list.appendChild(el('li', null, t.apply(null, [c.key].concat(c.args || []))));
+    if(conflicts.length>8) list.appendChild(el('li', null, t('moreN', conflicts.length-8)));
+    body.appendChild(list);
+  }
+  const act = el('button', {type:'button', class:'btn sm', onclick:()=>{ App.ui.view = 'summary'; renderResults(); }}, t('vSummaryView'));
+  return el('div', {class:'banner '+(kind==='infeasible' ? 'danger' : 'warn'), role:'status'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), body, act]);
+}
+function showApprovalBlockers(blockers){
+  const lines = [];
+  for(const b of blockers){
+    if(b.key==='stale') lines.push(t('staleMsg'));
+    else if(b.key==='invalid') for(const v of b.violations.slice(0, 4)) lines.push(violationText(v));
+  }
+  const inv = blockers.find(b=>b.key==='invalid');
+  if(inv && inv.n>4) lines.push(t('moreN', inv.n-4));
+  confirmDialog(t('approveBlockedTitle'), lines.join(' · '), {label:t('vSummaryView'), onConfirm:()=>{ App.ui.view = 'summary'; renderResults(); }});
+}
 function issueVisitIds(A){ const s = new Set(); for(const d of A.diags) if(d.visit && d.sev!=='info') s.add(d.visit); return s; }
 function personPill(id, extra){
   const p = personById(id);
@@ -433,6 +468,40 @@ function viewMatrix(plan, A){
   return wrap;
 }
 
+function requestedVolume(plan){
+  if(plan.stale) return plan.requested!=null ? plan.requested : plan.visits.length;
+  const pv = volumePreview();
+  return pv.invalid ? (plan.requested!=null ? plan.requested : plan.visits.length) : (pv.basic||0)+(pv.contracted||0);
+}
+function quantitiesBlock(plan, A){
+  const bad = new Set();
+  for(const v of A.violations) if(v.cls==='hard') for(const id of v.visits) bad.add(id);
+  let staffed = 0;
+  for(const v of plan.visits){
+    const f = facilityById(v.facilityId); if(!f) continue;
+    const full = S().pools.every(pl=>(v.team[pl.id]||[]).length>=seatsFor(pl, v.kind, f.category));
+    if(full && !bad.has(v.id)) staffed++;
+  }
+  const rows = [
+    ['qRequested', requestedVolume(plan)],
+    ['qScheduled', plan.visits.length],
+    ['qStaffedValid', staffed],
+    ['qCarried', (plan.carryover||[]).length],
+    ['qEligibleDays', A.days ? A.days.eligible : 0],
+    ['qCoveredDays', A.days ? A.days.covered : 0]
+  ];
+  if(A.days && A.days.required) rows.push(['qUncoveredDays', A.days.uncovered.length]);
+  const box = el('div');
+  box.appendChild(el('div', {class:'section-title'}, t('qTitle')));
+  box.appendChild(el('div', {class:'qty-grid'}, rows.map(r=>el('div', {class:'qty'}, [el('span', {class:'l'}, t(r[0])), el('b', {class:'num'}, String(r[1]))]))));
+  return box;
+}
+function loadTargetLabel(p, exp){
+  const q = p.quota || {};
+  if(q.min!=null && q.min===q.max) return t('qRequiredN', q.min);
+  if(q.min!=null || q.max!=null) return t('qRequiredRange', q.min!=null ? q.min : 0, q.max!=null ? q.max : '∞');
+  return t('qShareN', exp.toFixed(1));
+}
 function viewSummary(plan, A){
   const wrap = el('div', {class:'stack', style:{padding:'16px', gap:'18px'}});
   const visitDays = new Set(plan.visits.map(v=>v.date)).size;
@@ -444,6 +513,7 @@ function viewSummary(plan, A){
     el('div', {class:'kpi'}, [el('div', {class:'n num'}, totalKm.toLocaleString('en')), el('div', {class:'l'}, t('kpiKm'))]),
     el('div', {class:'kpi'}, [el('div', {class:'n num ltr'}, okChecks+' / '+A.checks.length), el('div', {class:'l'}, t('checksTitle'))])
   ]));
+  wrap.appendChild(quantitiesBlock(plan, A));
   const grid = el('div', {class:'grid-2', style:{alignItems:'start'}});
   const loadBox = el('div');
   loadBox.appendChild(el('div', {class:'section-title'}, t('loadTitle')));
@@ -454,11 +524,10 @@ function viewSummary(plan, A){
     for(const p of members){
       const L = A.loads[p.id] || {total:0, basic:0, contracted:0};
       const exp = A.expected[p.id]||0;
-      const dev = L.total - exp;
       bars.appendChild(el('div', {class:'bar-row', onclick:()=>{ App.ui.focusPerson = p.id; App.ui.view = 'list'; renderResults(); }}, [
         el('span', {class:'nm'}, p.name),
         el('span', {class:'bar'}, [el('i', {class:'b', style:{width:(L.basic/maxLoad*100)+'%'}}), el('i', {class:'c', style:{width:(L.contracted/maxLoad*100)+'%'}}), el('span', {class:'exp', style:{insetInlineStart:(exp/maxLoad*100)+'%'}})]),
-        el('span', {class:'v ltr'}, [el('b', null, String(L.total)), ' / '+exp.toFixed(1)+'  ', el('span', {class:dev>=0.5?'dev-pos':(dev<=-0.5?'dev-neg':'')}, (dev>=0?'+':'')+dev.toFixed(1))])
+        el('span', {class:'v', title:loadTargetLabel(p, exp)}, [el('b', null, String(L.total)), ' · '+loadTargetLabel(p, exp)])
       ]));
     }
     loadBox.appendChild(bars);
@@ -505,7 +574,7 @@ function buildActionBar(plan, A){
   const printBtn = el('button', {type:'button', class:'btn ghost', 'aria-label':t('print'), title:t('print'), onclick:doPrint, html:ICON.printer});
   let main;
   if(plan.approved) main = el('button', {type:'button', class:'btn ghost', onclick:()=>{ unapprovePlan(); }}, t('unapprove'));
-  else main = el('button', {type:'button', class:'btn primary', disabled: !!A.blocking || plan.stale || !n, onclick:()=>{ approvePlan(); toast(t('approved')); }}, [el('span', {html:ICON.check, style:{display:'flex'}}), t('approve')]);
+  else main = el('button', {type:'button', class:'btn primary', disabled: !n, onclick:()=>{ const r = approvePlan(); if(r.ok) toast(t('approved')); else showApprovalBlockers(r.blockers); }}, [el('span', {html:ICON.check, style:{display:'flex'}}), t('approve')]);
   bar.appendChild(el('div', {class:'actionbar-inner'}, [status, el('span', {style:{width:'10px'}}), printBtn, exportBtn, main]));
   return bar;
 }
@@ -534,32 +603,54 @@ function doPrint(){
   window.print();
 }
 
-function mutatePlan(fn){
-  if(!App.plan || App.plan.approved){ toast(t('vdLocked')); return; }
-  fn(App.plan);
+function syncFixedLocks(plan){
+  for(const v of plan.visits){
+    if(!v.fixed || !v.overrideId) continue;
+    v.locked = visitTeamIds(v).slice();
+    v.auto = false;
+  }
+}
+function sortVisits(plan){
+  plan.visits.sort((a, b)=>a.date<b.date ? -1 : (a.date>b.date ? 1 : 0));
+}
+function commitEdit(ev){
+  const plan = ev.trial;
   let synced = false;
-  for(const v of App.plan.visits){
+  for(const v of plan.visits){
     if(!v.fixed || !v.overrideId) continue;
     const o = overrideById(v.overrideId); if(!o) continue;
     const ids = visitTeamIds(v);
     if(o.date!==v.date || o.facilityId!==v.facilityId || o.people.join()!==ids.join()){ o.date = v.date; o.facilityId = v.facilityId; o.people = ids; o.fill = false; synced = true; }
   }
+  if(ev.hardAfter===0) plan.status = 'valid';
+  else if(plan.status==='valid') plan.status = 'invalid';
+  App.plan = plan;
   if(synced) save();
   savePlan();
   renderResults();
   if(sheet.current) sheet.current.render();
 }
-function moveVisit(id, iso){
-  const v = App.plan && App.plan.visits.find(x=>x.id===id);
-  if(!v || v.date===iso) return;
-  const target = moveTargets(App.plan, v).find(x=>x.date===iso);
-  const doIt = ()=>mutatePlan(p=>{ v.date = iso; v.moved = true; p.visits.sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0)); });
-  if(target && (target.conflicts || target.full || target.wdBad)){
-    const f = facilityById(v.facilityId);
-    confirmDialog(t('vdMove'), (f?f.name+' → ':'')+fmtDate(iso,'wdm')+' · '+[target.conflicts?t('conflicts', target.conflicts):null, target.full?t('dayFull'):null, target.wdBad?t('wdNotAllowed'):null].filter(Boolean).join(' · '), {onConfirm:doIt});
-  } else doIt();
+function violationText(v){ return t.apply(null, [v.key].concat(v.args || [])); }
+function mutatePlan(fn, opts){
+  opts = opts || {};
+  const plan = App.plan;
+  if(!plan || plan.approved){ toast(t('vdLocked')); return false; }
+  const ev = evaluateEdit(plan, p=>{ fn(p); syncFixedLocks(p); sortVisits(p); });
+  if(ev.introduced.length && !opts.force){
+    const lines = ev.introduced.slice(0, 3).map(violationText);
+    if(ev.introduced.length>3) lines.push(t('moreN', ev.introduced.length-3));
+    confirmDialog(t('editBreaksTitle'), lines.join(' · '), {danger:true, label:t('editApplyAnyway'), onConfirm:()=>commitEdit(ev)});
+    return false;
+  }
+  commitEdit(ev);
+  return true;
 }
-
+function visitIn(p, id){ return p.visits.find(x=>x.id===id); }
+function moveVisit(id, iso){
+  const v = App.plan && visitIn(App.plan, id);
+  if(!v || v.date===iso) return;
+  mutatePlan(p=>{ const x = visitIn(p, id); x.date = iso; x.moved = true; });
+}
 function openVisit(id){
   sheet({
     title:()=>{ const v = App.plan.visits.find(x=>x.id===id); const f = v && facilityById(v.facilityId); return f ? f.name : '—'; },
@@ -610,9 +701,10 @@ function openVisit(id){
           const btn = el('button', {type:'button', class:'btn sm outline', disabled:locked}, [el('span', {html:ICON.swap, style:{display:'flex'}}), p ? t('vdSwap') : t('vdFill')]);
           btn.addEventListener('click', ()=>{
             const cands = candidatesForSeat(plan, v, pl.id, pid);
-            menu(btn, cands.map(c=>({label:c.p.name, meta:c.reason ? t({busy:'rBusy', off:'rOff', blocked:'rBlocked'}[c.reason]) : (c.warn ? '⚠ '+t(c.warn==='rule'?'rRule':'rQuota')+' · '+t('loadN', c.load) : t('loadN', c.load)), disabled:!!c.reason, onClick:()=>mutatePlan(()=>{
-              v.team[pl.id] = v.team[pl.id] || [];
-              if(pid) v.team[pl.id][i] = c.p.id; else { v.team[pl.id].push(c.p.id); if(v.open && v.open[pl.id]){ v.open[pl.id]--; if(!v.open[pl.id]) delete v.open[pl.id]; } }
+            menu(btn, cands.map(c=>({label:c.p.name, meta:c.reason ? t({busy:'rBusy', off:'rOff', blocked:'rBlocked'}[c.reason]) : (c.warn ? '⚠ '+violationText(c.introduced[0])+' · '+t('loadN', c.load) : t('loadN', c.load)), disabled:!!c.reason, onClick:()=>mutatePlan(p=>{
+              const x = visitIn(p, v.id);
+              x.team[pl.id] = (x.team[pl.id] || []).slice();
+              if(pid) x.team[pl.id][i] = c.p.id; else { x.team[pl.id].push(c.p.id); if(x.open && x.open[pl.id]){ x.open[pl.id]--; if(!x.open[pl.id]) delete x.open[pl.id]; } }
             })})), {search:cands.length>8, width:280});
           });
           teamSec.appendChild(el('div', {class:'row', style:{padding:'6px 0', borderBottom:'1px dashed var(--line)'}}, [
@@ -628,7 +720,7 @@ function openVisit(id){
         const moveBtn = el('button', {type:'button', class:'btn outline'}, [el('span', {html:ICON.move, style:{display:'flex'}}), t('vdMove')]);
         moveBtn.addEventListener('click', ()=>menu(moveBtn, moveTargets(plan, v).map(x=>({label:fmtDate(x.date,'wdm'), meta:[x.count+' ×', x.conflicts?t('conflicts',x.conflicts):null, x.full?t('dayFull'):null, x.wdBad?t('wdNotAllowed'):null].filter(Boolean).join(' · '), onClick:()=>moveVisit(v.id, x.date)})), {width:300}));
         const repBtn = el('button', {type:'button', class:'btn outline'}, [el('span', {html:ICON.building, style:{display:'flex'}}), t('vdReplace')]);
-        repBtn.addEventListener('click', ()=>menu(repBtn, replacementFacilities(plan, v).map(x=>({label:x.f.name, meta:x.f.category+' · '+t('vdOverdue', x.overdue), onClick:()=>mutatePlan(()=>{ v.facilityId = x.f.id; v.why = {overdue:x.overdue, score:Math.round(x.score), rank:'—'}; })})), {search:true, width:340}));
+        repBtn.addEventListener('click', ()=>menu(repBtn, replacementFacilities(plan, v).map(x=>({label:x.f.name, meta:x.f.category+' · '+t('vdOverdue', x.overdue), onClick:()=>mutatePlan(p=>{ const y = visitIn(p, v.id); y.facilityId = x.f.id; y.why = {overdue:x.overdue, score:Math.round(x.score), rank:'—'}; })})), {search:true, width:340}));
         const delBtn = el('button', {type:'button', class:'btn ghost', style:{color:'var(--danger)'}, onclick:()=>confirmDialog(t('vdRemove'), f.name, {danger:true, label:t('del'), onConfirm:()=>{ mutatePlan(p=>{ p.visits = p.visits.filter(x=>x.id!==v.id); }); api.close(); }})}, [el('span', {html:ICON.trash, style:{display:'flex'}}), t('vdRemove')]);
         const fixBtn = el('button', {type:'button', class:'btn outline', onclick:()=>{ fixVisitAsOverride(v); api.render(); }}, [el('span', {html:ICON.flag, style:{display:'flex'}}), v.fixed ? t('vdEditFixed') : t('vdFix')]);
         act.appendChild(el('div', {class:'row wrap'}, [fixBtn, moveBtn, repBtn, delBtn]));
