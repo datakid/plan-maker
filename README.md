@@ -26,7 +26,7 @@ js/views/rules.js     all rules with a sticky section nav (scroll-spy) and on/of
 js/views/data.js      import, unresolved names, backup/restore, appearance, reset
 test.html             dev test runner: isolated storage, app self-test, regression suite (not needed in production)
 js/selftest.js        full-app UI and flow checks (generation, views, sheets, rules, export, approve, English mode)
-js/tests/             env.js (storage isolation), kit.js, fixtures.js (deterministic fixtures), reference.js (exhaustive solver), regress.js (regression cases)
+js/tests/             panel.js (on-page results), env.js (storage isolation), kit.js, fixtures.js (deterministic fixtures), reference.js (exhaustive solver), regress.js (regression cases)
 ```
 
 ## Goals (v3.1)
@@ -128,7 +128,7 @@ Swap, fill, move, replace and remove all go through `mutatePlan`, which evaluate
 Saved data without `rulesRev` (or older than 7) is migrated on load without removing people, facilities, goals or history. It adds `settings.patterns`, `volume.requireEveryEligibleDay` (false), `spacing.strict`, and per-person `pattern` (`inherit`); malformed numbers and dates are sanitised. `alkhitta.v4` and v4 backups still import.
 
 ## Tests
-- Open `test.html`. It replaces `localStorage` with an in-memory shim first and refuses to run if it cannot, so the real data is never cleared. It runs the app self-test and then the regression suite; the last line is `RESULT pass=… fail=…`.
+- Open `test.html`. It replaces `localStorage` with an in-memory shim first and refuses to run if it cannot, so the real data is never cleared. It runs the app self-test and then the regression suite. A results panel covers the page: green "ALL TESTS PASSED" with `RESULT pass=… fail=0`, or red with each failing test listed (tick the box to list passing ones too, or use "Show app" to see the page). The same lines are printed to the console.
 - `js/tests/regress.js` holds the regression cases: audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
 - The old seed-data self-test alone is not evidence of readiness.
 
