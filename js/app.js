@@ -95,8 +95,6 @@ function boot(){
   window.addEventListener('hashchange', ()=>{ const id = (location.hash||'').slice(1); if(id!==App.ui.tab && TABS.some(x=>x.id===id)) goTab(id); });
   window.addEventListener('storage', e=>{ if(e.key===STORE_KEY) toast(App.ui.lang==='ar' ? 'تغيّرت البيانات في نافذة أخرى' : 'Data changed in another window', {label:App.ui.lang==='ar'?'إعادة التحميل':'Reload', onClick:()=>location.reload()}); });
   window.addEventListener('beforeunload', ()=>{ clearTimeout(saveTimer); saveNow(); });
-  const fav = el('link', {rel:'icon', type:'image/svg+xml', href:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#6D4461"/><g transform="translate(4.8 4.8) scale(.7)" fill="none" stroke="#FBF6F9" stroke-width="3.4" stroke-linecap="round"><path d="M16 3a13 13 0 1 0 13 13"/><path d="M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6"/></g></svg>')});
-  document.head.appendChild(fav);
   if(App.migrated) toast(t('migrated'));
 }
 document.addEventListener('DOMContentLoaded', boot);
