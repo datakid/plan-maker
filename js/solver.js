@@ -80,7 +80,8 @@ function layoutDemand(plan){
   return m;
 }
 
-function flowDeficit(plan, bounds, caps){
+function flowDeficit(plan, bounds, caps, availFn){
+  const canWork = availFn || personAvailable;
   const layout = layoutDemand(plan);
   let total = 0;
   for(const pl of S().pools){
@@ -96,13 +97,68 @@ function flowDeficit(plan, bounds, caps){
         const b = bounds.get(p.id) || {lo:0, hi:Infinity};
         const cap = mode==='lo' ? b.lo : Math.min(b.hi, caps ? (caps.get(p.id)==null ? Infinity : caps.get(p.id)) : Infinity);
         edges.push([s, 1+i, Math.min(cap, D)]);
-        dayList.forEach((o, j)=>{ if(personAvailable(p, o)) edges.push([1+i, 1+m+j, 1]); });
+        dayList.forEach((o, j)=>{ if(canWork(p, o)) edges.push([1+i, 1+m+j, 1]); });
       });
       dayList.forEach((o, j)=>edges.push([1+m+j, t, layout.get(o)[pl.id]]));
       const f = maxFlow(m+D+2, edges, s, t);
       if(mode==='lo') total += Math.max(0, sum(members, p=>Math.min((bounds.get(p.id)||{lo:0}).lo, D)) - f);
       else total += Math.max(0, demand - f);
     }
+  }
+  return total;
+}
+
+function effectiveAvailability(){
+  const partners = new Map();
+  for(const r of S().pairs){
+    if(!r.on || r.mode!=='rigid' || r.type!=='together' || !r.a || !r.b) continue;
+    if(!personById(r.a) || !personById(r.b)) continue;
+    if(!partners.has(r.a)) partners.set(r.a, []);
+    if(!partners.has(r.b)) partners.set(r.b, []);
+    partners.get(r.a).push(r.b);
+    partners.get(r.b).push(r.a);
+  }
+  return (p, o)=>{
+    if(!personAvailable(p, o)) return false;
+    const list = partners.get(p.id);
+    if(!list) return true;
+    for(const id of list){
+      const q = personById(id);
+      if(!q || q.active===false || q.retired || !personAvailable(q, o)) return false;
+    }
+    return true;
+  };
+}
+
+function genderDeficit(plan, availFn){
+  let total = 0;
+  const people = activePeople();
+  for(const v of plan.visits){
+    if(v.auto===false) continue;
+    const f = facilityById(v.facilityId);
+    if(!f) continue;
+    const kind = visitKindOf(f);
+    const rule = genderRuleFor(f, kind);
+    if(!rule) continue;
+    const o = ordOf(v.date);
+    const n = teamSizeFor(kind, f.category);
+    let lo = 0, hi = 0, staffed = true;
+    for(const pl of S().pools){
+      const seats = seatsFor(pl, kind, f.category);
+      if(!seats) continue;
+      let m = 0, w = 0, u = 0;
+      for(const p of people){
+        if(p.pool!==pl.id || !availFn(p, o) || (p.blocked||[]).includes(f.id)) continue;
+        if(p.gender==='m') m++; else if(p.gender==='f') w++; else u++;
+      }
+      if(m+w+u<seats){ staffed = false; break; }
+      lo += Math.max(0, seats-w-u);
+      hi += Math.min(seats, m+u);
+    }
+    if(!staffed) continue;
+    let can = false;
+    for(let m=lo;m<=hi && !can;m++) can = genderValid(rule, m, n-m, n);
+    if(!can) total++;
   }
   return total;
 }
@@ -134,7 +190,9 @@ function preflightPlan(info, plan){
   const bounds = personBounds(rules);
   const hist = historyIndex(win.start).map;
   const workDays = win.days.filter(o=>normalWorkday(o) || isOverrideDate(isoOf(o)));
+  const warnings = [];
   const add = (key, args, extra)=>conflicts.push(Object.assign({key, args:args||[], sev:'error'}, extra||{}));
+  const warn = (key, args, extra)=>warnings.push(Object.assign({key, args:args||[], sev:'warn'}, extra||{}));
   const pools = set.pools;
 
   const cap = new Map();
@@ -157,14 +215,18 @@ function preflightPlan(info, plan){
   }
 
   if(plan && pools.every(pl=>!Object.keys(pl.byCategory||{}).length)){
-    const demand = layoutDemand(plan);
+    const exactProof = volume.mode==='exact' && !plan.visits.some(v=>v.auto===false);
+    const layout = layoutDemand(plan);
     for(const pl of pools){
       const members = activePeople().filter(p=>p.pool===pl.id);
-      const seats = sum([...demand.values()], d=>d[pl.id]||0);
+      const layoutSeats = sum([...layout.values()], d=>d[pl.id]||0);
+      const exactSeats = (volume.exact.basic|0)*seatsFor(pl, 'basic') + (volume.exact.contracted|0)*seatsFor(pl, 'contracted');
       const hi = sum(members, p=>Math.min((bounds.get(p.id)||{hi:Infinity}).hi, cap.get(p.id)==null ? Infinity : cap.get(p.id)));
       const lo = sum(members, p=>(bounds.get(p.id)||{lo:0}).lo);
-      if(seats>hi) add('xPoolSeatsHigh', [poolName(pl), seats, hi]);
-      if(seats<lo) add('xPoolSeatsLow', [poolName(pl), seats, lo]);
+      if(exactProof ? exactSeats>hi : (hi===0 && layoutSeats>0)) add('xPoolSeatsHigh', [poolName(pl), exactProof ? exactSeats : layoutSeats, hi]);
+      else if(layoutSeats>hi) warn('xPoolSeatsHigh', [poolName(pl), layoutSeats, hi]);
+      if(exactProof && exactSeats<lo) add('xPoolSeatsLow', [poolName(pl), exactSeats, lo]);
+      else if(layoutSeats<lo) warn('xPoolSeatsLow', [poolName(pl), layoutSeats, lo]);
     }
   }
 
@@ -229,7 +291,7 @@ function preflightPlan(info, plan){
       if(seatsFixed && !fits){ add('xEveryDayStaff', [isoOf(o)]); break; }
     }
   }
-  return {conflicts, bounds, cap};
+  return {conflicts, warnings, bounds, cap};
 }
 
 function layoutGroupsHard(plan){
@@ -244,6 +306,7 @@ function layoutGroupsHard(plan){
 
 function solveTeams(plan, budget, rnd, opts){
   opts = opts || {};
+  const noise = opts.noise==null ? 0 : opts.noise;
   const set = S();
   const fr = planFrame(plan);
   const ctx = makeCtx(fr.start);
@@ -261,7 +324,6 @@ function solveTeams(plan, budget, rnd, opts){
     for(const id of st.locked){
       const p = personById(id);
       if(!p) continue;
-      if((ctx.dayUsed.get(x.ord)||new Set()).has(id)) return null;
       ctxTally(ctx, id, x.ord, x.f, 1);
     }
     for(const pl of set.pools){
@@ -300,6 +362,28 @@ function solveTeams(plan, budget, rnd, opts){
     if(ds) for(const r of ctxRulesOf(ctx, p).hard) if(ruleBreaksOn(r, ds, x.ord)) return false;
     for(const r of ctx.rules.countsOf(p.id)) if(r.must && r.max!=null && inScopeOpt(x.f, r.scope) && (ctx.q[r.key]||0) >= r.max) return false;
     return true;
+  };
+  const groupsAt = new Map();
+  for(const g of groups){
+    const o = g.st.x.ord;
+    if(!groupsAt.has(o)) groupsAt.set(o, []);
+    groupsAt.get(o).push(g);
+  }
+  const spanOf = new Map();
+  for(const p of people){
+    let sp = 0;
+    for(const r of personPatternRules(p).hard) sp = Math.max(sp, r.minRest||0, r.maxRun ? 1 : 0);
+    spanOf.set(p.id, sp);
+  }
+  const futureCost = (p, ord, except)=>{
+    let c = 0;
+    const span = spanOf.get(p.id)||0;
+    for(let k=-span;k<=span;k++){
+      const gs = groupsAt.get(ord+k);
+      if(!gs) continue;
+      for(const g of gs) if(g!==except && g.chosen.length<g.seats && g.base.includes(p)) c++;
+    }
+    return c;
   };
   const teamOf = st=>[].concat(st.locked, ...st.groups.map(g=>g.chosen));
   const poolLeft = (st, pid)=>sum(st.groups.filter(g=>g.pool===pid), g=>g.seats-g.chosen.length);
@@ -415,8 +499,19 @@ function solveTeams(plan, budget, rnd, opts){
       for(const d of defs) if(d.r.pid===c.p.id && inScopeOpt(pick.st.x.f, d.r.scope)) u = Math.max(u, d.need/Math.max(1, opportunities(d.r)));
       return u;
     };
-    const scored = pickC.map(c=>({c, k:[-urgency(c), (load(c.p.id)+0.5)/(c.p.share==null||c.p.share<=0 ? 1 : c.p.share)+rnd()*opts.noise]}));
-    scored.sort((a,b)=>a.k[0]-b.k[0] || a.k[1]-b.k[1]);
+    const px = pick.st.x;
+    const rule = genderRuleFor(px.f, px.kind);
+    const nSize = teamSizeFor(px.kind, px.f.category);
+    const nowG = rule ? teamGender(teamOf(pick.st)) : null;
+    const remainingTotal = rule ? sum(pick.st.groups, g=>g.seats-g.chosen.length) : 0;
+    const genderPen = c=>{
+      if(!rule) return 0;
+      let m = nowG.m, w = nowG.f, u = nowG.u;
+      for(const q of c.unit){ if(!q.gender) u++; else if(q.gender==='m') m++; else w++; }
+      return genderFeasible(rule, m, w, u, remainingTotal-c.unit.length, nSize) ? 0 : 1;
+    };
+    const scored = pickC.map(c=>({c, k:[-urgency(c), genderPen(c), futureCost(c.p, px.ord, pick), (load(c.p.id)+0.5)/(c.p.share==null||c.p.share<=0 ? 1 : c.p.share)+rnd()*noise]}));
+    scored.sort((a,b)=>{ for(let i=0;i<a.k.length;i++) if(a.k[i]!==b.k[i]) return a.k[i]-b.k[i]; return 0; });
     for(const e of scored){
       const rec = assign(pick, e.c);
       let ok = true;
@@ -427,8 +522,6 @@ function solveTeams(plan, budget, rnd, opts){
     }
     return false;
   };
-  const noiseOpt = opts.noise==null ? 0 : opts.noise;
-  opts.noise = noiseOpt;
   for(const st of state) if(importanceNeed(st.x) && attainable.get(st)===false) attainable.set(st, false);
   const ok = dfs();
   if(!ok) return aborted ? {aborted:true} : null;
@@ -459,31 +552,63 @@ function polishSoft(plan){
   return plan;
 }
 
-function layoutMoves(plan, rnd){
-  const days = plan.days;
-  const moves = [];
-  const vs = plan.visits;
-  for(const v of vs){
-    if(v.fixed) continue;
-    for(const d of days){
-      if(d===v.date) continue;
-      moves.push({kind:'move', id:v.id, date:d});
-    }
+function layoutHot(plan){
+  const v = validatePlan(plan);
+  const hot = new Set();
+  let layoutHard = 0;
+  for(const x of v.violations){
+    if(x.cls!=='hard') continue;
+    for(const id of (x.visits||[])) hot.add(id);
+    if(x.group==='cCalendar' || x.group==='cCaps' || x.group==='cSpacing' || x.group==='cGoals' || x.group==='cDays' || (x.group==='cDup' && x.key==='dFacDup')) layoutHard++;
   }
-  for(let i=0;i<vs.length;i++) for(let j=i+1;j<vs.length;j++){
-    if(vs[i].date===vs[j].date || vs[i].fixed || vs[j].fixed) continue;
-    moves.push({kind:'swap', a:vs[i].id, b:vs[j].id});
-  }
-  const inPlan = new Set(vs.map(v=>v.facilityId));
-  for(const v of vs){
-    if(v.fixed || v.special) continue;
-    const kind = v.kind;
-    const alts = schedulableFacilities().filter(f=>visitKindOf(f)===kind && !inPlan.has(f.id));
-    for(const f of alts) moves.push({kind:'replace', id:v.id, facilityId:f.id});
-  }
-  for(let i=moves.length-1;i>0;i--){ const j = Math.floor(rnd()*(i+1)); const t = moves[i]; moves[i] = moves[j]; moves[j] = t; }
-  return moves;
+  return {hot, layoutHard, hard:v.hard, soft:v.soft};
 }
+
+function sampleLayoutMoves(plan, rnd, hot, k){
+  const vs = plan.visits.filter(v=>!v.fixed);
+  if(!vs.length || !plan.days.length) return [];
+  const hotVs = vs.filter(v=>hot.has(v.id));
+  const inPlan = new Set(plan.visits.map(v=>v.facilityId));
+  const altsByKind = {};
+  const alts = kind=>{
+    if(!altsByKind[kind]) altsByKind[kind] = schedulableFacilities().filter(f=>visitKindOf(f)===kind && !inPlan.has(f.id));
+    return altsByKind[kind];
+  };
+  const out = [];
+  const seen = new Set();
+  let guard = 0;
+  while(out.length<k && guard++<k*8){
+    const v = hotVs.length && rnd()<0.6 ? hotVs[Math.floor(rnd()*hotVs.length)] : vs[Math.floor(rnd()*vs.length)];
+    const r = rnd();
+    let m = null;
+    if(r<0.45){
+      const d = plan.days[Math.floor(rnd()*plan.days.length)];
+      if(d!==v.date) m = {kind:'move', id:v.id, date:d};
+    } else if(r<0.8){
+      const w = vs[Math.floor(rnd()*vs.length)];
+      if(w!==v && w.date!==v.date) m = {kind:'swap', a:v.id, b:w.id};
+    } else if(!v.special){
+      const list = alts(v.kind);
+      if(list.length) m = {kind:'replace', id:v.id, facilityId:list[Math.floor(rnd()*list.length)].id};
+    }
+    if(!m) continue;
+    const key = JSON.stringify(m);
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
+function perturbLayout(plan, rnd, hot, steps){
+  let cur = plan;
+  for(let i=0;i<steps;i++){
+    const m = sampleLayoutMoves(cur, rnd, hot, 1)[0];
+    if(m) cur = applyLayoutMove(cur, m);
+  }
+  return cur;
+}
+
 function applyLayoutMove(plan, m){
   const out = clonePlan(plan);
   if(m.kind==='move'){ out.visits.find(v=>v.id===m.id).date = m.date; }
@@ -504,39 +629,51 @@ function searchPlan(plan, info, opts){
   const b = opts.budget || {};
   const t0 = Date.now();
   const budget = {nodes:0, maxNodes:b.nodes || 120000, deadline:t0 + (b.ms || 1500)};
+  const maxEvals = b.evals || 4000;
   const rnd = mulberry32(opts.seed || 20260101);
-  const stats = {attempts:0, nodes:0, ms:0, exhausted:false, layoutMoves:0, restarts:0};
+  const stats = {attempts:0, nodes:0, ms:0, exhausted:false, layoutMoves:0, restarts:0, evals:0, stage:'search'};
   const rules = compilePeopleRules();
   const bounds = personBounds(rules);
-  const finish = (p)=>{ stats.nodes = budget.nodes; stats.ms = Date.now()-t0; return {plan:p, info:stats}; };
+  const avail = effectiveAvailability();
+  const finish = p=>{ stats.nodes = budget.nodes; stats.ms = Date.now()-t0; return {plan:p, info:stats}; };
 
   const tryTeams = (p, nodeCap, noise)=>{
     const sub = {nodes:0, maxNodes:Math.min(nodeCap, budget.maxNodes-budget.nodes), deadline:budget.deadline};
-    const before = budget.nodes;
     stats.attempts++;
     const r = solveTeams(p, sub, rnd, {noise});
-    budget.nodes += sub.nodes - 0;
+    budget.nodes += sub.nodes;
     if(r && r.plan){ polishSoft(r.plan); return r.plan; }
     return null;
   };
-  const alive = ()=>budget.nodes<budget.maxNodes && Date.now()<budget.deadline;
+  const maxLoops = b.loops || 1500;
+  const alive = ()=>budget.nodes<budget.maxNodes && Date.now()<budget.deadline && stats.evals<maxEvals && stats.layoutMoves<maxLoops;
+  const better = (v, w)=>v.hard<w.hard || (v.hard===w.hard && v.soft<w.soft);
 
   let best = plan;
   let bestVal = validatePlan(plan);
-  let r = tryTeams(plan, 6000, 0);
-  if(r){ const v = validatePlan(r); if(v.hard<bestVal.hard || (v.hard===bestVal.hard && v.soft<bestVal.soft)){ best = r; bestVal = v; } if(v.hard===0) return finish(best); }
+  const adopt = rr=>{
+    if(!rr) return false;
+    const v = validatePlan(rr);
+    if(better(v, bestVal)){ best = rr; bestVal = v; return true; }
+    return false;
+  };
+  adopt(tryTeams(plan, 6000, 0));
+  if(bestVal.hard===0) return finish(best);
 
-  let cur = best;
-  const defOf = p=>flowDeficit(p, bounds) + scopedDeficit(p, rules);
-  let curDef = defOf(cur);
-  const seen = new Set();
+  const defOf = p=>flowDeficit(p, bounds, null, avail) + scopedDeficit(p, rules);
   const sigOfPlan = p=>p.visits.map(v=>v.date+':'+v.facilityId).sort().join('|');
-  seen.add(sigOfPlan(cur));
-  let stale = 0;
+  let cur = best;
+  let curDef = defOf(cur);
+  let bestLayoutDef = curDef;
+  const seen = new Set([sigOfPlan(cur)]);
+  let stagnation = 0;
+  let kick = 2;
+  const maxKick = Math.max(3, Math.ceil(plan.visits.length/3));
+  let info0 = layoutHot(cur);
+
   while(alive()){
-    const moves = layoutMoves(cur, rnd);
-    let chosen = null, chosenDef = Infinity, tested = 0;
-    const baseLayout = layoutGroupsHard(cur);
+    const moves = sampleLayoutMoves(cur, rnd, info0.hot, 48);
+    let chosen = null, chosenDef = Infinity, chosenSoft = Infinity;
     for(const m of moves){
       if(!alive()) break;
       const cand = applyLayoutMove(cur, m);
@@ -544,24 +681,37 @@ function searchPlan(plan, info, opts){
       if(seen.has(sg)) continue;
       const d = defOf(cand);
       if(d>chosenDef) continue;
-      if(d===chosenDef && rnd()<0.5) continue;
-      if(layoutGroupsHard(cand)>baseLayout) continue;
-      chosen = cand; chosenDef = d; tested++;
+      stats.evals++;
+      if(layoutGroupsHard(cand)>info0.layoutHard) continue;
+      const sf = genderDeficit(cand, avail);
+      if(d===chosenDef && (sf>chosenSoft || (sf===chosenSoft && rnd()<0.5))) continue;
+      chosen = cand; chosenDef = d; chosenSoft = sf;
       if(d===0 && curDef>0) break;
-      if(tested>40) break;
     }
     stats.layoutMoves++;
-    if(!chosen){ stats.restarts++; if(++stale>3) break; cur = best; continue; }
-    seen.add(sigOfPlan(chosen));
-    cur = chosen; curDef = chosenDef;
-    if(curDef<=Math.max(0, defOf(best))){
-      const rr = tryTeams(cur, curDef===0 ? 8000 : 800, curDef===0 ? 0.5 : 0);
-      if(rr){
-        const v = validatePlan(rr);
-        if(v.hard<bestVal.hard || (v.hard===bestVal.hard && v.soft<bestVal.soft)){ best = rr; bestVal = v; }
-        if(v.hard===0) return finish(best);
+    let improved = false;
+    if(!chosen){
+      stagnation++;
+    } else {
+      seen.add(sigOfPlan(chosen));
+      cur = chosen; curDef = chosenDef;
+      if(curDef<=bestLayoutDef){
+        if(curDef<bestLayoutDef){ bestLayoutDef = curDef; improved = true; }
+        const rr = tryTeams(cur, curDef===0 ? 8000 : 800, curDef===0 ? 0.5 : 0);
+        if(adopt(rr)){ improved = true; if(bestVal.hard===0) return finish(best); }
       }
+      if(!improved) stagnation++;
     }
+    if(improved){ stagnation = 0; kick = 2; }
+    if(stagnation>=8){
+      stats.restarts++;
+      cur = perturbLayout(best, rnd, info0.hot, kick);
+      kick = Math.min(maxKick, kick+1);
+      curDef = defOf(cur);
+      seen.add(sigOfPlan(cur));
+      stagnation = 0;
+    }
+    info0 = layoutHot(cur);
   }
   stats.exhausted = !alive();
   return finish(best);

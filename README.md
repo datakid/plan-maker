@@ -15,6 +15,7 @@ js/engine.js          capacity, scoring, team assignment (with preset people), g
 js/goals.js           goal & fixed-visit models, demand builder, fixed-visit conflict checks
 js/constraints.js     the one validator (validatePlan), goal evaluation, work/rest rules, history lookback, generation snapshots
 js/solver.js          feasibility pre-check (proven conflicts), seat-level search, layout moves; bounded and deterministic
+js/anneal.js          last-resort seeded simulated annealing over the whole plan (dates, facilities, seats), best of several runs
 js/planner.js         generation pipeline: window → fixed visits → goal demand → selection → placement → teams → repair → search
 js/ui.js              popover stack, menus, sheet, dialog, toast, controls (Seg/Switch/Stepper/Slider/DaySet/MiniCal…)
 js/io.js              XLSX writer/reader, CSV, import preview/apply, plan export, matrix sheet
@@ -116,10 +117,16 @@ Precedence: a person's own limits and pattern goals always apply; the default pe
 ## Generation result
 `generatePlan()` returns a plan plus a status:
 - `valid`: no hard violation.
-- `infeasible`: a necessary condition fails, with named conflicts (a person's minimum above what their days allow, mandatory visits above the exact volume, a cap below a minimum, a rigid pair with no shared seats or days, an every-day requirement the volume, caps or rest rules cannot meet, and so on). Only proven conflicts use this word.
+- `infeasible`: a necessary condition fails, with named conflicts (a person's minimum above what their days allow, mandatory visits above the exact volume, a cap below a minimum, a rigid pair with no shared seats or days, an every-day requirement the volume, caps or rest rules cannot meet, and so on). Only proven conflicts use this word. Seat-count checks count as proofs when the volume is exact, or when nobody in a pool can work at all; otherwise they are shown as warnings.
 - `exhausted`: no conflict was proven, but the bounded search did not find a valid plan. Feasibility is unknown.
 - `invalid`: a draft was returned without searching, or a manual edit broke a rule.
-The draft is always shown with its violations. The search is deterministic for a given input (fixed seed, node budget) with a wall-clock cap of 1.5 s (300 ms when infeasibility is already proven).
+The draft is always shown with its violations. The search is deterministic for a given input (fixed seed, node, evaluation and iteration caps); the wall-clock caps can only end a run earlier on a slow machine.
+
+Stages, each run only when the previous one left a hard violation:
+1. **Draft**: window, fixed visits, goal demand, selection, placement, teams, repairs. The number of visits is capped by what each day can really staff (a day with one available admin can still host a visit that needs one), not by a blended average.
+2. **Search**: seat-level team search plus layout moves. Layout moves are sampled (biased to visits in current violations), scored by seat flow, scoped quotas, rigid-pair availability and gender feasibility, and restarted from the best layout with growing random kicks until the node, evaluation, loop or time cap is reached. Up to 1.5 s.
+3. **Annealing**: when no conflict is proven, a seeded simulated annealing over the whole plan (date moves, swaps, same-kind facility replacement, seat swaps, seat fills and removals). Cost is 200 x hard + soft from `validatePlan`. Three independent runs with seeds derived from the base seed; the best by (hard, soft) is kept and finished with the soft polish. The plan is never returned with more hard violations than the draft. Total time for stages 2 and 3 is capped at about 4 s.
+`plan.gen.search` records the stage that produced the result (`search` or `anneal`), attempts, restarts, runs, iterations and milliseconds.
 
 ## Manual edits
 Swap, fill, move, replace and remove all go through `mutatePlan`, which evaluates the edit on a copy with the validator. If the edit introduces a hard violation the dialog names it and asks before applying. Candidate menus show the same verdicts. Approval re-validates and is refused for stale or hard-invalid plans; there is no override.
@@ -129,11 +136,12 @@ Saved data without `rulesRev` (or older than 7) is migrated on load without remo
 
 ## Tests
 - Open `test.html`. It replaces `localStorage` with an in-memory shim first and refuses to run if it cannot, so the real data is never cleared. It runs the app self-test and then the regression suite. A results panel covers the page: green "ALL TESTS PASSED" with `RESULT pass=… fail=0`, or red with each failing test listed (tick the box to list passing ones too, or use "Show app" to see the page). The same lines are printed to the console.
-- `js/tests/regress.js` holds the regression cases: audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
+- `js/tests/reference.js` has two exhaustive solvers for small fixtures: `Ref.solve` (facilities, then days, then teams) and `Ref.days` (day by day with pruning on availability, rest, quotas and weekly caps, then the validator as the oracle).
+- `js/tests/regress.js` holds the regression cases (L1 to L15 cover the backup week of a real failing plan, gender, pair, quota, every-day and deadline fixtures, annealing and preflight proofs; K2 compares the generator with the reference across five fixture families and needs at least 99% valid; K3 checks determinism): audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
 - The old seed-data self-test alone is not evidence of readiness.
 
 ## Performance limits
-Seed data (about 150 facilities, 11 people): week, month and quarter plans validate with zero hard violations in under about 100 ms. The search stops at 120,000 nodes or 1.5 s, whichever is first; exhaustive reference checks are for small fixtures only (a handful of days and people).
+Seed data (about 150 facilities, 11 people): week, month and quarter plans validate with zero hard violations in under about 100 ms. The fast path is unchanged; the search and annealing stages only run when the draft has a hard violation. The team search stops at 120,000 nodes, the layout search at 4,000 evaluations or 1,500 loops, whichever comes first, and both stop at 1.5 s. Annealing stops at its iteration cap or when the 4 s total is spent. When a conflict is already proven the budget is 300 ms and annealing is skipped. Exhaustive reference checks are for small fixtures only (a handful of days and people).
 
 ## Release checklist
 1. `test.html` shows `fail=0` and no uncaught errors.
@@ -148,6 +156,8 @@ Seed data (about 150 facilities, 11 people): week, month and quarter plans valid
 ## Known limitations
 - The search is bounded; `exhausted` is not a proof of infeasibility.
 - Facility replacement moves in the search keep the visit kind; unusual per-category seat overrides disable the seat-count conflict check rather than risk a wrong claim.
+- Annealing recomputes `validatePlan` for every move; it is fast for week and month plans but is the slow path for quarter plans with many violations.
+- Gender rules are soft in the validator: the search and annealing reduce gender violations but a plan with only gender violations is still `valid`.
 - History before the lookback window (30 days) is not used by rest rules.
 - Patterns are evaluated per plan; there is no cross-plan fairness for them.
 

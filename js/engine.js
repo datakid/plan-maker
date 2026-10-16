@@ -101,6 +101,32 @@ function dayVisitCapacity(ord, shareBasic){
   }
   return Math.max(0, Math.min(cap, teamFit===Infinity ? cap : teamFit));
 }
+function dayVisitCapacityMax(ord){
+  if(!normalWorkday(ord)) return 0;
+  const cap = dayCap(ord);
+  const avail = poolAvailOn(ord);
+  const pools = S().pools;
+  const fits = (a, b)=>pools.every(pl=>a*seatsFor(pl, 'basic') + b*seatsFor(pl, 'contracted') <= (avail[pl.id]||0));
+  let best = 0;
+  for(let n=1;n<=cap;n++){
+    let ok = false;
+    for(let a=0;a<=n && !ok;a++) ok = fits(a, n-a);
+    if(!ok) break;
+    best = n;
+  }
+  return best;
+}
+function capacityOverMax(days){
+  const perWeek = S().volume.perWeek;
+  const byWeek = new Map();
+  let total = 0;
+  for(const o of days){
+    const c = dayVisitCapacityMax(o);
+    if(perWeek){ const k = weekKey(o); const used = byWeek.get(k)||0; const add = Math.max(0, Math.min(c, perWeek-used)); byWeek.set(k, used+add); total += add; }
+    else total += c;
+  }
+  return total;
+}
 function capacityOver(days, shareBasic){
   const perWeek = S().volume.perWeek;
   const byWeek = new Map();
@@ -144,14 +170,14 @@ function volumePreview(){
   if(!w) return {goal:'range', invalid:true, basic:0, contracted:0, total:0, workdays:0};
   const days = listWorkdays(w.start, w.end);
   let B, C, cap;
-  if(V.mode==='exact'){ B = Math.max(0, V.exact.basic|0); C = Math.max(0, V.exact.contracted|0); cap = capacityOver(days, B+C ? B/(B+C) : 0.5); }
+  if(V.mode==='exact'){ B = Math.max(0, V.exact.basic|0); C = Math.max(0, V.exact.contracted|0); cap = capacityOverMax(days); }
   else if(V.mode==='quota'){
     B = 0; C = 0;
     for(const cat of Object.keys(V.quotas||{})){
       const n = Math.min(Math.max(0, V.quotas[cat]|0), pool.filter(f=>f.category===cat).length);
       if(categoryKind(cat)==='basic') B += n; else C += n;
     }
-    cap = capacityOver(days, B+C ? B/(B+C) : 0.5);
+    cap = capacityOverMax(days);
   } else {
     cap = capacityOver(days, V.share);
     let total = Math.min(cap, basicAll.length + conAll.length);

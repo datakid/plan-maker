@@ -105,3 +105,30 @@ const Fx = {
   },
   strictOf(g){ return g.strict==='must' ? 'must' : 'try'; }
 };
+
+const VISITPLAN_WEEK = JSON.parse('{"rest":{"rest":1,"maxRun":1},"gmaxOn":true,"gmax":2,"members":[{"id":101,"name":"شوقي","pool":1,"gender":"M","off":[1,2]},{"id":102,"name":"ميسرة","pool":1,"gender":"M","off":[]},{"id":103,"name":"اسماء","pool":1,"gender":"F","off":[1]},{"id":104,"name":"شرنوبي","pool":1,"gender":"M","off":[2,3,1]},{"id":105,"name":"مريم","pool":1,"gender":"F","off":[]},{"id":106,"name":"حمودين","pool":1,"gender":"M","off":[1]},{"id":107,"name":"لبني","pool":2,"gender":"F","off":[1,5]},{"id":108,"name":"اباظة","pool":2,"gender":"M","off":[1,3,4]},{"id":109,"name":"شلتوت","pool":2,"gender":"M","off":[3,1,5]},{"id":110,"name":"اماني","pool":2,"gender":"F","off":[4]},{"id":111,"name":"غادة","pool":2,"gender":"F","off":[1,2,3]}],"locations":[{"id":112,"name":"رئيسي ١","type":"main","closed":[]},{"id":113,"name":"رئيسي ٢","type":"main","closed":[1,2,3,5]},{"id":114,"name":"رئيسي ٣","type":"main","closed":[]},{"id":115,"name":"متعاقد ١","type":"contracted","closed":[]},{"id":116,"name":"متعاقد ٢","type":"contracted","closed":[]}]}');
+Fx.visitplanSpec = function(B){
+  B = B || VISITPLAN_WEEK;
+  const offs = ns=>ns.map(n=>({from:Fx.iso(n-1), to:Fx.iso(n-1)}));
+  const people = B.members.map(m=>({id:'p'+m.id, name:m.name, pool:m.pool===1 ? 'cl' : 'ad', gender:m.gender==='M' ? 'm' : 'f', off:offs(m.off), quota:{min:null, max:B.gmaxOn ? B.gmax : null}, pattern:{mode:'custom', minRest:B.rest.rest}}));
+  const facilities = B.locations.map(l=>{
+    const open = [1, 2, 3, 4, 5].filter(d=>!(l.closed || []).includes(d)).map(d=>d-1);
+    return {id:'l'+l.id, name:l.name, cat:l.type==='main' ? 'B' : 'C', weekdays:open.length===5 ? null : open};
+  });
+  return {
+    days:5, facilities, people, workdays:[0, 1, 2, 3, 4],
+    pools:[{id:'cl', basic:2, contracted:2}, {id:'ad', basic:2, contracted:1}],
+    volume:{mode:'exact', exact:{basic:3, contracted:2}, perDay:1, requireEveryEligibleDay:true},
+    settings:{genderRules:[{id:'g1', on:true, kinds:['basic'], categories:[], facilities:[], minEach:25, avoidEven:true}]}
+  };
+};
+Fx.visitplanWitness = function(){
+  const day = (d, fac, cl, ad)=>({date:Fx.iso(d), facilityId:'l'+fac, team:{cl:cl.map(n=>'p'+n), ad:ad.map(n=>'p'+n)}});
+  return [
+    day(0, 115, [102, 105], [110]),
+    day(1, 112, [103, 106], [108, 109]),
+    day(2, 114, [101, 105], [107, 110]),
+    day(3, 113, [102, 104], [109, 111]),
+    day(4, 116, [101, 103], [108])
+  ];
+};

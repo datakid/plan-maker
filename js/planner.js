@@ -45,7 +45,7 @@ function selectUnits(win, fixed, demand, placed){
   };
   const fixedNormal = fixed.filter(x=>normalWorkday(x.ord)).length + placed.length;
   const share = prev.total ? prev.basic/prev.total : (prev.goal==='coverage' ? 0.5 : V.share);
-  const room = Math.max(0, capacityOver(win.work, share) - fixedNormal);
+  const room = Math.max(0, capacityOverMax(win.work) - fixedNormal);
   let dropped = 0;
   const flat = [];
   for(const it of demand.items.values()) for(const slot of it.slots) flat.push({it, slot});
@@ -483,16 +483,36 @@ function generatePlan(opts){
     genDiags: diags
   };
   const info = {win, fixed, placed:placedSpecials, demand, sel};
+  const draftPlan = plan;
   const pre = preflightPlan(info, plan);
   let search = null;
   let val = validatePlan(plan);
+  const draftHard = val.hard;
+  const tStart = Date.now();
   if(val.hard>0 && !opts.skipSearch){
     const bud = Object.assign({}, opts.budget || {});
-    if(pre.conflicts.length) bud.ms = Math.min(bud.ms || 1500, 300);
+    const proven = pre.conflicts.length>0;
+    if(proven) bud.ms = Math.min(bud.ms || 1500, 300);
     const r = searchPlan(plan, info, {budget:bud, seed:opts.seed});
-    plan = r.plan; search = r.info;
+    plan = r.plan; search = Object.assign({}, r.info, {stage:'search'});
     val = validatePlan(plan);
+    if(val.hard>0 && !proven){
+      const total = bud.maxMs || 4000;
+      const left = total - (Date.now()-tStart);
+      if(left>50){
+        const a = annealPlan(plan, info, {seed:opts.seed, ms:left, runs:bud.runs || 3, iters:bud.iters});
+        search = Object.assign({}, search, {runs:a.info.runs, iters:a.info.iters, annealMs:a.info.ms});
+        if(a.plan!==plan){
+          const av = validatePlan(a.plan);
+          if(av.hard<val.hard || (av.hard===val.hard && av.soft<val.soft)){ plan = a.plan; val = av; search.stage = 'anneal'; }
+        }
+      }
+    }
+    if(val.hard>draftHard){ plan = draftPlan; val = validatePlan(plan); }
+    search.ms = Date.now()-tStart;
+    search.found = val.hard===0 ? search.stage : null;
   }
+  for(const w of pre.warnings || []) plan.genDiags.push(w);
   let status = 'valid';
   if(val.hard>0) status = pre.conflicts.length ? 'infeasible' : (opts.skipSearch ? 'invalid' : 'exhausted');
   plan.gen = genSnapshot({status, conflicts:pre.conflicts, search});

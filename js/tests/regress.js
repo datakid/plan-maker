@@ -557,3 +557,216 @@ regress('J4 tampered numeric settings and person fields cannot leak non-finite v
   walk(o.settings, 's'); walk(o.people[0], 'p');
   return verdict(bad.length===0, 'ok', bad.join(','));
 });
+
+const hardOf = plan=>validatePlan(plan).hard;
+const softGroup = (plan, group)=>validatePlan(plan).violations.filter(x=>x.cls==='soft' && x.group===group).length;
+const GENDER_ON = {genderRules:[{id:'g1', on:true, kinds:['basic'], categories:[], facilities:[], minEach:25, avoidEven:true}]};
+
+regress('L1 gender rule: the only valid split per day is found with no hard or gender violation', ()=>{
+  const spec = {days:3, facilities:Fx.fac(3), pools:[{id:'a', basic:2}, {id:'b', basic:2}],
+    people:[{id:'A1', pool:'a', gender:'m'}, {id:'A2', pool:'a', gender:'m', off:OFF(1)}, {id:'A3', pool:'a', gender:'f', off:OFF(0)},
+      {id:'B1', pool:'b', gender:'m', off:OFF(1)}, {id:'B2', pool:'b', gender:'f'}, {id:'B3', pool:'b', gender:'f', off:OFF(0)}],
+    volume:{mode:'exact', exact:{basic:3, contracted:0}}, settings:GENDER_ON};
+  const p = Fx.gen(spec);
+  const ref = Ref.days(pl=>hardOf(pl)===0 && softGroup(pl, 'cGender')===0, {counts:{basic:3, contracted:0}});
+  if(!ref.found) return 'reference found no gender-clean plan';
+  return verdict(hardOf(p)===0 && softGroup(p, 'cGender')===0 && p.visits.length===3, sigOf(p), 'hard '+hardOf(p)+' gender '+softGroup(p, 'cGender')+' '+sigOf(p));
+});
+regress('L2 rigid together pair and rigid apart pair on a five-day week', ()=>{
+  const spec = {days:5, facilities:Fx.fac(5), pools:[{id:'a', basic:2}],
+    people:[{id:'p1', off:OFF(1, 3)}, {id:'p2', off:OFF(1, 3)}, {id:'p3', off:OFF(0)}, {id:'p4', off:OFF(2)}, {id:'p5', quota:{min:2, max:2}}, {id:'p6', quota:{min:1, max:1}}],
+    volume:{mode:'exact', exact:{basic:5, contracted:0}},
+    settings:{pairs:[{id:'pr1', a:'p1', b:'p2', type:'together', mode:'rigid', strength:'medium', on:true}, {id:'pr2', a:'p3', b:'p4', type:'avoid', mode:'rigid', strength:'medium', on:true}]}};
+  const p = Fx.gen(spec);
+  const ref = Ref.days(planIsValid, {counts:{basic:5, contracted:0}});
+  if(!ref.found) return 'reference found no plan';
+  return verdict(planIsValid(p) && p.visits.length===5, sigOf(p), 'hard '+hardOf(p)+' '+sigOf(p));
+});
+regress('L3 exact quotas with minimum rest 1 force a single alternating plan', ()=>{
+  const spec = {days:5, facilities:Fx.fac(5), pools:[{id:'a', basic:1}],
+    people:[{id:'P1', quota:{min:3, max:3}, pattern:{mode:'custom', minRest:1}}, {id:'P2', quota:{min:2, max:2}, pattern:{mode:'custom', minRest:1}}],
+    volume:{mode:'exact', exact:{basic:5, contracted:0}}};
+  const p = Fx.gen(spec);
+  return verdict(planIsValid(p) && Fx.count(p, 'P1')===3 && Fx.count(p, 'P2')===2 && p.visits.length===5, sigOf(p), 'hard '+hardOf(p)+' '+sigOf(p));
+});
+regress('L4 every eligible day with tight weekly person caps and availability', ()=>{
+  const spec = {days:5, facilities:Fx.fac(6), pools:[{id:'a', basic:2}],
+    people:[{id:'p1', maxPerWeek:2, off:OFF(1, 2)}, {id:'p2', maxPerWeek:2, off:OFF(0, 3)}, {id:'p3', maxPerWeek:2, off:OFF(4)}, {id:'p4', maxPerWeek:2, off:OFF(2)}, {id:'p5', maxPerWeek:2, off:OFF(0, 1)}],
+    volume:{mode:'fill', share:1, perDay:1, perWeek:null, requireEveryEligibleDay:true, exact:{basic:5, contracted:0}}};
+  Fx.use(spec);
+  const ref = Ref.days(planIsValid, {counts:{basic:5, contracted:0}});
+  if(!ref.found) return 'reference found no plan';
+  const p = Fx.gen();
+  return verdict(planIsValid(p) && p.visits.length===5, sigOf(p), 'hard '+hardOf(p)+' vis '+p.visits.length);
+});
+regress('L5 a Must cover goal with a deadline in the middle of the plan', ()=>{
+  const spec = {days:6, facilities:Fx.fac(6), pools:[{id:'a', basic:1}],
+    people:[{id:'p1', off:OFF(0, 1)}, {id:'p2', off:OFF(2)}, {id:'p3', off:OFF(0, 2)}],
+    volume:{mode:'exact', exact:{basic:4, contracted:0}},
+    goals:[{type:'cover', strict:'must', times:1, since:Fx.iso(-1), by:Fx.iso(2), scope:{kind:'facility', ids:['f3', 'f4']}}]};
+  const p = Fx.gen(spec);
+  const late = p.visits.filter(v=>(v.facilityId==='f3' || v.facilityId==='f4') && v.date>Fx.iso(2)).length;
+  return verdict(planIsValid(p) && late===0, sigOf(p), 'hard '+hardOf(p)+' late '+late+' '+sigOf(p));
+});
+['week', 'month', 'quarter'].forEach(preset=>regress('L6 seed data '+preset+' plan validates with zero hard violations', ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  S().period.preset = preset;
+  const t0 = Date.now();
+  const r = generatePlan();
+  if(r.error) return 'error '+r.error;
+  return verdict(hardOf(r.plan)===0 && r.status==='valid', preset+' '+(Date.now()-t0)+'ms '+r.plan.visits.length+' visits', 'status '+r.status+' hard '+hardOf(r.plan));
+}));
+regress('L7 backup week: witness plan is valid under the project validator', ()=>{
+  Fx.use(Fx.visitplanSpec());
+  const w = Fx.manualPlan(Fx.visitplanWitness());
+  const v = validatePlan(w);
+  return verdict(v.hard===0 && v.soft===0, 'hard 0 soft 0', 'hard '+v.hard+' soft '+v.soft+' '+v.violations.map(x=>x.group+':'+x.key).join(','));
+});
+regress('L8 backup week: generator finds a plan covering all five days', ()=>{
+  Fx.use(Fx.visitplanSpec());
+  const r = generatePlan();
+  if(r.error) return 'error '+r.error;
+  return verdict(r.status==='valid' && hardOf(r.plan)===0 && r.plan.visits.length===5, 'valid '+sigOf(r.plan), 'status '+r.status+' hard '+hardOf(r.plan)+' visits '+r.plan.visits.length+' '+JSON.stringify(r.search));
+});
+
+regress('L9 annealing repairs a scrambled but repairable plan and is deterministic', ()=>{
+  Fx.use(Fx.visitplanSpec());
+  const good = Fx.manualPlan(Fx.visitplanWitness());
+  const bad = clonePlan(good);
+  const a = bad.visits[0].team, b = bad.visits[2].team;
+  bad.visits[0].team = b; bad.visits[2].team = a;
+  bad.visits[1].team = Object.assign({}, bad.visits[1].team, {cl:bad.visits[3].team.cl.slice()});
+  const before = hardOf(bad);
+  const r1 = annealPlan(bad, null, {seed:7, ms:2500, runs:3}), r2 = annealPlan(bad, null, {seed:7, ms:2500, runs:3});
+  const same = JSON.stringify(r1.plan.visits.map(v=>[v.date, v.facilityId, v.team]))===JSON.stringify(r2.plan.visits.map(v=>[v.date, v.facilityId, v.team]));
+  return verdict(before>0 && hardOf(r1.plan)===0 && same, 'hard '+before+' -> 0', 'hard '+before+' -> '+hardOf(r1.plan)+' same '+same);
+});
+regress('L10 annealing never returns a plan with more hard violations than it was given', ()=>{
+  Fx.use(Fx.visitplanSpec());
+  const bad = clonePlan(Fx.manualPlan(Fx.visitplanWitness()));
+  bad.visits.pop();
+  const before = hardOf(bad);
+  const r = annealPlan(bad, null, {seed:3, ms:300, runs:2});
+  return verdict(hardOf(r.plan)<=before, 'hard '+before+' -> '+hardOf(r.plan), 'hard '+before+' -> '+hardOf(r.plan));
+});
+regress('L11 a failed generation records stage, attempts and time in plan.gen', ()=>{
+  let hit = null;
+  for(let seed=1;seed<=60 && !hit;seed++){
+    const spec = fuzzSpec(seed);
+    Fx.use(spec);
+    const ref = Ref.solve(planIsValid, {counts:{basic:spec.volume.exact.basic, contracted:0}, maxLeaves:60000});
+    if(ref.found || ref.truncated) continue;
+    const r = generatePlan();
+    if(r.status==='exhausted') hit = r;
+  }
+  if(!hit) return 'no exhausted fixture found';
+  const s = hit.plan.gen.search;
+  return verdict(!!s && s.attempts>=1 && typeof s.ms==='number' && ['search', 'anneal'].includes(s.stage), JSON.stringify(s), JSON.stringify(s));
+});
+regress('L12 team search does not mutate the caller options', ()=>{
+  const p = Fx.gen({days:3, facilities:Fx.fac(3), people:Fx.ppl(['p1', 'p2', 'p3']), pools:[{id:'a', basic:1}], volume:{mode:'exact', exact:{basic:3, contracted:0}}});
+  const o1 = {}, o2 = {noise:0.5};
+  solveTeams(p, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, mulberry32(1), o1);
+  solveTeams(p, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, mulberry32(1), o2);
+  return verdict(JSON.stringify(o1)==='{}' && JSON.stringify(o2)==='{"noise":0.5}', 'unchanged', JSON.stringify([o1, o2]));
+});
+regress('L13 a person locked into two fixed visits on one day does not make the team search fail', ()=>{
+  Fx.use({days:3, facilities:Fx.fac(3), people:Fx.ppl(['p1', 'p2', 'p3']), pools:[{id:'a', basic:1}], volume:{mode:'exact', exact:{basic:3, contracted:0}, perDay:2}});
+  const plan = Fx.manualPlan([
+    {date:Fx.iso(0), facilityId:'f1', team:{a:['p1']}},
+    {date:Fx.iso(0), facilityId:'f2', team:{a:['p1']}},
+    {date:Fx.iso(1), facilityId:'f3', team:{a:[]}}
+  ]);
+  plan.visits[0].locked = ['p1']; plan.visits[0].fixed = true;
+  plan.visits[1].locked = ['p1']; plan.visits[1].fixed = true;
+  const r = solveTeams(plan, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, mulberry32(1), {});
+  return verdict(!!(r && r.plan), 'solved', JSON.stringify(r));
+});
+regress('L14 seat-count conflicts are proofs only when the volume is exact; otherwise they are warnings', ()=>{
+  const base = {days:4, facilities:Fx.fac(4), pools:[{id:'a', basic:2}], people:[{id:'p1', quota:{min:null, max:1}}, {id:'p2', quota:{min:null, max:1}}, {id:'p3', quota:{min:null, max:0}}]};
+  Fx.use(Object.assign({volume:{mode:'exact', exact:{basic:4, contracted:0}}}, base));
+  const ex = generatePlan();
+  Fx.use(Object.assign({volume:{mode:'fill', share:1, perDay:1, exact:{basic:0, contracted:0}}}, base));
+  const fl = generatePlan();
+  const exHas = ex.conflicts.some(c=>c.key==='xPoolSeatsHigh');
+  const flHas = fl.conflicts.some(c=>c.key==='xPoolSeatsHigh');
+  return verdict(exHas && !flHas && fl.status!=='infeasible', 'exact proof, fill warning', 'exact '+exHas+' fill '+flHas+' '+fl.status);
+});
+regress('L15 the visit room is sized by what each day can really staff, not by a blended average', ()=>{
+  Fx.use(Fx.visitplanSpec());
+  const days = listWorkdays(ordOf(Fx.iso(0)), ordOf(Fx.iso(4)));
+  const blended = capacityOver(days, 0.6);
+  const real = capacityOverMax(days);
+  return verdict(real===5 && blended<5, 'blended '+blended+' real '+real, 'blended '+blended+' real '+real);
+});
+
+function familySpec(family, seed){
+  const r = mulberry32(seed*7919+13);
+  const rint = (a, b)=>a+Math.floor(r()*(b-a+1));
+  const days = rint(4, 5);
+  const offs = (p)=>{ const o = []; for(let d=0;d<days;d++) if(r()<p) o.push(d); return OFF(...o); };
+  const spec = {days, facilities:Fx.fac(days), people:[], volume:{mode:'exact', exact:{basic:days, contracted:0}}, settings:{}};
+  if(family==='gender'){
+    spec.pools = [{id:'a', basic:2, contracted:1}, {id:'b', basic:2, contracted:1}];
+    spec.settings.genderRules = GENDER_ON.genderRules;
+    for(const pl of ['a', 'b']){
+      const np = rint(3, 4);
+      for(let i=1;i<=np;i++) spec.people.push({id:pl+i, pool:pl, gender:r()<0.5 ? 'm' : 'f', off:offs(0.3)});
+    }
+  } else if(family==='pairs'){
+    spec.pools = [{id:'a', basic:2, contracted:1}];
+    const np = rint(5, 6);
+    for(let i=1;i<=np;i++) spec.people.push({id:'p'+i, off:offs(0.25)});
+    spec.settings.pairs = [
+      {id:'pr1', a:'p1', b:'p2', type:'together', mode:'rigid', strength:'medium', on:true},
+      {id:'pr2', a:'p3', b:'p4', type:'avoid', mode:'rigid', strength:'medium', on:true}
+    ];
+  } else if(family==='rest'){
+    spec.pools = [{id:'a', basic:1, contracted:1}];
+    const np = rint(3, 5);
+    for(let i=1;i<=np;i++){
+      const p = {id:'p'+i, off:offs(0.25), pattern:{mode:'custom', minRest:1}};
+      if(r()<0.7){ const q = rint(1, 2); p.quota = {min:q, max:q}; }
+      spec.people.push(p);
+    }
+  } else if(family==='everyday'){
+    spec.pools = [{id:'a', basic:2, contracted:1}];
+    const np = rint(4, 6);
+    for(let i=1;i<=np;i++){
+      const p = {id:'p'+i, off:offs(0.3)};
+      if(r()<0.4) p.maxRun = 1;
+      spec.people.push(p);
+    }
+    spec.volume = {mode:'exact', exact:{basic:days, contracted:0}, perDay:1, requireEveryEligibleDay:true};
+  } else {
+    spec.pools = [{id:'a', basic:1, contracted:1}];
+    const np = rint(3, 4);
+    for(let i=1;i<=np;i++) spec.people.push({id:'p'+i, off:offs(0.35)});
+    spec.goals = [{type:'cover', strict:'must', times:1, since:Fx.iso(-1), by:Fx.iso(rint(1, days-2)), scope:{kind:'facility', ids:['f'+rint(1, days)]}}];
+  }
+  return spec;
+}
+regress('K2 fuzz across gender, pair, rest, every-day and deadline families: valid in at least 99% of reference-solvable cases', ()=>{
+  const misses = [];
+  let solvable = 0;
+  for(const family of ['gender', 'pairs', 'rest', 'everyday', 'deadline']){
+    for(let seed=1;seed<=24;seed++){
+      const spec = familySpec(family, seed);
+      Fx.use(spec);
+      const ref = Ref.days(planIsValid, {counts:{basic:spec.volume.exact.basic, contracted:0}, maxLeaves:60000});
+      if(!ref.found) continue;
+      solvable++;
+      const r = generatePlan();
+      if(r.status!=='valid' || hardOf(r.plan)!==0) misses.push(family+seed);
+    }
+  }
+  const rate = solvable ? (solvable-misses.length)/solvable : 1;
+  return verdict(rate>=0.99 && solvable>=20, 'valid '+(solvable-misses.length)+'/'+solvable+' ('+(rate*100).toFixed(1)+'%)', 'valid '+(solvable-misses.length)+'/'+solvable+' misses '+misses.join(','));
+});
+regress('K3 generation is deterministic for the backup week and for a fuzz fixture', ()=>{
+  Fx.use(Fx.visitplanSpec());
+  const a = generatePlan(), b = generatePlan();
+  Fx.use(familySpec('gender', 5));
+  const c = generatePlan(), d = generatePlan();
+  return verdict(sigOf(a.plan)===sigOf(b.plan) && sigOf(c.plan)===sigOf(d.plan), 'identical', 'differs');
+});

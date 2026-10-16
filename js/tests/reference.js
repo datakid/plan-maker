@@ -101,3 +101,102 @@ const Ref = {
     };
   }
 };
+
+Ref.days = function(oracle, opts){
+  opts = opts || {};
+  const set = S();
+  const win = planWindow();
+  if(win.error) return {error:win.error};
+  const days = win.days.filter(o=>normalWorkday(o) || isOverrideDate(isoOf(o)));
+  const facs = schedulableFacilities();
+  const counts = opts.counts || null;
+  const maxLeaves = opts.maxLeaves || 200000;
+  const everyDay = !!set.volume.requireEveryEligibleDay;
+  const hist = historyIndex(win.start).map;
+  const people = activePeople();
+  const members = {};
+  for(const pl of set.pools) members[pl.id] = people.filter(p=>p.pool===pl.id);
+  const taken = new Map(people.map(p=>[p.id, new Set(hist.get(p.id) || [])]));
+  const cnt = new Map(people.map(p=>[p.id, 0]));
+  const wk = new Map();
+  const rules = new Map(people.map(p=>[p.id, personPatternRules(p).hard]));
+  let leaves = 0, found = null, truncated = false;
+  const chosen = [];
+  const usedFac = new Set();
+  const kc = {basic:0, contracted:0};
+
+  const eligible = (p, f, ord)=>{
+    if(!personAvailable(p, ord) || (p.blocked || []).includes(f.id)) return false;
+    const q = p.quota || {};
+    if(q.max!=null && cnt.get(p.id)>=q.max) return false;
+    if(p.maxPerWeek && (wk.get(p.id+'|'+weekKey(ord)) || 0)>=p.maxPerWeek) return false;
+    const ds = taken.get(p.id);
+    for(const r of rules.get(p.id)) if(ruleBreaksOn(r, ds, ord)) return false;
+    return true;
+  };
+  const mark = (ids, ord, d)=>{
+    for(const id of ids){
+      cnt.set(id, cnt.get(id)+d);
+      const k = id+'|'+weekKey(ord);
+      wk.set(k, (wk.get(k) || 0)+d);
+      if(d>0) taken.get(id).add(ord); else taken.get(id).delete(ord);
+    }
+  };
+
+  const rec = (i)=>{
+    if(found && !opts.all) return;
+    if(leaves>=maxLeaves){ truncated = true; return; }
+    if(i===days.length){
+      if(counts && (kc.basic!==(counts.basic || 0) || kc.contracted!==(counts.contracted || 0))) return;
+      leaves++;
+      const vs = chosen.map(c=>({f:c.f, ord:c.ord, kind:c.kind}));
+      const plan = Ref.build(vs, chosen.map(c=>({team:c.team})), win, days);
+      if(oracle(plan) && !found) found = plan;
+      return;
+    }
+    const ord = days[i];
+    const needLeft = counts ? (counts.basic || 0) + (counts.contracted || 0) - kc.basic - kc.contracted : 0;
+    for(const f of facs){
+      if(usedFac.has(f.id)) continue;
+      if(f.weekdays && f.weekdays.length && !f.weekdays.includes(wdOf(ord))) continue;
+      const c = dayCfg(ord);
+      if(c.only && c.only.length && !c.only.includes(f.category)) continue;
+      const kind = visitKindOf(f);
+      if(counts && kc[kind]>=(counts[kind] || 0)) continue;
+      const seatPools = set.pools.map(pl=>({pl, n:seatsFor(pl, kind, f.category), cands:[]}));
+      let possible = true;
+      for(const sp of seatPools){
+        sp.cands = members[sp.pl.id].filter(p=>eligible(p, f, ord));
+        if(sp.cands.length<sp.n){ possible = false; break; }
+      }
+      if(!possible) continue;
+      const teamRec = (pi, team, ids)=>{
+        if(found && !opts.all) return;
+        if(leaves>=maxLeaves){ truncated = true; return; }
+        if(pi===seatPools.length){
+          chosen.push({f, ord, kind, team:Object.assign({}, team)});
+          usedFac.add(f.id); kc[kind]++;
+          mark(ids, ord, 1);
+          rec(i+1);
+          mark(ids, ord, -1);
+          kc[kind]--; usedFac.delete(f.id);
+          chosen.pop();
+          return;
+        }
+        const sp = seatPools[pi];
+        for(const combo of Ref.combos(sp.cands, sp.n)){
+          const cid = combo.map(p=>p.id);
+          team[sp.pl.id] = cid;
+          teamRec(pi+1, team, ids.concat(cid));
+        }
+        delete team[sp.pl.id];
+      };
+      teamRec(0, {}, []);
+    }
+    if(!everyDay || !normalWorkday(ord)){
+      if(!counts || days.length-i-1 >= needLeft) rec(i+1);
+    }
+  };
+  rec(0);
+  return {found, leaves, truncated};
+};
