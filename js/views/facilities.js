@@ -129,9 +129,9 @@ function openFacility(id, draft){
       const sec2 = el('section', {class:'sheet-sec'}, [
         setting(t('fImportance'), t('fImportanceHint'), null, {full:Slider(f.importance||0, v=>{ f.importance = v; saveF(); }, {min:0, max:100, step:5, tiers:impTier})}),
         setting(t('fFreq'), t('fFreqHint'), null, {full:Slider(Math.round((f.freq||0)*100), v=>{ f.freq = v/100; saveF(); }, {min:0, max:200, step:5, format:v=>v+'%'})}),
-        setting(t('fPinned'), null, Switch(!!f.pinned, v=>{ f.pinned = v; saveF(); })),
+        setting(t('fPinned'), null, [Switch(!!f.pinned, v=>{ f.pinned = v; saveF(); }), LevelChip(facilityLvOf(f).pinned, 'fac.pinned', v=>{ f.lv = Object.assign(facilityLvOf(f), {pinned:v}); saveF(); })]),
         setting(t('fExcluded'), null, Switch(!!f.excluded, v=>{ f.excluded = v; saveF(); api.render(); })),
-        setting(t('fDays'), f.weekdays && f.weekdays.length ? null : t('fAnyDay'), DaySet(f.weekdays||[], v=>{ f.weekdays = v.length ? v : null; saveF(); }, {sm:true}))
+        setting(t('fDays'), f.weekdays && f.weekdays.length ? null : t('fAnyDay'), [DaySet(f.weekdays||[], v=>{ f.weekdays = v.length ? v : null; saveF(); }, {sm:true}), LevelChip(facilityLvOf(f).weekdays, 'fac.weekdays', v=>{ f.lv = Object.assign(facilityLvOf(f), {weekdays:v}); saveF(); })])
       ]);
       const sec3 = el('section', {class:'sheet-sec'});
       sec3.appendChild(el('div', {class:'section-title'}, t('vdHistory')));

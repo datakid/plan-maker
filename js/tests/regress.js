@@ -620,7 +620,8 @@ regress('L7 backup week: witness plan is valid under the project validator', ()=
   Fx.use(Fx.visitplanSpec());
   const w = Fx.manualPlan(Fx.visitplanWitness());
   const v = validatePlan(w);
-  return verdict(v.hard===0 && v.soft===0, 'hard 0 soft 0', 'hard '+v.hard+' soft '+v.soft+' '+v.violations.map(x=>x.group+':'+x.key).join(','));
+  const softOutsidePrefs = v.violations.filter(x=>x.cls==='soft' && x.group!=='cPrefs').length;
+  return verdict(v.hard===0 && softOutsidePrefs===0, 'hard 0 soft 0 outside preferences', 'hard '+v.hard+' soft '+v.soft+' '+v.violations.map(x=>x.group+':'+x.key).join(','));
 });
 regress('L8 backup week: generator finds a plan covering all five days', ()=>{
   Fx.use(Fx.visitplanSpec());
@@ -629,7 +630,7 @@ regress('L8 backup week: generator finds a plan covering all five days', ()=>{
   return verdict(r.status==='valid' && hardOf(r.plan)===0 && r.plan.visits.length===5, 'valid '+sigOf(r.plan), 'status '+r.status+' hard '+hardOf(r.plan)+' visits '+r.plan.visits.length+' '+JSON.stringify(r.search));
 });
 
-regress('L9 annealing repairs a scrambled but repairable plan and is deterministic', ()=>{
+regress('L9 LNS repairs a scrambled but repairable plan and is deterministic', ()=>{
   Fx.use(Fx.visitplanSpec());
   const good = Fx.manualPlan(Fx.visitplanWitness());
   const bad = clonePlan(good);
@@ -637,16 +638,16 @@ regress('L9 annealing repairs a scrambled but repairable plan and is determinist
   bad.visits[0].team = b; bad.visits[2].team = a;
   bad.visits[1].team = Object.assign({}, bad.visits[1].team, {cl:bad.visits[3].team.cl.slice()});
   const before = hardOf(bad);
-  const r1 = annealPlan(bad, null, {seed:7, ms:2500, runs:3}), r2 = annealPlan(bad, null, {seed:7, ms:2500, runs:3});
+  const r1 = lnsPlan(bad, null, {seed:7, ms:30000, iters:12000}), r2 = lnsPlan(bad, null, {seed:7, ms:30000, iters:12000});
   const same = JSON.stringify(r1.plan.visits.map(v=>[v.date, v.facilityId, v.team]))===JSON.stringify(r2.plan.visits.map(v=>[v.date, v.facilityId, v.team]));
   return verdict(before>0 && hardOf(r1.plan)===0 && same, 'hard '+before+' -> 0', 'hard '+before+' -> '+hardOf(r1.plan)+' same '+same);
 });
-regress('L10 annealing never returns a plan with more hard violations than it was given', ()=>{
+regress('L10 LNS never returns a plan with more hard violations than it was given', ()=>{
   Fx.use(Fx.visitplanSpec());
   const bad = clonePlan(Fx.manualPlan(Fx.visitplanWitness()));
   bad.visits.pop();
   const before = hardOf(bad);
-  const r = annealPlan(bad, null, {seed:3, ms:300, runs:2});
+  const r = lnsPlan(bad, null, {seed:3, ms:300});
   return verdict(hardOf(r.plan)<=before, 'hard '+before+' -> '+hardOf(r.plan), 'hard '+before+' -> '+hardOf(r.plan));
 });
 regress('L11 a failed generation records stage, attempts and time in plan.gen', ()=>{
@@ -661,7 +662,7 @@ regress('L11 a failed generation records stage, attempts and time in plan.gen', 
   }
   if(!hit) return 'no exhausted fixture found';
   const s = hit.plan.gen.search;
-  return verdict(!!s && s.attempts>=1 && typeof s.ms==='number' && ['search', 'anneal'].includes(s.stage), JSON.stringify(s), JSON.stringify(s));
+  return verdict(!!s && s.attempts>=1 && typeof s.ms==='number' && ['search', 'lns'].includes(s.stage), JSON.stringify(s), JSON.stringify(s));
 });
 regress('L12 team search does not mutate the caller options', ()=>{
   const p = Fx.gen({days:3, facilities:Fx.fac(3), people:Fx.ppl(['p1', 'p2', 'p3']), pools:[{id:'a', basic:1}], volume:{mode:'exact', exact:{basic:3, contracted:0}}});

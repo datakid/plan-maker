@@ -4,7 +4,7 @@ const GP_FACTOR = {light:1.25, medium:1.6, strong:2.4};
 function genderPrefFactor(p, ord, kind, band){
   const gp = p.gender && S().genderPrefs && S().genderPrefs[p.gender];
   if(!gp || !gp.on) return 1;
-  const k = GP_FACTOR[gp.strength] || GP_FACTOR.medium;
+  const k = GP_FACTOR[genderPrefStrength(p.gender)] || GP_FACTOR.medium;
   let m = 1;
   if(gp.dist) m *= gp.dist===band ? k : (band==='mid' ? 1 : 1/k);
   if(gp.kind) m *= gp.kind===kind ? k : 1/k;
@@ -19,7 +19,7 @@ function normalWorkday(ord){
   return base && activityDayAllowed(ord);
 }
 function isWorkday(ord){ return normalWorkday(ord) || isOverrideDate(isoOf(ord)); }
-function dayCfg(ord){ return S().days[wdOf(ord)] || {}; }
+function dayCfg(ord){ return dayView(normalizeDay(S().days[wdOf(ord)])); }
 
 function presetWindow(preset, startIso, endIso){
   const t0 = todayOrd();
@@ -36,7 +36,6 @@ function poolsLive(){
   const pools = S().pools;
   return pools.map(pl=>({pool:pl, members:activePeople().filter(p=>p.pool===pl.id)}));
 }
-function seatsMap(kind, category){ const m = {}; for(const pl of S().pools) m[pl.id] = seatsFor(pl, kind, category); return m; }
 function teamSizeFor(kind, category){ return sum(S().pools, pl=>seatsFor(pl, kind, category)); }
 
 function dayCap(ord){
@@ -224,9 +223,9 @@ function buildPairIndex(){
   const add = (a, e)=>{ if(!idx.has(a)) idx.set(a, []); idx.get(a).push(e); };
   for(const r of S().pairs){
     if(!r.on || !r.a || !r.b || r.a===r.b) continue;
-    const factor = PAIR_FACTOR[r.strength] || 2;
-    add(r.a, {other:r.b, type:r.type, mode:r.mode, factor});
-    add(r.b, {other:r.a, type:r.type, mode:r.mode, factor});
+    const factor = PAIR_FACTOR[pairStrength(r)] || 2;
+    add(r.a, {other:r.b, type:r.type, mode:pairRigid(r) ? 'rigid' : 'flexible', factor});
+    add(r.b, {other:r.a, type:r.type, mode:pairRigid(r) ? 'rigid' : 'flexible', factor});
   }
   return idx;
 }
@@ -310,7 +309,7 @@ function hardOk(p, ord, f, ctx, used){
   if(!personAvailable(p, ord)) return 'off';
   if((p.blocked||[]).includes(f.id)) return 'blocked';
   const rb = S().repeatBlock;
-  if(rb.on && (ctx.fpv[f.id+'|'+p.id]||0) >= rb.times) return 'repeat';
+  if(rotateMustActive() && (ctx.fpv[f.id+'|'+p.id]||0) >= rb.times) return 'repeat';
   if(p.maxPerWeek!=null && p.maxPerWeek>0 && (ctx.week[p.id+'|'+weekKey(ord)]||0) >= p.maxPerWeek) return 'week';
   const ds = ctx.dates[p.id];
   if(ds) for(const r of ctxRulesOf(ctx, p).hard){ const b = ruleBreaksOn(r, ds, ord); if(b) return b; }
@@ -324,11 +323,6 @@ function softRuleHits(p, ord, ctx){
   let n = 0;
   if(ds) for(const r of ctxRulesOf(ctx, p).soft) if(ruleBreaksOn(r, ds, ord)) n++;
   return n;
-}
-
-function quotaBroken(ctx, pid){
-  for(const r of ctx.rules.countsOf(pid)) if(r.must && r.max!=null && (ctx.q[r.key]||0) > r.max) return true;
-  return false;
 }
 
 function violationScore(ctx){
@@ -405,7 +399,7 @@ function assignTeam(visit, ord, ctx, opts){
   const rule = genderRuleFor(f, kind);
   const sen = set.seniority;
   const importance = f.importance||0;
-  const needSenior = sen.on && sen.mode==='require' && importance >= sen.threshold;
+  const needSenior = sen.on && seniorRequired() && importance >= sen.threshold;
   const qual = p=>skillOf(p, kind, f.category) >= importance;
   const team = {}, chosen = [];
   const pairs = ctx.pairs;
@@ -473,7 +467,7 @@ function assignTeam(visit, ord, ctx, opts){
         if(share<=0) continue;
         const terms = candidateTerms(p, f, ord, ctx, used, inTeam);
         let pref = soft * terms.pref;
-        if(set.rotation.on){ const v = Math.min(ctx.fpv[f.id+'|'+p.id]||0, 6); pref *= 1/(1+set.rotation.strength*v); }
+        if(rotatePreferActive()){ const v = Math.min(ctx.fpv[f.id+'|'+p.id]||0, 6); pref *= 1/(1+rotationFactor()*v); }
         if(sen.on && sen.match){ const crit = (f.importance||50)/100; pref *= Math.max(0.1, 1 + sen.match*4*(crit-0.5)*(skill/100-0.5)); }
         const band = distBand(personTravelKm(p, f));
         if(p.distPref){ pref *= p.distPref===band ? 1.5 : (band==='mid' ? 1 : 0.65); }
@@ -527,7 +521,7 @@ function visitFlags(v){
   const gender = rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n) ? 1 : 0;
   const sen = S().seniority;
   let senior = 0;
-  if(sen.on && sen.mode==='require' && (f.importance||0) >= sen.threshold && ids.length && !ids.some(id=>{ const p = personById(id); return p && skillOf(p, kind, f.category) >= (f.importance||0); })) senior = 1;
+  if(sen.on && seniorRequired() && (f.importance||0) >= sen.threshold && ids.length && !ids.some(id=>{ const p = personById(id); return p && skillOf(p, kind, f.category) >= (f.importance||0); })) senior = 1;
   return {pair:pairBreaks(ids), gender, senior};
 }
 function flagsWorse(a, b, skipGender){
@@ -663,7 +657,7 @@ function pairBreaks(ids){
   let n = 0;
   const s = new Set(ids);
   for(const r of S().pairs){
-    if(!r.on || r.mode!=='rigid') continue;
+    if(!r.on || !pairRigid(r)) continue;
     const ha = s.has(r.a), hb = s.has(r.b);
     if(r.type==='avoid' && ha && hb) n++;
     if(r.type==='together' && ha!==hb) n++;
@@ -673,8 +667,8 @@ function pairBreaks(ids){
 
 function visitTeamIds(v){ return [].concat(...Object.values(v.team||{})); }
 
-const CHECK_ALWAYS = ['cOpen','cDup','cAvail','cBlocked','cGender','cSenior','cPairs','cRun','cPeople','cGoals'];
-const CHECK_ORDER = ['cOpen','cTeam','cDup','cAvail','cBlocked','cCalendar','cCaps','cWeek','cRest','cSpacing','cDays','cGender','cSenior','cPairs','cRun','cPeople','cGoals'];
+const CHECK_ALWAYS = ['cOpen','cDup','cAvail','cBlocked','cGender','cSenior','cPairs','cRun','cPeople','cGoals','cPrefs'];
+const CHECK_ORDER = ['cOpen','cTeam','cDup','cAvail','cBlocked','cCalendar','cCaps','cWeek','cRest','cSpacing','cDays','cGender','cSenior','cPairs','cRun','cPeople','cGoals','cPrefs'];
 
 function violationDiag(v){
   const sev = v.cls==='hard' ? 'error' : (v.cls==='exception' ? 'info' : (v.src==='goal' ? 'info' : 'warn'));

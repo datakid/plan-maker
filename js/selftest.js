@@ -92,9 +92,9 @@ window.addEventListener('load', async ()=>{
     for(const tab of ['facilities','team','rules','data','plan']){
       step('tab '+tab, ()=>{ goTab(tab); return $('#page').children.length>0 && !$('#page').textContent.includes('undefined') && noOverflow(); });
     }
-    step('rules tab: goals section has people group', ()=>{ goTab('rules'); return $('#rule-goals') && $('#rule-goals').textContent.includes(t('gGroupPeople')) && $$('#rule-goals .goal-card.people').length===6; });
-    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .btn.sm.outline')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===8 ? '8 types' : false; });
-    step('add each goal type via menu', ()=>{ const n0 = s.goals.length; for(let i=0;i<7;i++){ const b = [...$$('#rule-goals .btn.sm.outline')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); $$('.pop .menu-item')[i].click(); } return s.goals.length===n0+7; });
+    step('rules tab: goals section has people group', ()=>{ goTab('rules'); return $('#rule-goals') && $('#rule-goals').textContent.includes(t('gGroupPeople')) && $$('#rule-goals .gm-row.people').length===6; });
+    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===8 ? '8 types' : false; });
+    step('add each goal type via menu', ()=>{ const n0 = s.goals.length; for(let i=0;i<7;i++){ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); $$('.pop .menu-item')[i].click(); } return s.goals.length===n0+7; });
     step('unconfigured new goals are inert', ()=>withFresh(()=>{
       const before = generatePlan().plan.visits.length;
       for(const type of PEOPLE_GOALS) S().goals.push(newGoal(type));
@@ -102,11 +102,11 @@ window.addEventListener('load', async ()=>{
       const r = generatePlan();
       return !r.error && doubleBooked(r.plan)===0 && r.plan.visits.length===before ? before+' → '+r.plan.visits.length : false;
     }));
-    step('delete new goals', ()=>{ s.goals.splice(s.goals.length-7, 7); goTab('rules'); return $$('#rule-goals .goal-card').length===s.goals.length; });
+    step('delete new goals', ()=>{ s.goals.splice(s.goals.length-7, 7); goTab('rules'); return $$('#rule-goals .gm-row').length===s.goals.length; });
 
     step('team: person sheet', ()=>{ goTab('team'); openPerson(B0.id); const r = $('.sheet').textContent.includes(t('pPerPlan')) && $('.sheet').textContent.includes(t('pGoals')); return r; });
     step('team: quota modes', ()=>{ const seg = [...$$('.sheet .seg')].find(x=>x.textContent.includes(t('pQAuto'))); seg.children[0].click(); const a = B0.quota.min==null && B0.quota.max==null; [...$$('.sheet .seg')].find(x=>x.textContent.includes(t('pQAuto'))).children[2].click(); const r = B0.quota.max!=null; [...$$('.sheet .seg')].find(x=>x.textContent.includes(t('pQAuto'))).children[1].click(); const e = B0.quota.min!=null && B0.quota.min===B0.quota.max; sheet.current.close(true); return a && r && e; });
-    step('team: card tag', ()=>{ goTab('team'); return $('#team-card').textContent.includes(t('pPerPlanShort')); });
+    step('team: per-plan chip in the table', ()=>{ goTab('team'); return !!$('#team-card') && $$('#team-card td.pt-c-quota .chip.on').length>0; });
     step('team: add rule from person sheet', ()=>{ openPerson(D0.id); const n0 = s.goals.length; const b = [...$$('.sheet .btn.sm.ghost')].find(x=>x.textContent.trim()===t('gAddFor_person')); b.click(); const ok_ = s.goals.length===n0+1 && s.goals[s.goals.length-1].people[0]===D0.id && !!$('.sheet'); if(sheet.current) sheet.current.close(true); s.goals.pop(); return ok_; });
     step('facility sheet', ()=>{ goTab('facilities'); openFacility(App.data.facilities[10].id); const r = !!$('.sheet'); sheet.current.close(true); return r; });
 

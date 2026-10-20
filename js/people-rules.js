@@ -16,7 +16,7 @@ function compilePeopleRules(){
   }
   for(const g of S().goals){
     if(!g.on) continue;
-    const must = g.strict==='must';
+    const must = goalMust(g);
     if(g.type==='person'){
       for(const pid of g.people||[]){
         if(!active.has(pid)) continue;

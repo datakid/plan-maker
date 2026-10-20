@@ -128,53 +128,15 @@ function OptDate(value, onChange, emptyLabel){
   return wrap;
 }
 
-function goalCard(g, paint){
-  const set = S();
-  const upd = ()=>{ goalsChanged(); const tl = card.querySelector('.goal-title'); if(tl) tl.textContent = goalTitle(g); const st = card.querySelector('.goal-sub'); if(st){ const txt = goalStatusText(g); st.textContent = goalTypeLabel(g.type)+(txt ? ' · '+txt : ''); } };
-  const card = el('div', {class:'rule-card goal-card'+(g.on?'':' off')+(isPeopleGoal(g)?' people':''), 'data-goal':g.id});
-  const stText = goalStatusText(g);
-  card.appendChild(el('div', {class:'rc-head'}, [
-    Switch(g.on, v=>{ g.on = v; upd(); paint(); }, t('on')),
-    el('span', {class:'goal-ic', html:isPeopleGoal(g) ? ICON.users : ICON.target}),
-    el('div', {class:'gl-main'}, [el('b', {class:'goal-title'}, goalTitle(g)), el('span', {class:'goal-sub'}, goalTypeLabel(g.type)+(stText ? ' · '+stText : ''))]),
-    Seg([{value:'must',label:t('gMust')},{value:'try',label:t('gTry')}], g.strict, v=>{ g.strict = v; upd(); }, {cls:'sm'}),
-    el('button', {type:'button', class:'icon-btn sm', html:ICON.trash, 'aria-label':t('del'), onclick:()=>{ set.goals = set.goals.filter(x=>x!==g); goalsChanged(); paint(); }})
-  ]));
-  card.appendChild(el('div', {class:'hint', style:{fontSize:'12px'}}, goalTypeHint(g.type)));
-  appendKids(card, goalFields(g, upd, paint));
-  return card;
-}
-
-function goalsEditor(paint){
-  const list = el('div', {class:'rules-list'});
-  const goals = S().goals;
-  const groups = [{k:'gGroupFac', items:goals.filter(g=>!isPeopleGoal(g))}, {k:'gGroupPeople', items:goals.filter(isPeopleGoal)}];
-  for(const gr of groups){
-    if(!gr.items.length) continue;
-    list.appendChild(el('div', {class:'goal-group-h'}, t(gr.k)));
-    for(const g of gr.items) list.appendChild(goalCard(g, paint));
-  }
-  if(!goals.length) list.appendChild(el('div', {class:'empty', style:{padding:'18px'}}, t('goalsNone')));
-  const add = el('button', {type:'button', class:'btn sm outline', style:{alignSelf:'flex-start'}}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('goalAdd')]);
-  const item = type=>({label:goalTypeLabel(type), desc:goalTypeHint(type), onClick:()=>{ S().goals.push(newGoal(type)); goalsChanged(); paint(); }});
-  add.addEventListener('click', ()=>menu(add, [
-    {header:true, label:t('gGroupFac'), icon:ICON.target}, ...FACILITY_GOALS.map(item),
-    {sep:true},
-    {header:true, label:t('gGroupPeople'), icon:ICON.users}, ...PEOPLE_GOALS.map(item)
-  ], {width:380}));
-  list.appendChild(add);
-  return list;
-}
-
 function openGoals(focusId){
   const api = sheet({
+    cls:'wide',
     title:()=>t('goalsTitle'),
     sub:()=>[el('span', null, t('goalsHint'))],
-    body:api=>[goalsEditor(()=>api.render())],
+    body:api=>[GoalsManager({selectId:focusId, onChange:()=>{}})],
     foot:api=>[el('button', {type:'button', class:'btn ghost', onclick:()=>{ api.close(); goTab('rules', 'rule-goals'); }}, t('rTitle')+' →'), el('div', {class:'spacer'}), el('button', {type:'button', class:'btn primary', onclick:()=>api.close()}, t('done'))],
     onClose:()=>{ if(App.ui.tab==='team' || App.ui.tab==='rules') setTimeout(renderTab, 0); }
   });
-  if(focusId) setTimeout(()=>{ const c = api.body.querySelector('[data-goal="'+focusId+'"]'); if(c){ c.scrollIntoView({block:'center'}); c.classList.add('flash'); } }, 60);
 }
 
 function goalsPop(refresh){
@@ -186,7 +148,8 @@ function goalsPop(refresh){
     const pr = prog.find(r=>r.g.id===g.id);
     box.appendChild(el('div', {class:'goal-row'+(g.on?'':' off')}, [
       Switch(g.on, v=>{ g.on = v; goalsChanged(refresh); }),
-      el('div', {class:'gl-main'}, [el('b', null, goalTitle(g)), el('span', null, [el('span', {class:'tag '+(g.strict==='must'?'warn':'')}, t(g.strict==='must'?'gMust':'gTry')), pr ? ' '+pr.label : ''])]),
+      el('div', {class:'gl-main'}, [el('b', null, goalTitle(g)), el('span', null, [pr ? pr.label : ''])]),
+      LevelChip(g.lv, goalRuleId(g), v=>{ g.lv = v; goalsChanged(refresh); }, {sm:true}),
       pr ? goalMeter(pr) : null
     ]));
   }

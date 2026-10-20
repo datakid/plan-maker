@@ -542,6 +542,7 @@ function viewSummary(plan, A){
     checks.appendChild(el('div', {class:'check '+(c.ok ? 'ok' : (c.soft ? 'soft' : 'bad'))}, [el('span', {html:c.ok?ICON.ok:ICON.alert, style:{display:'flex'}}), t(c.key), c.ok ? null : el('span', {class:'n'}, String(c.n))]));
   }
   right.appendChild(checks);
+  right.appendChild(ruleContribBlock(plan));
   if(A.diags.length){
     const notes = el('div');
     notes.appendChild(el('div', {class:'section-title'}, t('notesTitle')+' · '+A.diags.length));
@@ -686,6 +687,7 @@ function openVisit(id){
       if(vd.length){
         out.push(el('section', {class:'sheet-sec'}, vd.map(d=>el('div', {class:'check '+(d.sev==='error'?'bad':'soft')}, [el('span', {html:ICON.alert, style:{display:'flex'}}), t.apply(null, [d.key].concat(d.args||[]))]))));
       }
+      out.push(visitContribSection(plan, v));
       const teamSec = el('section', {class:'sheet-sec'});
       teamSec.appendChild(el('div', {class:'section-title'}, t('vdTeam')));
       if(locked) teamSec.appendChild(el('div', {class:'banner info', style:{marginBottom:'8px'}}, [el('span', {html:ICON.lock, style:{display:'flex'}}), t('vdLocked')]));
@@ -737,4 +739,57 @@ function openVisit(id){
     },
     foot:api=>[el('button', {type:'button', class:'btn ghost', onclick:()=>{ api.close(); openFacility(App.plan.visits.find(x=>x.id===id).facilityId); }}, t('fTitle')+' →'), el('div', {class:'spacer'}), el('button', {type:'button', class:'btn', onclick:()=>api.close()}, t('done'))]
   });
+}
+
+
+function contribLevelTag(x){
+  return el('span', {class:'tag '+(x.level==='prefer' ? '' : 'warn')}, x.level==='prefer' ? t('lvPrefer')+' · '+x.weight : (x.level==='always' ? t('lvAlways') : t('lvMust')+' · '+x.weight));
+}
+
+function contribRows(list){
+  const byRule = new Map();
+  for(const x of list){
+    if(x.cls==='exception') continue;
+    const e = byRule.get(x.rule) || {rule:x.rule, level:x.level, weight:x.weight, units:0, score:0};
+    e.units += x.units;
+    e.score += x.units*x.weight;
+    byRule.set(x.rule, e);
+  }
+  return [...byRule.values()].sort((a, b)=>b.score-a.score).map(e=>el('div', {class:'rc-line'}, [
+    contribLevelTag(e),
+    el('span', {class:'rc-name'}, whyRuleName(e.rule)),
+    el('span', {class:'num rc-num'}, (Math.round(e.units*100)/100)+' × '+e.weight+' = '+(Math.round(e.score*100)/100))
+  ]));
+}
+
+function ruleContribBlock(plan){
+  const V = validatePlan(plan);
+  const box = el('div', {class:'rc-block'});
+  box.appendChild(el('div', {class:'section-title'}, t('rcTitle')));
+  const rows = contribRows(V.violations);
+  if(!rows.length) box.appendChild(el('div', {class:'hint'}, '—'));
+  appendKids(box, rows);
+  const st = makeState(clonePlan(plan));
+  if(st.reward) box.appendChild(el('div', {class:'rc-line'}, [el('span', {class:'tag'}, t('lvPrefer')+' · '+lvOf('due.priority').w), el('span', {class:'rc-name'}, t('rcDue')), el('span', {class:'num rc-num'}, '−'+st.reward)]));
+  const unmet = V.violations.filter(x=>(x.cls==='hard' || x.cls==='soft') && x.why);
+  if(unmet.length){
+    box.appendChild(el('div', {class:'section-title', style:{marginTop:'12px'}}, t('wWhyTitle')));
+    for(const x of unmet.slice(0, 12)) box.appendChild(el('div', {class:'rc-why'}, [el('b', null, violationText(x)), el('span', {class:'muted'}, whyText(x.why))]));
+  }
+  return box;
+}
+
+function visitContribSection(plan, v){
+  const sec = el('section', {class:'sheet-sec'});
+  sec.appendChild(el('div', {class:'section-title'}, t('rcTitle')));
+  const V = validatePlan(plan);
+  const mine = V.violations.filter(x=>(x.visits || []).includes(v.id));
+  const rows = contribRows(mine);
+  if(!rows.length) sec.appendChild(el('div', {class:'hint'}, '—'));
+  appendKids(sec, rows);
+  const st = makeState(clonePlan(plan));
+  const pct = st.due.get(v.facilityId) || 0;
+  if(pct>0) sec.appendChild(el('div', {class:'rc-line'}, [el('span', {class:'tag'}, t('lvPrefer')+' · '+lvOf('due.priority').w), el('span', {class:'rc-name'}, t('rcDue')), el('span', {class:'num rc-num'}, '−'+(Math.round(lvOf('due.priority').w*pct*100)/100))]));
+  for(const x of mine.filter(y=>(y.cls==='hard' || y.cls==='soft') && y.why)) sec.appendChild(el('div', {class:'rc-why'}, [el('b', null, violationText(x)), el('span', {class:'muted'}, whyText(x.why))]));
+  return sec;
 }

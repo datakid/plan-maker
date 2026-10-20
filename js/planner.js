@@ -64,7 +64,7 @@ function selectUnits(win, fixed, demand, placed){
     const preferred = demand.preferred;
     const blocked = new Set();
     for(const g of S().goals){
-      if(!g.on || g.type!=='cover' || g.strict!=='must') continue;
+      if(!g.on || g.type!=='cover' || !goalMust(g)) continue;
       const rep = demand.report[g.id];
       const since = rep ? rep.since : g.since;
       for(const f of goalFacilities(g)) if(baselineVisits(f, since, win.start, null) >= Math.max(1, g.times||1)) blocked.add(f.id);
@@ -118,6 +118,7 @@ function firstIdxFrom(days, lo){ for(let i=0;i<days.length;i++) if(days[i]>=lo) 
 
 function generatePlan(opts){
   opts = opts || {};
+  const genStart = Date.now();
   const set = S(), V = set.volume, sp = set.spacing;
   const win = planWindow();
   if(win.error) return {error:win.error};
@@ -245,7 +246,7 @@ function generatePlan(opts){
 
   const sen = set.seniority;
   const seniorDays = new Map();
-  const seniorNeeded = f=>sen.on && sen.mode==='require' && (f.importance||0) >= sen.threshold;
+  const seniorNeeded = f=>sen.on && seniorRequired() && (f.importance||0) >= sen.threshold;
   const seniorOkOn = (f, kind, d)=>{
     if(!seniorNeeded(f)) return true;
     let key = f.id+'|'+kind;
@@ -317,7 +318,7 @@ function generatePlan(opts){
   const chains = new Map();
   for(const c of demand.chains){
     const key = c.f.id+'|'+c.gid;
-    chains.set(key, {key, f:c.f, kind:visitKindOf(c.f), last:c.last, days:c.days, strict:c.strict==='must', gid:c.gid, stuck:new Set()});
+    chains.set(key, {key, f:c.f, kind:visitKindOf(c.f), last:c.last, days:c.days, strict:goalMust(c), gid:c.gid, stuck:new Set()});
   }
   const chainNeed = ch=>{
     const dates = (facilityDays.get(ch.f.id)||[]).map(i=>days[i]);
@@ -345,6 +346,138 @@ function generatePlan(opts){
   const eligibleIdx = days.map((o,i)=>i).filter(i=>normalWorkday(days[i]));
   const queue = seq.slice().sort((a,b)=>a.tier-b.tier || ((a.deadline==null)-(b.deadline==null)) || ((a.deadline||0)-(b.deadline||0)) || a.copy-b.copy || a.target-b.target);
   let last = 0;
+
+  const flowInfo = {};
+  const flowStage = ()=>{
+    if(!seq.length) return null;
+    const freeSeq = V.mode==='quota' ? [] : seq.filter(u=>u.tier>=2 && !u.chain);
+    const fixedSeq = seq.filter(u=>!freeSeq.includes(u));
+    const kindQuota = {basic:freeSeq.filter(u=>u.kind==='basic').length, contracted:freeSeq.filter(u=>u.kind==='contracted').length};
+    const slotTargets = {basic:freeSeq.filter(u=>u.kind==='basic').map(u=>u.target), contracted:freeSeq.filter(u=>u.kind==='contracted').map(u=>u.target)};
+    const selectedFree = new Set(freeSeq.map(u=>u.f.id));
+    const wDue = lvOf('due.priority').w;
+    const cands = [];
+    for(const k of ['basic', 'contracted']){
+      if(!kindQuota[k]) continue;
+      const list = sel.ranked[k];
+      const n = list.length;
+      for(const x of list){
+        const isSel = selectedFree.has(x.f.id);
+        if(!isSel){
+          if(sel.picked.has(x.f.id) || demand.preCount.has(x.f.id)) continue;
+          if(sel.caps.some(c=>inScope(x.f, c.scope))) continue;
+        }
+        const existing = isSel ? freeSeq.find(u=>u.f.id===x.f.id) : null;
+        const u = existing || {f:x.f, kind:k, tier:3, deadline:null, softDl:null, strict:false, goals:[], overdue:x.overdue, score:x.score, rank:x.rank, copy:0, target:0};
+        u.cand = true;
+        const gl = demand.preferred.get(x.f.id);
+        const gw = sum(Array.isArray(gl) ? gl : [], gid=>{ const g = S().goals.find(q=>q.id===gid); return g && g.lv.level!=='must' ? g.lv.w : 0; });
+        u.reward = Math.round((wDue*(n>1 ? 1-(x.rank-1)/(n-1) : 1)+gw)*LAYOUT_UNIT);
+        cands.push(u);
+      }
+    }
+    const units = fixedSeq.concat(cands);
+    const shareBasic = byKind.basic.length/Math.max(1, seq.length);
+    const dayRaw = days.map(o=>normalizeDay(set.days[wdOf(o)]));
+    const room = days.map((o, d)=>normalWorkday(o) ? Math.max(0, Math.min(dayCap(o), dayVisitCapacityMax(o)) - load[d]) : 0);
+    const gapW = Math.max(1, N/Math.max(1, Vn));
+    const wShape = lvOf('space.shape').w;
+    const cost = (u, d)=>{
+      const ord = days[d], dr = dayRaw[d];
+      if(room[d]<=0) return null;
+      if(u.limit!=null && d>u.limit) return null;
+      if(u.lo!=null && d<u.lo) return null;
+      if((facilityDays.get(u.f.id)||[]).includes(d)) return null;
+      if(!seniorOkOn(u.f, u.kind, d)) return null;
+      let c = 0;
+      const fl = facilityLvOf(u.f).weekdays;
+      if(u.f.weekdays && u.f.weekdays.length && !u.f.weekdays.includes(wdOf(ord))){ if(fl.level==='must') return null; c += fl.w*LAYOUT_UNIT; }
+      if(dr.only && !dr.only.ids.includes(u.f.category)){ if(dr.only.lv.level==='must') return null; c += dr.only.lv.w*LAYOUT_UNIT; }
+      const lin = (e, ok)=>{ if(!e || e.howMany==='one' || ok) return true; if(e.lv.level==='must') return false; c += e.lv.w*LAYOUT_UNIT; return true; };
+      if(!lin(dr.kind, !dr.kind || u.kind===dr.kind.kind)) return null;
+      if(!lin(dr.band, !dr.band || distBand(facilityKm(u.f))===dr.band.band)) return null;
+      if(!lin(dr.category, !dr.category || dr.category.ids.includes(u.f.category))) return null;
+      const tg = u.cand ? Math.min(...(slotTargets[u.kind].length ? slotTargets[u.kind].map(x=>Math.abs(d-x)) : [0])) : Math.abs(d-u.target);
+      c += Math.round(100*wShape*tg/gapW);
+      if(u.softLimit!=null && u.softLimit>=0 && d>u.softLimit) c += Math.round(5*LAYOUT_UNIT*(d-u.softLimit)/7);
+      return c;
+    };
+    const oneFor = d=>{
+      const dr = dayRaw[d];
+      const cands = [];
+      if(dr.kind && dr.kind.howMany==='one') cands.push({e:dr.kind, ok:x=>x.kind===dr.kind.kind});
+      if(dr.band && dr.band.howMany==='one') cands.push({e:dr.band, ok:x=>distBand(facilityKm(x.f))===dr.band.band});
+      if(dr.category && dr.category.howMany==='one') cands.push({e:dr.category, ok:x=>dr.category.ids.includes(x.f.category)});
+      if(!cands.length) return null;
+      const c = cands[0];
+      const have = visits.some(v=>v.d===d && c.ok({kind:v.kind, f:facilityById(v.facilityId)}));
+      if(have) return null;
+      return {match:c.ok, must:c.e.lv.level==='must', w:c.e.lv.w};
+    };
+    const weekOf = days.map(o=>weekKey(o));
+    const segments = d=>{
+      const dr = dayRaw[d], R = room[d];
+      const capCfg = dr.cap ? dr.cap.n : null;
+      const capMust = dr.cap && dr.cap.lv.level==='must';
+      const limit = capMust ? Math.max(0, Math.min(R, capCfg-load[d])) : R;
+      const minE = dr.min;
+      let lowerCount = minE && minE.lv.level==='must' ? Math.max(0, minE.n-load[d]) : 0;
+      const everyLv = lvOf('vol.everyDay');
+      if(everyDay && load[d]===0 && normalWorkday(days[d]) && everyLv.level==='must') lowerCount = Math.max(lowerCount, 1);
+      lowerCount = Math.min(lowerCount, limit);
+      const out = [];
+      for(let i=0; i<limit; i++){
+        const g = load[d]+i;
+        let c = 0;
+        if(minE && minE.lv.level!=='must' && g<minE.n) c -= minE.lv.w*LAYOUT_UNIT;
+        if(everyDay && everyLv.level!=='must' && g===0) c -= everyLv.w*LAYOUT_UNIT;
+        if(capCfg!=null && !capMust && g>=capCfg) c += dr.cap.lv.w*LAYOUT_UNIT;
+        const lower = i<lowerCount;
+        const last = out[out.length-1];
+        if(last && last.cost===c && last.lowerFlag===lower){ last.n++; if(lower) last.lower++; }
+        else out.push({n:1, cost:c, lower:lower ? 1 : 0, lowerFlag:lower});
+      }
+      return out;
+    };
+    const wl = lvOf('vol.week');
+    const weekSegments = w=>{
+      if(!perWeek) return [{n:1e6, cost:0}];
+      const left = Math.max(0, perWeek-(weekLoad.get(w)||0));
+      if(wl.level==='must') return [{n:left, cost:0}];
+      return [{n:left, cost:0}, {n:1e6, cost:wl.w*LAYOUT_UNIT}];
+    };
+    const weekRoom = new Map();
+    for(const w of weekOf) weekRoom.set(w, perWeek ? Math.max(0, perWeek-(weekLoad.get(w)||0)) : 1e6);
+    const res = layoutByFlow({units, kindQuota, N, room, weekOf, weekRoom, cost, one:days.map((o, d)=>oneFor(d)), segments, weekSegments});
+    res.units = units;
+    res.freeSeq = freeSeq;
+    return res;
+  };
+  const flowRes = flowStage();
+  flowInfo.stage = flowRes ? {assigned:flowRes.assign.size, flow:flowRes.flow, lowerMet:flowRes.lowerMet} : null;
+  if(flowRes){
+    const fu = flowRes.units;
+    const order = [...flowRes.assign.entries()].sort((a, b)=>a[1]-b[1] || (fu[a[0]].tier-fu[b[0]].tier));
+    const mark = visits.length;
+    const done = [];
+    let clean = true;
+    for(const [i, d] of order){
+      const u = fu[i];
+      if(!canPlace(u, d, false)){ clean = false; break; }
+      place(u, d, false);
+      done.push(u);
+    }
+    if(clean){
+      for(const u of flowRes.freeSeq){ const qi = queue.indexOf(u); if(qi>=0) queue.splice(qi, 1); }
+      for(const u of done){ const qi = queue.indexOf(u); if(qi>=0) queue.splice(qi, 1); if(u.cand && !sel.picked.has(u.f.id)) sel.picked.set(u.f.id, 1); }
+      for(const u of flowRes.freeSeq) if(!done.includes(u)) queue.push(u);
+      if(done.length) last = visits[visits.length-1].d;
+    } else {
+      for(let k=visits.length-1; k>=mark; k--){ const v = visits[k]; unoccupy(v.d, facilityById(v.facilityId), v.kind); }
+      visits.length = mark;
+      flowInfo.stage.rolledBack = true;
+    }
+  }
 
   if(everyDay){
     const uncovered = eligibleIdx.filter(i=>load[i]===0);
@@ -482,12 +615,13 @@ function generatePlan(opts){
     goalReport: demand.report,
     genDiags: diags
   };
+  plan.targets = {mode:set.volume.mode, basic:win.prev.basic, contracted:win.prev.contracted, share:win.prev.total ? win.prev.basic/win.prev.total : set.volume.share, quota:set.volume.mode==='quota' ? Object.assign({}, set.volume.quotas || {}) : null, pinned:schedulableFacilities().filter(f=>f.pinned).map(f=>f.id)};
   const info = {win, fixed, placed:placedSpecials, demand, sel};
   const draftPlan = plan;
   const pre = preflightPlan(info, plan);
   let search = null;
   let val = validatePlan(plan);
-  const draftHard = val.hard;
+  const draftHard = val.hardScore;
   const tStart = Date.now();
   if(val.hard>0 && !opts.skipSearch){
     const bud = Object.assign({}, opts.budget || {});
@@ -496,26 +630,43 @@ function generatePlan(opts){
     const r = searchPlan(plan, info, {budget:bud, seed:opts.seed});
     plan = r.plan; search = Object.assign({}, r.info, {stage:'search'});
     val = validatePlan(plan);
-    if(val.hard>0 && !proven){
-      const total = bud.maxMs || 4000;
+    if(val.hard>0){
+      const total = proven ? 600 : (bud.maxMs || 4000);
       const left = total - (Date.now()-tStart);
       if(left>50){
-        const a = annealPlan(plan, info, {seed:opts.seed, ms:left, runs:bud.runs || 3, iters:bud.iters});
-        search = Object.assign({}, search, {runs:a.info.runs, iters:a.info.iters, annealMs:a.info.ms});
-        if(a.plan!==plan){
+        const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:bud.iters});
+        search = Object.assign({}, search, {iters:a.info.iters, lnsMs:a.info.ms, byMove:a.info.byMove, seed:a.info.seed});
+        if(a.improved){
           const av = validatePlan(a.plan);
-          if(av.hard<val.hard || (av.hard===val.hard && av.soft<val.soft)){ plan = a.plan; val = av; search.stage = 'anneal'; }
+          if(av.hardScore<val.hardScore || (av.hardScore===val.hardScore && av.softScore<val.softScore)){ plan = a.plan; val = av; search.stage = 'lns'; }
         }
       }
     }
-    if(val.hard>draftHard){ plan = draftPlan; val = validatePlan(plan); }
+    if(val.hardScore>draftHard){ plan = draftPlan; val = validatePlan(plan); }
     search.ms = Date.now()-tStart;
     search.found = val.hard===0 ? search.stage : null;
+  }
+  if(val.hard===0 && !opts.skipSearch && !opts.skipPolish && plan.visits.length>1){
+    const cap = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.8;
+    const left = cap-(Date.now()-genStart);
+    if(left>40 && val.softScore>0){
+      const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:opts.iters || Math.max(40, Math.min(200+60*plan.visits.length, Math.floor(cap/8)))});
+      search = Object.assign({}, search || {}, {stage:(search && search.stage) || 'lns', polish:{iters:a.info.iters, ms:a.info.ms, accepted:a.info.accepted, byMove:a.info.byMove}, seed:a.info.seed});
+      if(a.improved){
+        const sa = makeState(a.plan), sb = makeState(plan);
+        if(sa.hard===0 && sa.soft<sb.soft){ plan = a.plan; val = sa.eval; }
+      }
+    }
   }
   for(const w of pre.warnings || []) plan.genDiags.push(w);
   let status = 'valid';
   if(val.hard>0) status = pre.conflicts.length ? 'infeasible' : (opts.skipSearch ? 'invalid' : 'exhausted');
-  plan.gen = genSnapshot({status, conflicts:pre.conflicts, search});
+  search = Object.assign({}, search || {}, {score:{hard:val.hardScore, soft:val.softScore}, lowerBound:null, optimal:false, seed:opts.seed==null ? null : opts.seed});
+  if(!opts.skipSearch && !opts.skipExplain && plan.visits.length){
+    const capMs = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.2;
+    plan.why = explainPlan(plan, {ms:Math.max(120, capMs), seed:opts.seed});
+  }
+  plan.gen = genSnapshot({status, conflicts:pre.conflicts, search, layout:flowInfo.stage || null});
   plan.status = status;
   plan.conflicts = pre.conflicts;
   return {plan, status, conflicts:pre.conflicts, search};

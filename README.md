@@ -1,33 +1,42 @@
-# الخطة · al-Khitta 3.0
+# الخطة · al-Khitta 4.0
 
 A rebuilt planner for inspection visits. It picks which facilities are due, spreads them across workdays, and assigns balanced teams. The rules can be tuned, but the defaults work as-is: open the app and press **Generate**.
 
 ## Structure
 ```
 index.html            shell (loads scripts in order)
-css/app.css           design system (tokens, light/dark, RTL, responsive, print)
+css/app.css           design system (tokens, light/dark, RTL, responsive, print) plus the v4 blocks at the end
 js/core.js            dates (ordinal-day math), parsing, DOM helper, icons
 js/seed.js            seed facilities, locations, categories, people, pools
-js/store.js           data model, v4→v5 migration, persistence, domain helpers
-js/i18n.js            Arabic / English strings
+js/store.js           data model, migrations, persistence, domain helpers
+js/i18n.js            Arabic / English strings, including the rule registry texts
+js/rules-model.js     rule registry (levels, weights, units), level helpers, RULES_REV 8 migration, weekday rule helpers
 js/people-rules.js    compiles person goals, pair goals and per-plan quotas into one rule index (deny / count / together)
 js/engine.js          capacity, scoring, team assignment (with preset people), gender repair, analysis, approve/undo
 js/goals.js           goal & fixed-visit models, demand builder, fixed-visit conflict checks
-js/constraints.js     the one validator (validatePlan), goal evaluation, work/rest rules, history lookback, generation snapshots
+js/constraints.js     validatePlan: the one validator, a thin layer that tags every violation with rule, level, weight and units; goal evaluation, work/rest rules, history lookback, generation snapshots
+js/score.js           preference scoring (weekday rules, volume targets, distance, gender preferences, rotation, spread, fairness), plan state, due-ness reward, move apply / delta / revert
+js/flow.js            min-cost flow (successive shortest paths, Johnson potentials, binary-heap Dijkstra, big-M lower bounds)
+js/assign.js          Hungarian algorithm (rectangular, integer or real costs)
+js/layout.js          builds the layout network (candidates, days, weeks) and reads the placement back
 js/solver.js          feasibility pre-check (proven conflicts), seat-level search, layout moves; bounded and deterministic
-js/anneal.js          last-resort seeded simulated annealing over the whole plan (dates, facilities, seats), best of several runs
-js/planner.js         generation pipeline: window → fixed visits → goal demand → selection → placement → teams → repair → search
-js/ui.js              popover stack, menus, sheet, dialog, toast, controls (Seg/Switch/Stepper/Slider/DaySet/MiniCal…)
+js/lns.js             seeded Late Acceptance Hill Climbing with destroy-and-repair moves, kicks, restarts and a steepest-descent polish
+js/explain.js         one probe per unmet item: the best single move that fixes it and the rules it would break
+js/planner.js         generation pipeline: window → fixed visits → goal demand → selection → flow layout → teams → repair → search → LNS polish → explanations
+js/ui.js              popover stack, menus, sheet, dialog, toast, controls (Seg/Switch/Stepper/Slider/DaySet/MiniCal/LevelChip…)
 js/io.js              XLSX writer/reader, CSV, import preview/apply, plan export, matrix sheet
-js/views/plan.js      setup strip + List / Calendar / Matrix / Summary views, visit sheet, action bar
+js/views/plan.js      setup strip + List / Calendar / Matrix / Summary views, visit sheet, rule contributions, action bar
 js/views/facilities.js  table, bulk actions, facility sheet, categories, locations
-js/views/team.js      people cards, person sheet, groups & seats
-js/views/goals.js     goals editor (sheet + rules section), fixed-visit sheet, plan-strip popovers, progress block
-js/views/rules.js     all rules with a sticky section nav (scroll-spy) and on/off status per section
+js/views/team.js      person editor parts (sheet and panel), groups & seats
+js/views/team-table.js  editable People table, docked detail panel, bulk bar
+js/views/goals.js     fixed-visit sheet, plan-strip popovers, progress block, wide goals sheet
+js/views/goals-manager.js  master-detail goals manager (Rules tab, wide sheet, person popover deep link)
+js/views/rules.js     all rules with a sticky section nav (scroll-spy), level chips and on/off status per section
 js/views/data.js      import, unresolved names, backup/restore, appearance, reset
 test.html             dev test runner: isolated storage, app self-test, regression suite (not needed in production)
 js/selftest.js        full-app UI and flow checks (generation, views, sheets, rules, export, approve, English mode)
-js/tests/             panel.js (on-page results), env.js (storage isolation), kit.js, fixtures.js (deterministic fixtures), reference.js (exhaustive solver), regress.js (regression cases)
+js/tests/             panel.js, env.js, kit.js, fixtures.js, reference.js (exhaustive solver with the production objective), regress.js, phase1.js to phase7.js (v4)
+docs/                 v4-baseline.md (numbers before the rewrite), v4-notes.md (decisions and changed tests)
 ```
 
 ## Goals (v3.1)
@@ -70,6 +79,81 @@ You can add one from the **Fixed visits** tile, the **+** on any calendar day, t
 ## Defaults
 Workdays are Sunday to Thursday (5 days). Visit mix is 3 basic : 2 contracted (basic share 60%). Existing saved data is moved to these defaults once (settings rev 6).
 
+## What changed in 4.0
+Every rule that is not structural now has a **level**: *Must* or *Prefer*, with a weight from 1 to 10. One objective is used everywhere:
+
+- `hardScore` = sum of weight x units over Must rules and structural rules (structural rules weigh 10);
+- `softScore` = sum of weight x units over Prefer rules, minus the due-ness reward (overdue facilities, default weight 3);
+- a plan is valid when `hardScore` is 0; plans compare lexicographically on (hard, soft).
+
+`validatePlan` tags each violation with `rule`, `level`, `weight` and `units`, and returns `hardScore` and `softScore` next to the old counts. The generator, the LNS and the explanations all use this same function, so the solver's score is the validator's score.
+
+Structural rules (always hard, shown with an "Always" tag): the calendar, days off, retired or inactive people, one place per person per day, the same facility once per day, seats from the right pool with none left open, the global per-day capacity, and a fixed visit's date and facility.
+
+Prefer-only rules (Must is disabled): overdue priority, skill match, spacing shape, people spread over consecutive days.
+
+### Rule registry
+| Rule id | Name | Layer | Applies to | Default | Counts as one unit |
+|---|---|---|---|---|---|
+| `day.cap` | Weekday max visits | layout | day | Must 5 | 1 visit over |
+| `day.min` | Weekday min visits | layout | day | Prefer 5 | 1 visit short |
+| `day.kind` | Weekday kind lean | layout | day | Prefer 5 | 1 visit of the other kind |
+| `day.band` | Weekday distance lean | layout | day | Prefer 5 | 1 visit in the other band |
+| `day.category` | Weekday favoured categories | layout | day | Prefer 5 | 1 visit outside the categories |
+| `day.only` | Weekday allowed categories | layout | day | Must 5 | 1 visit outside |
+| `fac.weekdays` | Facility weekdays | layout | facility | Must 5 | 1 visit on another weekday |
+| `vol.week` | Max visits per week | layout | global | Must 5 | 1 visit over |
+| `vol.everyDay` | A visit every eligible day | layout | global | Must 5 | 1 empty day |
+| `vol.exact` | Exact basic/contracted counts | layout | global | Must 3 | 1 visit off target |
+| `vol.share` | Basic share | layout | global | Prefer 5 | 1 visit off the share |
+| `vol.quota` | Category quotas | layout | global | Must 3 | 1 visit short or over |
+| `vol.gap` | Gap between active days | layout | global | Prefer 5 | 1 pair too close |
+| `vol.activity` | Plan activity pattern | layout | global | Must 5 | 1 breach |
+| `fac.pinned` | Pinned facility | layout | facility | Prefer 9 | 1 pinned facility missing |
+| `dist.pick` | Pick facilities by distance | layout | global | Prefer 5 | 1 visit in the opposite band |
+| `p.blocked` | Person blocked facilities | staff | person | Must 5 | 1 assignment |
+| `p.avail` | Person availability | staff | person | Must 5 | 1 assignment on an off day |
+| `p.maxRun` | Person max run | staff | person | Must 5 | 1 breach |
+| `p.maxWeek` | Person max per week | staff | person | Must 5 | 1 breach |
+| `p.rest` | Person rest pattern | staff | person | Must 5 | 1 breach |
+| `p.quota` | Person visits per plan | both | person | Must 5 | 1 visit outside the range |
+| `p.dist` | Person distance preference | staff | person | Prefer 5 | 1 assignment in the opposite band |
+| `fair.load` | Fairness by share | staff | global | Prefer 5 | Σ max(0, |load − expected| − 0.5) |
+| `gender.rule` | Team gender rule | staff | item | Prefer 8 | 1 invalid team |
+| `gender.pref.m` | Male preference | staff | global | Prefer 5 | 1 mismatch per dimension |
+| `gender.pref.f` | Female preference | staff | global | Prefer 5 | 1 mismatch per dimension |
+| `senior` | Seniority | staff | global | Must 5 | 1 team with no qualified member |
+| `pair` | Pair rule | staff | item | Prefer 5 | 1 visit breaking it |
+| `rotate` | People rotation | staff | global | Prefer 5 | Prefer: prior visits to the facility; Must: each assignment over N |
+| `dist.short` | Short trips | staff | global | Prefer 5 | 1 far-band trip |
+| `dist.balanceFar` | Balance far trips | staff | global | Prefer 5 | Σ max(0, far − minFar − 1) |
+| `goal.cover` | Cover goal | layout | goal | Prefer 5 | 1 missing visit |
+| `goal.atLeast` | At-least goal | layout | goal | Prefer 5 | 1 missing visit |
+| `goal.atMost` | At-most goal | layout | goal | Must 5 | 1 extra visit |
+| `goal.maxGap` | Max-gap goal | layout | goal | Must 5 | 1 late facility |
+| `goal.person` | Person goal | staff | goal | Must 5 | 1 offending visit |
+| `goal.together` | Together goal | staff | goal | Prefer 5 | Visits below the % target |
+| `goal.special` | Special visit | both | goal | Must 5 | 1 missing visit |
+| `goal.pattern` | Person pattern goal | both | goal | Must 5 | 1 breach |
+| `due.priority` | Overdue priority | layout | global | Prefer only, Prefer 3 | Reward by overdue percentile |
+| `skill.match` | Skill match | staff | global | Prefer only, Prefer 5 | Skill gap |
+| `space.shape` | Spacing shape | layout | global | Prefer only, Prefer 5 | Deviation from the shape |
+| `p.spread` | Consecutive-day spread | staff | person | Prefer only, Prefer 2 | Consecutive days |
+
+Stored shape: `settings.lv[ruleId]`, `settings.days[wd].<field>.lv`, `person.lv`, `facility.lv`, `goal.lv`, `pair.lv`, `genderRule.lv`, each `{level, w}`. `RULES_REV` is 8; older data is migrated on load and a saved unapproved plan from an older revision loads as stale. Rules that already had an on/off switch keep it (rotation, seniority, pairs, gender rules, patterns).
+
+### Solver
+1. **Compile and prove.** The window, fixed visits and goal demand are built as before. The pre-check proves conflicts against the Must rules (including day-kind rules against exact counts, exact counts above the facilities that exist, and "at least one" day rules with no possible visit) and returns `infeasible` with the rules named.
+2. **Layout by min-cost flow.** Mandatory units plus candidate facilities per kind flow through kind -> facility copy -> day -> week. Day caps, minimums, "all / at least one" lean rules, weekday and category limits, deadlines, spacing shape, due reward and goal rewards are edge costs, capacities or lower bounds. Selection and placement are solved together. If any flow placement breaks a non-linear hard day rule (gap spacing, activity patterns) the flow result is discarded and the greedy placement runs.
+3. **Teams** are built day by day; a seat-level search repairs hard violations.
+4. **LNS** (`js/lns.js`): seeded Late Acceptance Hill Climbing over the unified score with moves for day, swapped days, facility, person, swapped people, ejection chains, whole-visit re-staffing and Hungarian re-staffing, kicks and restarts when hard violations remain, then a steepest-descent polish.
+5. **Explanations** (`js/explain.js`): for each unmet Prefer item and each Must violation, the best single move that fixes it and the rules it would break are stored in `plan.why` and shown in the Summary and the visit sheet.
+
+`plan.gen.search` records stage, iterations, per-move statistics, score, seed and the layout stage. Status is `valid`, `infeasible` (proof only) or `exhausted`.
+
+### Budgets
+Iteration caps are primary and wall-clock caps are a safety cutoff. The polish uses at most `cap / 8` iterations (40, 150 and 500 on week, month and quarter windows; caps 400 ms, 1.5 s and 5 s, polish uses 80% of the cap minus construction time). Repair of hard violations uses 3,000 / 8,000 / 15,000 iterations. The same input and seed give the same plan as long as the iteration cap is reached before the wall-clock cap, which is the case for the seed data.
+
 ## Features
 - **Plan tab**: six summary tiles (Period, Workdays, Visits, Team, Goals, Fixed visits). Each opens an in-place popover, so the page never expands, collapses or jumps. Generate/Regenerate button. Stale-plan banner.
 - **Views**: List (grouped by day), Calendar (month grid; drag a visit to another day), Matrix (people × days or facilities × days, with unavailable days shaded), Summary (KPIs, workload vs expected, checks, notes, carry-over).
@@ -78,11 +162,11 @@ Workdays are Sunday to Thursday (5 days). Visit mix is 3 basic : 2 contracted (b
 - **Skill**: 0–100 per visit type, with optional per-category overrides. Replaces the old 1–5 rank.
 - **Importance**: 0–100 per facility, with a configurable seniority threshold (require or prefer) and matching strength.
 - **Gender rules**: an ordered list, each rule switchable on/off. Scope by type, categories or specific facilities. Set a minimum % of each gender and whether to avoid even splits (e.g. 2+2). The rule card previews which team splits are valid.
-- **Preferences by gender** (inside Gender rules): separate soft preferences for men and women: near/far trips, basic/contracted facilities, preferred weekdays, and a strength (light/medium/strong). They weight who gets picked but never block anyone. Stored in `settings.genderPrefs.{m,f}`.
+- **Preferences by gender** (inside Gender rules): separate preferences for men and women: near/far trips, basic/contracted facilities, preferred weekdays, each with a level chip. They weight who gets picked but never block anyone. Stored in `settings.genderPrefs.{m,f}`.
 - **Dropdowns**: every select is a themed button with a popover menu (searchable when it has more than 8 options), so it matches the other controls and the dark theme.
-- **Pairs**: together/apart, flexible (light/medium/strong) or rigid, each switchable on/off.
+- **Pairs**: together/apart, each with a level chip (Must is the old rigid, Prefer weights replace light/medium/strong), each switchable on/off.
 - **Distance**: editable near/far km bands, trips measured from HQ or each person's starting point, a short-trip preference, sharing far trips evenly, and a facility pick bias.
-- **Per weekday**: max visits, min visits, type lean, distance lean, favoured category, only-these categories.
+- **Per weekday**: max visits, min visits, type lean, distance lean, favoured categories, only-these categories; each configured cell has a level chip, and lean cells can mean every visit that day or at least one.
 - **Volume**: fill days (basic share), exact counts, or per-category quotas. Per-day and per-week caps. Spacing: even, packed, or with a minimum gap.
 - **Coverage goal**: cover a scope N times; the end date is computed automatically.
 - **Approve**: writes visit history and fairness counts. Can be undone.
@@ -122,11 +206,10 @@ Precedence: a person's own limits and pattern goals always apply; the default pe
 - `invalid`: a draft was returned without searching, or a manual edit broke a rule.
 The draft is always shown with its violations. The search is deterministic for a given input (fixed seed, node, evaluation and iteration caps); the wall-clock caps can only end a run earlier on a slow machine.
 
-Stages, each run only when the previous one left a hard violation:
+Stages (the first two run only when the previous one left a hard violation; the LNS polish and explanations run on valid plans too):
 1. **Draft**: window, fixed visits, goal demand, selection, placement, teams, repairs. The number of visits is capped by what each day can really staff (a day with one available admin can still host a visit that needs one), not by a blended average.
 2. **Search**: seat-level team search plus layout moves. Layout moves are sampled (biased to visits in current violations), scored by seat flow, scoped quotas, rigid-pair availability and gender feasibility, and restarted from the best layout with growing random kicks until the node, evaluation, loop or time cap is reached. Up to 1.5 s.
-3. **Annealing**: when no conflict is proven, a seeded simulated annealing over the whole plan (date moves, swaps, same-kind facility replacement, seat swaps, seat fills and removals). Cost is 200 x hard + soft from `validatePlan`. Three independent runs with seeds derived from the base seed; the best by (hard, soft) is kept and finished with the soft polish. The plan is never returned with more hard violations than the draft. Total time for stages 2 and 3 is capped at about 4 s.
-`plan.gen.search` records the stage that produced the result (`search` or `anneal`), attempts, restarts, runs, iterations and milliseconds.
+3. **LNS**: the seeded Late Acceptance search described under *Solver*; it also improves plans that are already valid.
 
 ## Manual edits
 Swap, fill, move, replace and remove all go through `mutatePlan`, which evaluates the edit on a copy with the validator. If the edit introduces a hard violation the dialog names it and asks before applying. Candidate menus show the same verdicts. Approval re-validates and is refused for stale or hard-invalid plans; there is no override.
@@ -137,27 +220,43 @@ Saved data without `rulesRev` (or older than 7) is migrated on load without remo
 ## Tests
 - Open `test.html`. It replaces `localStorage` with an in-memory shim first and refuses to run if it cannot, so the real data is never cleared. It runs the app self-test and then the regression suite. A results panel covers the page: green "ALL TESTS PASSED" with `RESULT pass=… fail=0`, or red with each failing test listed (tick the box to list passing ones too, or use "Show app" to see the page). The same lines are printed to the console.
 - `js/tests/reference.js` has two exhaustive solvers for small fixtures: `Ref.solve` (facilities, then days, then teams) and `Ref.days` (day by day with pruning on availability, rest, quotas and weekly caps, then the validator as the oracle).
-- `js/tests/regress.js` holds the regression cases (L1 to L15 cover the backup week of a real failing plan, gender, pair, quota, every-day and deadline fixtures, annealing and preflight proofs; K2 compares the generator with the reference across five fixture families and needs at least 99% valid; K3 checks determinism): audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
+- `js/tests/phase1.js` to `phase7.js` hold the v4 tests: registry and migration, every rule flipped between Must and Prefer, delta against full evaluation, flow and Hungarian cross-checks, T1 to T9, LevelChip reachability, People table, Goals manager and explanations.
+- `js/tests/regress.js` holds the regression cases (L1 to L15 cover the backup week of a real failing plan, gender, pair, quota, every-day and deadline fixtures, LNS repair and preflight proofs; K2 compares the generator with the reference across five fixture families and needs at least 99% valid; K3 checks determinism): audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
 - The old seed-data self-test alone is not evidence of readiness.
 
-## Performance limits
-Seed data (about 150 facilities, 11 people): week, month and quarter plans validate with zero hard violations in under about 100 ms. The fast path is unchanged; the search and annealing stages only run when the draft has a hard violation. The team search stops at 120,000 nodes, the layout search at 4,000 evaluations or 1,500 loops, whichever comes first, and both stop at 1.5 s. Annealing stops at its iteration cap or when the 4 s total is spent. When a conflict is already proven the budget is 300 ms and annealing is skipped. Exhaustive reference checks are for small fixtures only (a handful of days and people).
+## Performance
+Seed data (about 150 facilities, 11 people), measured in headless jsdom on Node 22, full pipeline including LNS polish and explanations:
+
+| Window | Visits | Time | Hard violations |
+|---|---|---|---|
+| Week | 5 | about 0.1-0.2 s | 0 |
+| Month | 20 | about 0.5 s | 0 |
+| Quarter | 70 | about 1.6 s | 0 |
+
+Budgets: week under 400 ms, month under 1.5 s, quarter under 5 s (test T8).
 
 ## Release checklist
-1. `test.html` shows `fail=0` and no uncaught errors.
+1. `test.html` shows `fail=0` and no uncaught errors. This includes T1 to T9: W1 Tuesday contracted in 20/20 seeds with the lean rule Prefer and Must (T1), two lean days (T2), Must contracted day against exact 5/0 counts is `infeasible` naming both rules (T3), favoured category like kind (T4), score equals `validatePlan` on 200 fixtures (T5), generator against the exhaustive reference (T6), same seed same plan (T7), seed-data budgets (T8), weight monotonicity (T9).
 2. Generate week, month and quarter plans from a fresh seed: zero hard violations, summary quantities match the plan.
 3. Break a Must rule in the visit sheet: the dialog names it; approval is refused until fixed.
-4. Rules → Work and rest and the person sheet: toggle patterns, Must/Try, require-every-day; regenerate; summary shows the result.
-5. Check Arabic and English, light and dark, and 390 px width (no horizontal scroll).
-6. Export XLSX/CSV and print preview.
-7. Load an older backup: nothing is lost, rules revision is current.
-8. No code comments in JS, CSS or HTML.
+4. Rules tab: open every section and flip a few level chips between Must and Prefer; regenerate; the Summary shows the rule contributions and the why lines.
+5. People tab: edit a name, pool, skill, per-plan and max run inline; keep the panel open while moving between rows with the arrow keys; bulk-edit two people and undo.
+6. Goals: add each goal type, edit its number inline, filter by Failing, duplicate, delete and undo, in the Rules tab, in the wide sheet and from a person's Rules popover.
+7. Check Arabic and English, light and dark, and 390 px width (no horizontal page scroll).
+8. Export XLSX/CSV and print preview.
+9. Load an older backup: nothing is lost, rules revision is 8.
+10. No code comments in JS, CSS or HTML.
 
 ## Known limitations
 - The search is bounded; `exhausted` is not a proof of infeasibility.
-- Facility replacement moves in the search keep the visit kind; unusual per-category seat overrides disable the seat-count conflict check rather than risk a wrong claim.
-- Annealing recomputes `validatePlan` for every move; it is fast for week and month plans but is the slow path for quarter plans with many violations.
-- Gender rules are soft in the validator: the search and annealing reduce gender violations but a plan with only gender violations is still `valid`.
+- Score re-evaluation after a move recomputes the whole plan (exact, checked against a fresh evaluation, but not key-partitioned), so LNS iterations cost about 1.5 ms on a week and about 3 ms on a quarter.
+- Window re-layout through the flow and a Hungarian pass over a whole day are not separate LNS neighbourhoods; layout comes from the initial flow and from day, swap and facility moves.
+- LNS never adds or removes visits or seats: with equal weights it could trade a visit for an open seat.
+- No flow relaxation bound is computed: `lowerBound` is `null` and `optimal` is `false`.
+- Layout flow covers at most one "at least one visit" rule per weekday; the others are left to LNS.
+- Non-linear hard day rules (gap spacing, activity patterns) are not in the flow; when the flow breaks them the greedy placement is used.
+- `js/solver.js` is kept for the feasibility pre-check and the seat-level repair search.
+- Explanations probe at most 14 items within a time budget; the rest are marked as not probed.
 - History before the lookback window (30 days) is not used by rest rules.
 - Patterns are evaluated per plan; there is no cross-plan fairness for them.
 

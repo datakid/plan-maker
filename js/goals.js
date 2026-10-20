@@ -4,15 +4,17 @@ const GOAL_TYPES = FACILITY_GOALS.concat(PEOPLE_GOALS);
 const TOGETHER_RELS = ['atLeast','atMost'];
 
 function newGoal(type){
-  const g = {id:uid('goal'), on:true, type, strict:'try', scope:{kind:'all', ids:[]}};
+  const g = {id:uid('goal'), on:true, type, scope:{kind:'all', ids:[]}};
   if(type==='cover') Object.assign(g, {times:1, since:todayISO(), by:null, repeat:true});
   if(type==='atLeast') Object.assign(g, {n:4, repeat:false});
-  if(type==='atMost') Object.assign(g, {n:2, strict:'must', scope:{kind:'category', ids:[]}});
-  if(type==='maxGap') Object.assign(g, {days:60, strict:'must'});
-  if(type==='person') Object.assign(g, {people:[], rel:'never', n:4, strict:'must', scope:{kind:'type', ids:['contracted']}});
+  if(type==='atMost') Object.assign(g, {n:2, scope:{kind:'category', ids:[]}});
+  if(type==='maxGap') Object.assign(g, {days:60});
+  if(type==='person') Object.assign(g, {people:[], rel:'never', n:4, scope:{kind:'type', ids:['contracted']}});
   if(type==='together') Object.assign(g, {a:null, b:null, rel:'atLeast', pct:50});
-  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null, strict:'must'});
-  if(type==='pattern') Object.assign(g, {people:[], pattern:{minRest:1, maxRun:null, cycle:null}, from:null, to:null, strict:'must'});
+  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null});
+  if(type==='pattern') Object.assign(g, {people:[], pattern:{minRest:1, maxRun:null, cycle:null}, from:null, to:null});
+  g.lv = ruleSpec(GOAL_RULE[type]).def ? mkLv(ruleSpec(GOAL_RULE[type]).def.level, ruleSpec(GOAL_RULE[type]).def.w) : mkLv('prefer', 5);
+  Object.defineProperty(g, 'strict', {get(){ return this.lv && this.lv.level==='must' ? 'must' : 'try'; }, set(v){ this.lv = mkLv(v==='must' ? 'must' : 'prefer', this.lv ? this.lv.w : 5); }, enumerable:false, configurable:true});
   return g;
 }
 function defaultGoals(){
@@ -25,7 +27,7 @@ function normalizeGoal(g){
   const base = newGoal(type);
   const out = Object.assign(base, g||{}, {type});
   out.scope = out.scope && out.scope.kind ? {kind:out.scope.kind, ids:Array.isArray(out.scope.ids) ? out.scope.ids.slice() : []} : {kind:'all', ids:[]};
-  out.strict = out.strict==='must' ? 'must' : 'try';
+  out.lv = normLv(out.lv, ruleSpec(goalRuleId(out)).def, ruleSpec(goalRuleId(out)));
   out.on = out.on!==false;
   const dflt = newGoal(type);
   if(type==='cover'){
@@ -120,7 +122,7 @@ function specialRequests(win){
   const list = [], diags = [];
   for(const g of S().goals.filter(g=>g.on && g.type==='special')){
     const f = facilityById(g.facilityId);
-    const tier = g.strict==='must' ? 0 : 1;
+    const tier = goalMust(g) ? 0 : 1;
     if(!f){ diags.push({sev:'info', key:'dSpecialNoFacility', args:[goalTitle(g)]}); continue; }
     const w = specialWindow(g, win);
     if(!w) continue;
@@ -168,25 +170,25 @@ function buildDemand(win, fixed, placed){
       if(g.by){
         const by = ordOf(g.by);
         if(by>=win.start && by<=win.end){
-          for(const r of pending) ob(g.id, r.f, g.strict, r.need-preAt(r.f, sinceOrd, by), {kind:'cover', latest:by});
+          for(const r of pending) ob(g.id, r.f, goalStrict(g), r.need-preAt(r.f, sinceOrd, by), {kind:'cover', latest:by});
         } else if(by>win.end){
           const left = countWorkdays(win.start, by);
           const rest = pending.map(r=>({f:r.f, need:r.need-preAt(r.f, sinceOrd)})).filter(r=>r.need>0);
           const quota = Math.ceil(sum(rest, r=>r.need) * win.work.length / Math.max(1, left));
           let acc = 0;
           for(const r of rest){
-            if(acc<quota){ const take = Math.min(r.need, quota-acc); ob(g.id, r.f, g.strict, take, {kind:'cover'}); acc += take; if(take<r.need) prefer(r.f, g.id); }
+            if(acc<quota){ const take = Math.min(r.need, quota-acc); ob(g.id, r.f, goalStrict(g), take, {kind:'cover'}); acc += take; if(take<r.need) prefer(r.f, g.id); }
             else prefer(r.f, g.id);
           }
           report[g.id].paced = true;
         } else {
-          for(const r of pending) ob(g.id, r.f, g.strict, r.need-preAt(r.f, sinceOrd), {kind:'cover'});
+          for(const r of pending) ob(g.id, r.f, goalStrict(g), r.need-preAt(r.f, sinceOrd), {kind:'cover'});
         }
       } else {
         for(const r of pending){
           const n = r.need-preAt(r.f, sinceOrd);
           if(n<=0) continue;
-          if(g.strict==='must') ob(g.id, r.f, 'must', n, {kind:'cover', open:true});
+          if(goalMust(g)) ob(g.id, r.f, 'must', n, {kind:'cover', open:true});
           else prefer(r.f, g.id);
         }
         report[g.id].open = true;
@@ -197,11 +199,11 @@ function buildDemand(win, fixed, placed){
       for(const f of goalFacilities(g)){
         const last = lastVisitBefore(f, win.start);
         const sim = pre.filter(x=>x.f.id===f.id).map(x=>x.ord);
-        chains.push({gid:g.id, f, days, strict:g.strict, last});
+        chains.push({gid:g.id, f, days, strict:goalStrict(g), last});
         for(let i=0;i<400;i++){
           const need = chainNextNeed(last, sim, days, win.start, win.end);
           if(!need) break;
-          ob(g.id, f, g.strict, 1, {kind:'maxGap', chain:true, earliest:need.lo, latest:need.hi, first:need.first, early:need.early});
+          ob(g.id, f, goalStrict(g), 1, {kind:'maxGap', chain:true, earliest:need.lo, latest:need.hi, first:need.first, early:need.early});
           sim.push(need.first ? win.start : need.hi);
         }
       }
@@ -216,20 +218,20 @@ function buildDemand(win, fixed, placed){
       const order = shared.concat(rest);
       for(const f of order){
         if(left<=0) break;
-        ob(g.id, f, g.strict, 1, {kind:'atLeast', pooled:true});
+        ob(g.id, f, goalStrict(g), 1, {kind:'atLeast', pooled:true});
         left--;
       }
       for(let round=1; g.repeat && left>0 && order.length && round<50; round++){
         for(const f of order){
           if(left<=0) break;
-          ob(g.id, f, g.strict, 1, {kind:'atLeast', pooled:true, copy:round});
+          ob(g.id, f, goalStrict(g), 1, {kind:'atLeast', pooled:true, copy:round});
           left--;
         }
       }
-      if(left>0) diags.push({sev:g.strict==='must'?'warn':'info', key:'dGoalShortPool', args:[goalTitle(g), g.n, g.n-left]});
+      if(left>0) diags.push({sev:goalMust(g)?'warn':'info', key:'dGoalShortPool', args:[goalTitle(g), g.n, g.n-left]});
       report[g.id] = {type:'atLeast', target:g.n||0};
     } else if(g.type==='atMost'){
-      caps.push({id:g.id, scope:g.scope, must:g.strict==='must', left:Math.max(0, (g.n||0) - preIn(g.scope))});
+      caps.push({id:g.id, scope:g.scope, must:goalMust(g), left:Math.max(0, (g.n||0) - preIn(g.scope))});
       report[g.id] = {type:'atMost', target:g.n||0};
     }
   }
@@ -272,7 +274,7 @@ function buildDemand(win, fixed, placed){
         for(const pid of liveIds(g.people)){
           const p = personById(pid);
           const avail = win.days.filter(o=>personAvailable(p, o)).length;
-          if(avail < g.n) diags.push({sev:g.strict==='must'?'warn':'info', key:'dPersonFewDays', args:[p.name, g.n, avail]});
+          if(avail < g.n) diags.push({sev:goalMust(g)?'warn':'info', key:'dPersonFewDays', args:[p.name, g.n, avail]});
         }
       }
       if(g.rel==='only' && !goalFacilities(g).length) diags.push({sev:'warn', key:'dPersonEmptyScope', args:[goalTitle(g)]});

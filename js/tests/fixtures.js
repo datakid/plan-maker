@@ -106,6 +106,35 @@ const Fx = {
   strictOf(g){ return g.strict==='must' ? 'must' : 'try'; }
 };
 
+Fx.rng = function(a){
+  return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+};
+Fx.W1 = {start:'2026-10-04', end:'2026-10-08', tuesday:'2026-10-06', tuesdayWd:2};
+Fx.w1 = function(opts){
+  opts = opts || {};
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  App.plan = null;
+  if(opts.shuffle){
+    const r = Fx.rng(opts.shuffle);
+    for(const f of App.data.facilities){
+      const d = Math.floor(r() * 600);
+      f.lastVisit = isoOf(ordOf('2026-10-03') - d - 1);
+      f.history = [f.lastVisit];
+      f.visitCount = 1;
+    }
+  }
+  const s = S();
+  s.period = Object.assign({}, s.period, {goal:'range', preset:'custom', start:Fx.W1.start, end:Fx.W1.end});
+  s.volume = Object.assign({}, s.volume, {mode:'fill', share:0.6, perDay:1});
+  const leans = opts.leans || {2:'contracted'};
+  for(const wd of Object.keys(leans)) patchDay(+wd, {lean:leans[wd]});
+  return App.data;
+};
+Fx.leanMisses = function(plan, leans){
+  leans = leans || {2:'contracted'};
+  return Object.keys(leans).filter(wd=>!plan.visits.some(v=>wdOf(ordOf(v.date))===+wd && v.kind===leans[wd])).length;
+};
+
 const VISITPLAN_WEEK = JSON.parse('{"rest":{"rest":1,"maxRun":1},"gmaxOn":true,"gmax":2,"members":[{"id":101,"name":"شوقي","pool":1,"gender":"M","off":[1,2]},{"id":102,"name":"ميسرة","pool":1,"gender":"M","off":[]},{"id":103,"name":"اسماء","pool":1,"gender":"F","off":[1]},{"id":104,"name":"شرنوبي","pool":1,"gender":"M","off":[2,3,1]},{"id":105,"name":"مريم","pool":1,"gender":"F","off":[]},{"id":106,"name":"حمودين","pool":1,"gender":"M","off":[1]},{"id":107,"name":"لبني","pool":2,"gender":"F","off":[1,5]},{"id":108,"name":"اباظة","pool":2,"gender":"M","off":[1,3,4]},{"id":109,"name":"شلتوت","pool":2,"gender":"M","off":[3,1,5]},{"id":110,"name":"اماني","pool":2,"gender":"F","off":[4]},{"id":111,"name":"غادة","pool":2,"gender":"F","off":[1,2,3]}],"locations":[{"id":112,"name":"رئيسي ١","type":"main","closed":[]},{"id":113,"name":"رئيسي ٢","type":"main","closed":[1,2,3,5]},{"id":114,"name":"رئيسي ٣","type":"main","closed":[]},{"id":115,"name":"متعاقد ١","type":"contracted","closed":[]},{"id":116,"name":"متعاقد ٢","type":"contracted","closed":[]}]}');
 Fx.visitplanSpec = function(B){
   B = B || VISITPLAN_WEEK;

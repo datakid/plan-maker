@@ -1,9 +1,8 @@
 const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
-const LEGACY_PLAN_KEY = 'alkhitta.plan.v1';
 const SETTINGS_REV = 6;
-const RULES_REV = 7;
+const RULES_REV = 8;
 
 const App = {
   data: null,
@@ -80,7 +79,6 @@ function normalizePattern(x){
   out.cycle = normalizeCycle(x.cycle);
   return out;
 }
-function patternIsEmpty(pt){ return !pt || (!(pt.minRest>0) && !pt.maxRun && !pt.cycle); }
 function normalizePatterns(x){
   const out = defaultPatterns();
   for(const k of ['activity','person']){
@@ -120,7 +118,7 @@ function freshPerson(p){
     id: uid('p'), name:'', pool:'fin', gender:null, title:null, retired:false, active:true,
     skill:{basic:50, contracted:50, byCategory:{}}, share:1, quota:{min:null, max:null}, origin:null, distPref:null,
     avail:{mode:'plan', weekdays:[0,1,2,3,4], cycle:{on:2, off:2, anchor:todayISO()}},
-    maxRun:null, maxPerWeek:null, off:[], blocked:[], pattern:{mode:'inherit', minRest:0}
+    maxRun:null, maxPerWeek:null, off:[], blocked:[], pattern:{mode:'inherit', minRest:0}, lv:null
   };
   const out = Object.assign(base, p||{});
   out.skill = Object.assign({basic:50, contracted:50, byCategory:{}}, (p&&p.skill)||{});
@@ -137,6 +135,7 @@ function freshPerson(p){
   out.maxRun = out.maxRun==null || out.maxRun==='' ? null : cleanInt(out.maxRun, 1, 60, null);
   out.maxPerWeek = out.maxPerWeek==null || out.maxPerWeek==='' ? null : cleanInt(out.maxPerWeek, 1, 60, null);
   out.pattern = normalizePersonPattern(out.pattern);
+  out.lv = out.lv ? normalizePersonLv(out.lv) : null;
   delete out.fixed;
   return out;
 }
@@ -226,7 +225,7 @@ function migrateV4(raw){
   const ov = s.dayOverrides||{};
   for(const k of Object.keys(ov)){
     const o = ov[k]||{};
-    st.days[k] = {cap:o.visitCap||null, lean:o.kindLean>0?'basic':(o.kindLean<0?'contracted':null), dist:o.distLean>0?'far':(o.distLean<0?'near':null), favor:o.favorCategory||null, only:o.restrictTo||null};
+    st.days[k] = normalizeDay({cap:o.visitCap||null, lean:o.kindLean>0?'basic':(o.kindLean<0?'contracted':null), dist:o.distLean>0?'far':(o.distLean<0?'near':null), favor:o.favorCategory||null, only:o.restrictTo||null});
   }
   const h = raw.history||{};
   d.history.fpv = h.facilityPersonVisits||{};
@@ -269,14 +268,13 @@ function normalizeData(d){
     if(!d.settings.goals.length) d.settings.goals = defaultGoals();
     d.rev = SETTINGS_REV;
   }
-  if((d.rulesRev||0) < RULES_REV){
-    migrateRules(d);
-    d.rulesRev = RULES_REV;
-  }
+  if((d.rulesRev||0) < 7) migrateRules(d);
+  d.rulesRev = RULES_REV;
   const gp = d.settings.genderPrefs || {};
   d.settings.genderPrefs = {m:Object.assign(fresh.genderPrefs.m, gp.m||{}), f:Object.assign(fresh.genderPrefs.f, gp.f||{})};
   d.locations = d.locations||[]; d.categories = d.categories||[]; d.facilities = d.facilities||[];
   d.people = (d.people||[]).map(freshPerson);
+  migrateLv(d);
   const ids = new Set(d.people.map(p=>p.id));
   for(const g of d.settings.goals){
     if(Array.isArray(g.people)) g.people = g.people.filter(id=>ids.has(id));
@@ -321,6 +319,7 @@ function loadAll(){
   App.data = normalizeData(data);
   try{ const p = localStorage.getItem(PLAN_KEY); App.plan = p ? JSON.parse(p) : null; }catch(e){ App.plan = null; }
   if(App.plan && !Array.isArray(App.plan.visits)) App.plan = null;
+  if(App.plan && !App.plan.approved && !(App.plan.gen && App.plan.gen.rulesRev>=RULES_REV)) App.plan.stale = true;
   saveNow();
 }
 

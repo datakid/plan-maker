@@ -111,7 +111,7 @@ function flowDeficit(plan, bounds, caps, availFn){
 function effectiveAvailability(){
   const partners = new Map();
   for(const r of S().pairs){
-    if(!r.on || r.mode!=='rigid' || r.type!=='together' || !r.a || !r.b) continue;
+    if(!r.on || !pairRigid(r) || r.type!=='together' || !r.a || !r.b) continue;
     if(!personById(r.a) || !personById(r.b)) continue;
     if(!partners.has(r.a)) partners.set(r.a, []);
     if(!partners.has(r.b)) partners.set(r.b, []);
@@ -214,6 +214,31 @@ function preflightPlan(info, plan){
     if(strictSlots + fixedN > total) add('xHardOverVolume', [strictSlots+fixedN, total]);
   }
 
+  const eligibleDays = win.days.filter(normalWorkday);
+  const cands = schedulableFacilities();
+    if(volume.mode==='exact'){
+    const exact = {basic:volume.exact.basic|0, contracted:volume.exact.contracted|0};
+    const capBy = {basic:0, contracted:0};
+    for(const o of eligibleDays){
+      const dr = normalizeDay(set.days[wdOf(o)]);
+      const k = dr.kind && dr.kind.lv.level==='must' && dr.kind.howMany==='all' ? dr.kind.kind : null;
+      for(const kind of ['basic', 'contracted']) if(!k || k===kind) capBy[kind] += dayCap(o);
+    }
+    for(const kind of ['basic', 'contracted']){
+      if(exact[kind]>capBy[kind]) add('xDayKindCapacity', [kindLabel(kind), exact[kind], capBy[kind]], {rules:['day.kind', 'vol.exact']});
+      if(exact[kind]>cands.filter(f=>visitKindOf(f)===kind).length) add('xExactOverFacilities', [kindLabel(kind), exact[kind], cands.filter(f=>visitKindOf(f)===kind).length], {rules:['vol.exact']});
+    }
+  }
+  for(const o of eligibleDays){
+    const dr = normalizeDay(set.days[wdOf(o)]);
+    const checks = [['kind', 'day.kind', f=>visitKindOf(f)===(dr.kind && dr.kind.kind)], ['band', 'day.band', f=>distBand(facilityKm(f))===(dr.band && dr.band.band)], ['category', 'day.category', f=>dr.category && dr.category.ids.includes(f.category)]];
+    for(const [field, rule, ok] of checks){
+      const e = dr[field];
+      if(!e || e.lv.level!=='must' || e.howMany!=='one') continue;
+      const exactZero = field==='kind' && volume.mode==='exact' && (volume.exact[e.kind]|0)===0;
+      if(exactZero || !cands.some(ok)) add('xDayRuleNone', [wdName(wdOf(o)), t(rule)], {rules:exactZero ? [rule, 'vol.exact'] : [rule]});
+    }
+  }
   if(plan && pools.every(pl=>!Object.keys(pl.byCategory||{}).length)){
     const exactProof = volume.mode==='exact' && !plan.visits.some(v=>v.auto===false);
     const layout = layoutDemand(plan);
@@ -231,7 +256,7 @@ function preflightPlan(info, plan){
   }
 
   for(const g of set.goals){
-    if(!g.on || g.strict!=='must') continue;
+    if(!g.on || !goalMust(g)) continue;
     if(g.type==='atLeast' && (g.n||0)>0){
       const fac = goalFacilities(g);
       const distinct = g.repeat ? Infinity : fac.length;
@@ -240,7 +265,7 @@ function preflightPlan(info, plan){
     if(g.type==='person' && g.rel==='only' && liveIds(g.people).length && !goalFacilities(g).length) add('xOnlyEmpty', [goalTitle(g)], {goal:g.id});
     if(g.type==='atLeast'){
       for(const c of set.goals){
-        if(c===g || !c.on || c.type!=='atMost' || c.strict!=='must') continue;
+        if(c===g || !c.on || c.type!=='atMost' || !goalMust(c)) continue;
         const same = JSON.stringify(c.scope)===JSON.stringify(g.scope);
         if(same && c.n<g.n) add('xCapVsMin', [goalTitle(g), goalTitle(c)], {goal:g.id});
       }
@@ -248,7 +273,7 @@ function preflightPlan(info, plan){
   }
 
   for(const r of set.pairs){
-    if(!r.on || r.mode!=='rigid' || r.type!=='together' || !r.a || !r.b) continue;
+    if(!r.on || !pairRigid(r) || r.type!=='together' || !r.a || !r.b) continue;
     const A = personById(r.a), B = personById(r.b);
     if(!A || !B) continue;
     const ok = schedulableFacilities().some(f=>{
@@ -335,7 +360,7 @@ function solveTeams(plan, budget, rnd, opts){
         if(p.pool!==pl.id) return false;
         if(!personAvailable(p, x.ord) || (p.blocked||[]).includes(x.f.id)) return false;
         const rb = set.repeatBlock;
-        if(rb.on && ((ctx.fpv[x.f.id+'|'+p.id])||0) >= rb.times) return false;
+        if(rotateMustActive() && ((ctx.fpv[x.f.id+'|'+p.id])||0) >= rb.times) return false;
         if(ctx.rules.denied(p.id, x.f)==='must') return false;
         return true;
       });
@@ -345,7 +370,7 @@ function solveTeams(plan, budget, rnd, opts){
   const pairBy = ctx.pairs;
   const importanceNeed = x=>{
     const sen = set.seniority;
-    return sen.on && sen.mode==='require' && (x.f.importance||0) >= sen.threshold;
+    return sen.on && seniorRequired() && (x.f.importance||0) >= sen.threshold;
   };
   const qual = (x, p)=>skillOf(p, x.kind, x.f.category) >= (x.f.importance||0);
   const attainable = new Map();

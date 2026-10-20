@@ -33,7 +33,7 @@ const SEED_PEOPLE = [
   {id:'p_hamoudein', name:'حمودين', pool:'clin', gender:'m', skill:{basic:75, contracted:25}},
   {id:'p_sharnouby', name:'شرنوبي', pool:'clin', gender:'m', skill:{basic:25, contracted:50}},
   {id:'p_maysara', name:'ميسرة', pool:'clin', gender:'m', skill:{basic:75, contracted:75}},
-  {id:'p_shawky', name:'شوقي', pool:'clin', gender:'m', skill:{basic:25, contracted:25}},
+  {id:'p_shawky', name:'شوقي', pool:'clin', gender:'m', origin:'ايتاي', skill:{basic:25, contracted:25}},
   {id:'p_mariam', name:'مريم', pool:'clin', gender:'f', origin:'كفر الدوار', skill:{basic:50, contracted:100}},
   {id:'p_asmaa', name:'أسماء', pool:'clin', gender:'f', origin:'النفرة', skill:{basic:50, contracted:75}},
   {id:'p_adib', name:'اديب', pool:'fin', gender:'m', title:'مالي واداري', retired:true, skill:{basic:100, contracted:50}},
@@ -41,4 +41,4 @@ const SEED_PEOPLE = [
   {id:'p_sobhy', name:'صبحي', pool:'clin', gender:'m', title:'فني', retired:true, skill:{basic:25, contracted:25}}
 ];
 const PERSON_ALIASES = {'لبني':'لبنى','اسماء':'أسماء','اباظة':'أباظة','ابظة':'أباظة','شرنوبى':'شرنوبي','ميسره':'ميسرة'};
-const FACILITY_ALIASES = {'التانيه':'الثانية','التانية':'الثانية','الاولى':'الاولي','اشعه':'اشعة','مستشفى':'مستشفي','غسيل كلوى':'غسيل كلوي'};
+

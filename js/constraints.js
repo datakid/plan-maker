@@ -1,8 +1,60 @@
 const CLS = {HARD:'hard', SOFT:'soft', EXC:'exception'};
 const HISTORY_LOOKBACK = 30;
 
+const KEY_RULE = {
+  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit',
+  dOutOfPlan:'struct.calendar', dNotWorkday:'struct.calendar', dActivityRest:'vol.activity', dWeekday:'fac.weekdays', dDayOnly:'day.only', dActivityCycleSoft:'vol.activity',
+  dGender:'gender.rule', dSenior:'senior', dSeniorNone:'senior', dPair:'pair', dLate:'goal.cover', dUnavailable:'p.avail', dFixedOff:'p.avail', dPatternDay:'p.rest', dBlocked:'p.blocked', dFixedBlocked:'p.blocked', dRepeatBlock:'rotate',
+  dDayDup:'struct.onePlace', dFacDup:'struct.facilityOnce', dCapDay:'struct.perDay', dCapDayCfg:'day.cap', dCapWeek:'vol.week', dSpacing:'vol.gap', dActivityRest2:'vol.activity', dActivityRun:'vol.activity',
+  dRest:'p.rest', dRun:'p.maxRun', dWeek:'p.maxWeek', dPatternDaySoft:'p.rest', dQuotaPerson:'p.quota', dEveryDay:'vol.everyDay',
+  dCoverShort:'goal.cover', dGapLate:'goal.maxGap', dGapShort:'goal.maxGap', dAtLeastShort:'goal.atLeast', dCapMust:'goal.atMost', dCapPref:'goal.atMost', dSpecialShort:'goal.special', dPersonRule:'goal.person', dTogetherShort:'goal.together', dPatternGoalCycle:'goal.pattern',
+  dMinDay:'day.min', dDayKind:'day.kind', dDayBand:'day.band', dDayCategory:'day.category', dShareOff:'vol.share', dExactOff:'vol.exact', dQuotaOff:'vol.quota', dPinnedMissing:'fac.pinned', dDistPick:'dist.pick', dPersonDist:'p.dist', dGenderPref:'gender.pref', dFairLoad:'fair.load', dRotate:'rotate', dShortTrip:'dist.short', dBalanceFar:'dist.balanceFar', dSpread:'p.spread'
+};
+const ALWAYS_LV = {level:'always', w:10};
+const DAY_RULE_FIELD = {'day.cap':'cap', 'day.min':'min', 'day.kind':'kind', 'day.band':'band', 'day.category':'category', 'day.only':'only'};
+const PERSON_RULE_FIELD = {'p.spread':'spread', 'p.blocked':'blocked', 'p.avail':'avail', 'p.maxRun':'maxRun', 'p.maxWeek':'maxWeek', 'p.rest':'rest', 'p.quota':'quota', 'p.dist':'dist'};
+
+function violationLv(v){
+  const rule = v.rule;
+  const spec = ruleSpec(rule);
+  const dflt = spec ? mkLv(spec.def.level, spec.def.w) : ALWAYS_LV;
+  if(!rule || rule.startsWith('struct.')) return ALWAYS_LV;
+  if(DAY_RULE_FIELD[rule]){
+    const dr = normalizeDay(S().days[wdOf(ordOf(v.dates[0]))]);
+    const e = dr[DAY_RULE_FIELD[rule]];
+    return e ? e.lv : dflt;
+  }
+  if(rule==='fac.weekdays' || rule==='fac.pinned') return facilityLvOf(facilityById(v.facilities[0]))[rule==='fac.pinned' ? 'pinned' : 'weekdays'];
+  if(PERSON_RULE_FIELD[rule]){
+    const p = personById(v.people[0]);
+    return personLvOf(p)[v.lvk || PERSON_RULE_FIELD[rule]];
+  }
+  if(rule.startsWith('goal.')){
+    const g = S().goals.find(x=>x.id===v.goal);
+    return g ? g.lv : dflt;
+  }
+  if(rule==='pair'){ const pr = S().pairs.find(x=>x.id===v.ref); return pr && pr.lv ? pr.lv : dflt; }
+  if(rule==='gender.rule'){ const gr = S().genderRules.find(x=>x.id===v.ref); return gr && gr.lv ? gr.lv : dflt; }
+  return lvOf(rule);
+}
+
+function finalizeViolation(v){
+  if(!v.rule) v.rule = KEY_RULE[v.key] || '';
+  if(v.rule==='gender.pref') v.rule = v.ref==='f' ? 'gender.pref.f' : 'gender.pref.m';
+  if(v.goal && v.rule==='p.quota') v.rule = 'goal.person';
+  if(v.goal && v.rule==='p.rest') v.rule = 'goal.pattern';
+  if(v.goal && v.rule==='p.maxRun') v.rule = 'goal.pattern';
+  const lv = v.lv || violationLv(v);
+  v.level = lv.level;
+  v.weight = lv.w;
+  if(v.units==null) v.units = 1;
+  if(v.cls!==CLS.EXC) v.cls = lv.level==='prefer' ? CLS.SOFT : CLS.HARD;
+  delete v.lv;
+  return v;
+}
+
 function mkViolation(o){
-  return Object.assign({id:'', src:'', cls:CLS.HARD, group:'', people:[], facilities:[], dates:[], visits:[], actual:null, required:null, key:'', args:[], goal:null}, o);
+  return Object.assign({id:'', src:'', cls:CLS.HARD, group:'', people:[], facilities:[], dates:[], visits:[], actual:null, required:null, key:'', args:[], goal:null, rule:'', level:'', weight:0, units:1, ref:null, lvk:null}, o);
 }
 
 function patternsCfg(){
@@ -22,15 +74,15 @@ function cycleOn(c, ord){
   return pos < (c.on||1);
 }
 function activityCfg(){ return patternsCfg().activity; }
-function activityHard(){ const a = activityCfg(); return !!(a && a.on && a.strict==='must'); }
+function activityHard(){ const a = activityCfg(); return !!(a && a.on && lvMust('vol.activity')); }
 function activityDayAllowed(ord){
   const a = activityCfg();
-  if(!a || !a.on || a.strict!=='must' || !a.pattern || !a.pattern.cycle) return true;
+  if(!a || !a.on || !lvMust('vol.activity') || !a.pattern || !a.pattern.cycle) return true;
   return cycleOn(a.pattern.cycle, ord);
 }
 function activitySoftDayPenalty(ord){
   const a = activityCfg();
-  if(!a || !a.on || a.strict==='must' || !a.pattern || !a.pattern.cycle) return 1;
+  if(!a || !a.on || lvMust('vol.activity') || !a.pattern || !a.pattern.cycle) return 1;
   return cycleOn(a.pattern.cycle, ord) ? 1 : 0.35;
 }
 
@@ -44,7 +96,7 @@ function effectivePersonPattern(p){
     eff.minRest = P.pattern.minRest||0;
     if(eff.maxRun==null) eff.maxRun = P.pattern.maxRun||null;
     if(P.pattern.cycle && !(p.avail && p.avail.mode==='cycle')) eff.cycle = P.pattern.cycle;
-    eff.hard = P.strict==='must';
+    eff.hard = personLvOf(p).rest.level==='must';
     eff.from = 'default';
   }
   return eff;
@@ -52,18 +104,18 @@ function effectivePersonPattern(p){
 
 function personPatternRules(p){
   const out = {hard:[], soft:[]};
-  if(p.maxRun) out.hard.push({src:'person', minRest:0, maxRun:p.maxRun, from:null, to:null});
+  if(p.maxRun) (personLvOf(p).maxRun.level==='must' ? out.hard : out.soft).push({src:'person', minRest:0, maxRun:p.maxRun, from:null, to:null, lvk:'maxRun'});
   const own = p.pattern || {mode:'inherit', minRest:0};
-  if(own.mode==='custom' && own.minRest>0) out.hard.push({src:'person', minRest:own.minRest, maxRun:null, from:null, to:null});
+  if(own.mode==='custom' && own.minRest>0) (personLvOf(p).rest.level==='must' ? out.hard : out.soft).push({src:'person', minRest:own.minRest, maxRun:null, from:null, to:null, lvk:'rest'});
   const P = patternsCfg().person;
   if(own.mode==='inherit' && P && P.on && P.pattern && (P.pattern.minRest>0 || (P.pattern.maxRun && !p.maxRun))){
     const r = {src:'default', minRest:P.pattern.minRest||0, maxRun:p.maxRun ? null : (P.pattern.maxRun||null), from:null, to:null};
-    (P.strict==='must' ? out.hard : out.soft).push(r);
+    (personLvOf(p).rest.level==='must' ? out.hard : out.soft).push(r);
   }
   for(const g of S().goals){
     if(!g.on || g.type!=='pattern' || !(g.people||[]).includes(p.id) || !g.pattern) continue;
     if(!(g.pattern.minRest>0) && !g.pattern.maxRun) continue;
-    (g.strict==='must' ? out.hard : out.soft).push({src:g.id, gid:g.id, minRest:g.pattern.minRest||0, maxRun:g.pattern.maxRun||null, from:g.from||null, to:g.to||null});
+    (goalMust(g) ? out.hard : out.soft).push({src:g.id, gid:g.id, minRest:g.pattern.minRest||0, maxRun:g.pattern.maxRun||null, from:g.from||null, to:g.to||null});
   }
   return out;
 }
@@ -72,7 +124,7 @@ function patternCyclesAllow(p, ord){
   const e = effectivePersonPattern(p);
   if(e.cycle && e.hard && !cycleOn(e.cycle, ord)) return false;
   for(const g of S().goals){
-    if(!g.on || g.type!=='pattern' || g.strict!=='must' || !g.pattern || !g.pattern.cycle) continue;
+    if(!g.on || g.type!=='pattern' || !goalMust(g) || !g.pattern || !g.pattern.cycle) continue;
     if(!(g.people||[]).includes(p.id) || !inWindowOrd(g, ord)) continue;
     if(!cycleOn(g.pattern.cycle, ord)) return false;
   }
@@ -83,7 +135,7 @@ function patternCycleSoftPenalty(p, ord){
   const e = effectivePersonPattern(p);
   if(e.cycle && !e.hard && !cycleOn(e.cycle, ord)) m *= 0.35;
   for(const g of S().goals){
-    if(!g.on || g.type!=='pattern' || g.strict==='must' || !g.pattern || !g.pattern.cycle) continue;
+    if(!g.on || g.type!=='pattern' || goalMust(g) || !g.pattern || !g.pattern.cycle) continue;
     if(!(g.people||[]).includes(p.id) || !inWindowOrd(g, ord)) continue;
     if(!cycleOn(g.pattern.cycle, ord)) m *= 0.35;
   }
@@ -198,16 +250,6 @@ function baselineVisits(f, sinceIso, startOrd, plan){
   return n;
 }
 
-function eligibleDaysOf(days){
-  return days.filter(o=>normalWorkday(o));
-}
-
-function visitLockInfo(v){
-  const lock = Array.isArray(v.locked) ? v.locked : null;
-  const exact = !!(v.fixed || v.special) && lock!=null && v.auto===false;
-  return {lock, exact, fixed:!!v.fixed};
-}
-
 function isFixedLockedPerson(v, pid){
   return !!v.fixed && Array.isArray(v.locked) && v.locked.includes(pid);
 }
@@ -224,10 +266,10 @@ function planDayRules(){
   const out = [];
   const a = activityCfg();
   if(a && a.on && a.pattern && (a.pattern.minRest>0 || a.pattern.maxRun)){
-    out.push({src:'activity', hard:a.strict==='must', minRest:a.pattern.minRest||0, maxRun:a.pattern.maxRun||null, group:'cCalendar'});
+    out.push({src:'activity', hard:lvMust('vol.activity'), minRest:a.pattern.minRest||0, maxRun:a.pattern.maxRun||null, group:'cCalendar'});
   }
   const sp = S().spacing;
-  if(sp && sp.mode==='gap' && sp.gap>1) out.push({src:'spacing', hard:sp.strict==='must', minRest:sp.gap-1, maxRun:null, group:'cSpacing'});
+  if(sp && sp.mode==='gap' && sp.gap>1) out.push({src:'spacing', hard:lvMust('vol.gap'), minRest:sp.gap-1, maxRun:null, group:'cSpacing'});
   return out;
 }
 
@@ -286,7 +328,7 @@ function chainNextNeed(last, dates, days, startOrd, endOrd){
   return null;
 }
 
-function strictCls(g){ return g.strict==='must' ? CLS.HARD : CLS.SOFT; }
+function strictCls(g){ return goalMust(g) ? CLS.HARD : CLS.SOFT; }
 
 function evaluateGoals(plan, T, ctx){
   const rows = [], viols = [];
@@ -298,7 +340,7 @@ function evaluateGoals(plan, T, ctx){
   const planWork = fr.days.filter(normalWorkday).length;
   for(const g of S().goals){
     if(!g.on) continue;
-    const row = {g, title:goalTitle(g), must:g.strict==='must', state:'new', met:false, pct:0, label:'', inPlan:0, target:0};
+    const row = {g, title:goalTitle(g), must:goalMust(g), state:'new', met:false, pct:0, label:'', inPlan:0, target:0};
     const viol = o=>{ viols.push(Object.assign({src:'goal', cls:strictCls(g), group:isPeopleGoal(g) ? 'cPeople' : 'cGoals', goal:g.id}, o)); };
     rows.push(row);
     if(g.type==='cover'){
@@ -347,9 +389,9 @@ function evaluateGoals(plan, T, ctx){
       row.met = row.inPlan>=target;
       row.pct = total ? Math.min(100, Math.round((doneBase+inPlan)/total*100)) : 100;
       row.label = (doneBase+inPlan)+'/'+total;
-      if(!row.met) viol({key:'dCoverShort', actual:row.inPlan, required:target, facilities:missing, args:[row.title, row.inPlan, target]});
-      row.state = row.open && !row.complete && g.strict!=='must' ? 'progress' : (row.met ? 'met' : 'short');
-      if(row.open && row.met && !row.complete && g.strict==='must') row.ongoing = true;
+      if(!row.met) viol({key:'dCoverShort', units:Math.max(1, target-row.inPlan), actual:row.inPlan, required:target, facilities:missing, args:[row.title, row.inPlan, target]});
+      row.state = row.open && !row.complete && !goalMust(g) ? 'progress' : (row.met ? 'met' : 'short');
+      if(row.open && row.met && !row.complete && goalMust(g)) row.ongoing = true;
     } else if(g.type==='maxGap'){
       const days = Math.max(1, g.days||1);
       const facs = goalFacilities(g);
@@ -383,15 +425,15 @@ function evaluateGoals(plan, T, ctx){
       row.inPlan = n; row.target = g.n||0; row.met = n>=row.target;
       row.pct = row.target ? Math.min(100, Math.round(n/row.target*100)) : 100;
       row.state = row.met ? 'met' : 'short';
-      if(!row.met) viol({key:'dAtLeastShort', actual:n, required:row.target, args:[row.title, n, row.target]});
+      if(!row.met) viol({key:'dAtLeastShort', units:Math.max(1, row.target-n), actual:n, required:row.target, args:[row.title, n, row.target]});
     } else if(g.type==='atMost'){
       const V = visitsIn(g.scope);
       row.inPlan = V.length; row.target = g.n||0; row.met = V.length<=row.target;
       row.pct = row.met ? 100 : Math.round(row.target/Math.max(1, V.length)*100);
-      row.state = row.met ? 'met' : (g.strict==='must' ? 'short' : 'exceeded');
+      row.state = row.met ? 'met' : (goalMust(g) ? 'short' : 'exceeded');
       if(!row.met){
         const fixedOnly = V.filter(x=>!x.v.fixed).length===0;
-        viol({key:g.strict==='must' ? 'dCapMust' : 'dCapPref', cls:fixedOnly && g.strict==='must' ? CLS.EXC : strictCls(g), actual:V.length, required:row.target, visits:V.map(x=>x.v.id), args:[row.title, V.length, row.target]});
+        viol({key:goalMust(g) ? 'dCapMust' : 'dCapPref', cls:fixedOnly && goalMust(g) ? CLS.EXC : strictCls(g), units:Math.max(1, V.length-row.target), actual:V.length, required:row.target, visits:V.map(x=>x.v.id), args:[row.title, V.length, row.target]});
       }
     } else if(g.type==='special'){
       const f = facilityById(g.facilityId);
@@ -403,7 +445,7 @@ function evaluateGoals(plan, T, ctx){
       row.met = q.length>=row.target;
       row.pct = Math.min(100, Math.round(q.length/row.target*100));
       row.state = row.met ? 'met' : 'short';
-      if(!row.met) viol({key:'dSpecialShort', actual:q.length, required:row.target, facilities:[f.id], args:[row.title, q.length, row.target]});
+      if(!row.met) viol({key:'dSpecialShort', units:Math.max(1, row.target-q.length), actual:q.length, required:row.target, facilities:[f.id], args:[row.title, q.length, row.target]});
     } else if(g.type==='person'){
       const ids = liveIds(g.people);
       if(g.rel==='never' || g.rel==='only'){
@@ -449,7 +491,7 @@ function evaluateGoals(plan, T, ctx){
       row.label = t('gpTogether', st.both, st.base, st.pct);
       row.state = row.met ? 'met' : 'short';
       row.inPlan = st.both; row.target = st.base;
-      if(!row.met) viol({key:'dTogetherShort', people:[g.a, g.b], actual:st.pct, required:rule.pct, args:[row.title, st.pct, rule.pct]});
+      if(!row.met) viol({key:'dTogetherShort', units:Math.max(1, Math.ceil((rule.pct-st.pct)/100*Math.max(1, st.base||1))), people:[g.a, g.b], actual:st.pct, required:rule.pct, args:[row.title, st.pct, rule.pct]});
     } else if(g.type==='pattern'){
       const ids = liveIds(g.people);
       const per = [];
@@ -532,7 +574,8 @@ function validatePlan(plan, opts){
   if(!plan) return out;
   const set = S();
   const fr = planFrame(plan);
-  const add = o=>{ const v = mkViolation(o); v.id = 'x'+out.violations.length; out.violations.push(v); return v; };
+  const whyMap = plan.why || null;
+  const add = o=>{ const v = finalizeViolation(mkViolation(o)); v.id = 'x'+out.violations.length; if(whyMap){ const w = whyMap[violationSig(v)]; if(w) v.why = w; } out.violations.push(v); return v; };
   const vis = (plan.visits||[]).map(v=>{
     const f = facilityById(v.facilityId);
     const ids = [];
@@ -597,25 +640,25 @@ function validatePlan(plan, opts){
     const ids = x.ids;
     const g = teamGender(ids);
     const rule = genderRuleFor(f, x.kind), n = sum(Object.values(need));
-    if(rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n)) add({src:'visit', cls:CLS.SOFT, group:'cGender', key:'dGender', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, g.m, g.f]});
+    if(rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n)) add({src:'visit', cls:CLS.SOFT, ref:rule.id, group:'cGender', key:'dGender', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, g.m, g.f]});
     const sen = set.seniority;
     if(sen.on && (f.importance||0) >= sen.threshold && ids.length){
       const qualified = id=>{ const p = personById(id); return p && skillOf(p, x.kind, f.category) >= (f.importance||0); };
       if(!ids.some(qualified)){
         const attainable = activePeople().some(p=>skillOf(p, x.kind, f.category) >= (f.importance||0) && personAvailable(p, ord) && !(p.blocked||[]).includes(f.id));
-        if(sen.mode==='require'){
+        if(lvMust('senior')){
           const exempt = locked.length>0 && fixed;
           add({src:'visit', cls:(attainable && !exempt) ? CLS.HARD : CLS.EXC, group:'cSenior', key:attainable ? 'dSenior' : 'dSeniorNone', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date]});
         } else add({src:'visit', cls:CLS.SOFT, group:'cSenior', key:'dSenior', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date]});
       }
     }
     for(const r of set.pairs){
-      if(!r.on || r.mode!=='rigid' || !r.a || !r.b || r.a===r.b) continue;
+      if(!r.on || !r.a || !r.b || r.a===r.b) continue;
       const ha = ids.includes(r.a), hb = ids.includes(r.b);
       const broken = (r.type==='avoid' && ha && hb) || (r.type==='together' && ha!==hb);
       if(!broken) continue;
       const lockedPair = fixed && (locked.includes(r.a) || locked.includes(r.b));
-      add({src:'visit', cls:lockedPair ? CLS.EXC : CLS.HARD, group:'cPairs', key:'dPair', people:[r.a, r.b], visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date]});
+      add({src:'visit', cls:lockedPair ? CLS.EXC : CLS.HARD, ref:r.id, group:'cPairs', key:'dPair', people:[r.a, r.b], visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date]});
     }
     if(v.late && v.why && v.why.deadline) add({src:'visit', cls:CLS.SOFT, group:'cGoals', key:'dLate', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.why.deadline]});
     for(const id of ids){
@@ -626,7 +669,7 @@ function validatePlan(plan, opts){
       else if(!patternCyclesAllow(p, ord)) add({src:'person', cls:exempt ? CLS.EXC : CLS.HARD, group:'cRest', key:'dPatternDay', people:[id], visits:[v.id], dates:[v.date], facilities:[f.id], args:[p.name, v.date]});
       if((p.blocked||[]).includes(f.id)) add({src:'person', cls:exempt ? CLS.EXC : CLS.HARD, group:'cBlocked', key:exempt ? 'dFixedBlocked' : 'dBlocked', people:[id], visits:[v.id], dates:[v.date], facilities:[f.id], args:[p.name, f.name]});
       const rb = set.repeatBlock;
-      if(rb.on && !plan.approved && ((App.data.history.fpv||{})[f.id+'|'+id]||0) >= rb.times) add({src:'person', cls:exempt ? CLS.EXC : CLS.HARD, group:'cPeople', key:'dRepeatBlock', people:[id], visits:[v.id], dates:[v.date], facilities:[f.id], args:[p.name, f.name]});
+      if(rotateMustActive() && !plan.approved && ((App.data.history.fpv||{})[f.id+'|'+id]||0) >= rb.times) add({src:'person', cls:exempt ? CLS.EXC : CLS.HARD, group:'cPeople', key:'dRepeatBlock', people:[id], visits:[v.id], dates:[v.date], facilities:[f.id], args:[p.name, f.name]});
     }
   }
 
@@ -645,16 +688,17 @@ function validatePlan(plan, opts){
     const facSeen = new Set();
     for(const x of list){ if(facSeen.has(x.f.id)) add({src:'day', cls:CLS.HARD, group:'cDup', key:'dFacDup', facilities:[x.f.id], visits:[x.v.id], dates:[date], args:[x.f.name, date]}); facSeen.add(x.f.id); }
     const ord = ordOf(date), dcap = dayCap(ord);
-    if(list.length>dcap){
-      const free = list.filter(x=>!x.v.fixed).length;
-      add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:dcap, args:[date, list.length, dcap]});
-    }
+    const free = list.filter(x=>!x.v.fixed).length;
+    const perDay = S().volume.perDay|0;
+    const cfgCap = dayView(normalizeDay(S().days[wdOf(ord)])).cap;
+    if(perDay>0 && list.length>perDay) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:perDay, units:list.length-perDay, args:[date, list.length, perDay]});
+    else if(cfgCap!=null && list.length>cfgCap) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', rule:'day.cap', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:cfgCap, units:list.length-cfgCap, args:[date, list.length, cfgCap]});
   }
   if(set.volume.perWeek){
     const byWk = groupBy(vis.filter(x=>x.f), x=>weekKey(x.ord));
     for(const [wk, list] of byWk) if(list.length>set.volume.perWeek){
       const free = list.filter(x=>!x.v.fixed).length;
-      add({src:'week', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapWeek', visits:list.map(x=>x.v.id), dates:[isoOf(wk)], actual:list.length, required:set.volume.perWeek, args:[isoOf(wk), list.length, set.volume.perWeek]});
+      add({src:'week', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapWeek', units:list.length-set.volume.perWeek, visits:list.map(x=>x.v.id), dates:[isoOf(wk)], actual:list.length, required:set.volume.perWeek, args:[isoOf(wk), list.length, set.volume.perWeek]});
     }
   }
 
@@ -686,7 +730,7 @@ function validatePlan(plan, opts){
       for(const x of ruleViolationsOn(r, all)){
         if(x.b<fr.start) continue;
         const ex = [x.a, x.b].every(o=>!dm.has(o) || dm.get(o).every(v=>isExemptLocked(v, p.id)));
-        add({src:'person', cls:hard ? (ex ? CLS.EXC : CLS.HARD) : CLS.SOFT, group:x.kind==='rest' ? 'cRest' : 'cRun', key:x.kind==='rest' ? 'dRest' : 'dRun', people:[p.id], dates:[isoOf(x.a), isoOf(x.b)], goal:r.gid||null, visits:[].concat(dm.get(x.a)||[], dm.get(x.b)||[]).map(v=>v.id), args:[p.name, isoOf(x.a), isoOf(x.b), x.n||0]});
+        add({src:'person', cls:hard ? (ex ? CLS.EXC : CLS.HARD) : CLS.SOFT, lvk:r.lvk || (r.src==='default' ? 'rest' : (x.kind==='run' ? 'maxRun' : 'rest')), group:x.kind==='rest' ? 'cRest' : 'cRun', key:x.kind==='rest' ? 'dRest' : 'dRun', people:[p.id], dates:[isoOf(x.a), isoOf(x.b)], goal:r.gid||null, visits:[].concat(dm.get(x.a)||[], dm.get(x.b)||[]).map(v=>v.id), args:[p.name, isoOf(x.a), isoOf(x.b), x.n||0]});
       }
     };
     for(const r of rules.hard) if(!r.gid) emit(r, true);
@@ -696,7 +740,7 @@ function validatePlan(plan, opts){
       for(const o of dm.keys()) for(const v of dm.get(o)){ const k = weekKey(o); if(!byWk.has(k)) byWk.set(k, []); byWk.get(k).push({o, v}); }
       for(const [wk, list] of byWk) if(list.length>p.maxPerWeek){
         const free = list.filter(e=>!isExemptLocked(e.v, p.id)).length;
-        add({src:'person', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cWeek', key:'dWeek', people:[p.id], dates:[isoOf(wk)], visits:list.map(e=>e.v.id), actual:list.length, required:p.maxPerWeek, args:[p.name, list.length, p.maxPerWeek]});
+        add({src:'person', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cWeek', key:'dWeek', units:list.length-p.maxPerWeek, people:[p.id], dates:[isoOf(wk)], visits:list.map(e=>e.v.id), actual:list.length, required:p.maxPerWeek, args:[p.name, list.length, p.maxPerWeek]});
       }
     }
     const e = effectivePersonPattern(p);
@@ -715,11 +759,13 @@ function validatePlan(plan, opts){
     const low = r.min!=null && q<r.min, high = r.max!=null && q>r.max;
     if(!low && !high) continue;
     let cls = r.must ? CLS.HARD : CLS.SOFT;
+    const qlv = r.must ? personLvOf(p).quota : mkLv('prefer', personLvOf(p).quota.w);
     if(high && !low && cls===CLS.HARD && q-(exemptQ[r.key]||0)<=0) cls = CLS.EXC;
-    add({src:'person', cls, group:'cPeople', key:'dQuotaPerson', people:[r.pid], actual:q, required:low ? r.min : r.max, args:[p?p.name:'?', q, quotaLabel(r)]});
+    add({src:'person', cls, lv:qlv, units:Math.abs(q-(low ? r.min : r.max)), group:'cPeople', key:'dQuotaPerson', people:[r.pid], actual:q, required:low ? r.min : r.max, args:[p?p.name:'?', q, quotaLabel(r)]});
   }
   const ev = evaluateGoals(plan, T, ctxInfo);
   for(const o of ev.viols) add(o);
+  collectPreferences(plan, {set, fr, vis, byDate, worked, H, T}, add);
   out.goals = ev.rows;
   for(const row of out.goals) row.source = 'current';
 
@@ -735,11 +781,13 @@ function validatePlan(plan, opts){
   if(requireDays) for(const o of uncovered) add({src:'volume', cls:CLS.HARD, group:'cDays', key:'dEveryDay', dates:[isoOf(o)], args:[isoOf(o)]});
   out.days = {required:requireDays, eligible:eligible.length, covered:covered.length, uncovered:uncovered.map(isoOf), used:dayDates.length};
 
+  out.hardScore = 0; out.softScore = 0;
   for(const v of out.violations){
-    if(v.cls===CLS.HARD) out.hard++; else if(v.cls===CLS.SOFT) out.soft++; else out.exceptions++;
+    if(v.cls===CLS.HARD){ out.hard++; out.hardScore += v.weight*v.units; } else if(v.cls===CLS.SOFT){ out.soft++; out.softScore += v.weight*v.units; } else out.exceptions++;
     out.byGroup[v.group] = out.byGroup[v.group] || {hard:0, soft:0, exceptions:0};
     out.byGroup[v.group][v.cls==='hard' ? 'hard' : (v.cls==='soft' ? 'soft' : 'exceptions')]++;
   }
+  out.hardScore = Math.round(out.hardScore*1000)/1000; out.softScore = Math.round(out.softScore*1000)/1000;
   out.valid = out.hard===0;
   out.vis = vis;
   return out;

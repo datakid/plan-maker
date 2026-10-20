@@ -110,7 +110,7 @@ function menu(anchor, items, opts){
 function sheet(opts){
   if(sheet.current) sheet.current.close(true);
   const scrim = el('div', {class:'scrim'});
-  const panel = el('aside', {class:'sheet', role:'dialog', 'aria-modal':'true'});
+  const panel = el('aside', {class:'sheet'+(opts.cls ? ' '+opts.cls : ''), role:'dialog', 'aria-modal':'true'});
   const head = el('header', {class:'sheet-head'});
   const body = el('div', {class:'sheet-body'});
   const foot = el('footer', {class:'sheet-foot'});
@@ -428,4 +428,52 @@ function PatternEditor(pt, onChange, opts){
   }
   paint();
   return wrap;
+}
+
+function LevelChip(lv, spec, onChange, opts){
+  opts = opts || {};
+  const rs = ruleSpec(spec);
+  let cur = normLv(lv, rs ? rs.def : null, rs);
+  const chip = el('button', {type:'button', class:'chip level', 'aria-haspopup':'dialog', 'aria-expanded':'false', 'aria-label':t('lvChipLabel')+(rs ? ' · '+t(rs.name) : '')});
+  function paint(){
+    const must = cur.level==='must';
+    chip.className = 'chip level '+(must ? 'must' : 'prefer')+(opts.sm ? ' sm' : '');
+    clear(chip);
+    if(must) chip.appendChild(el('span', {class:'lk', html:ICON.lock}));
+    chip.appendChild(document.createTextNode(must ? t('lvMust') : t('lvPrefer')+' · '+cur.w));
+    chip.dataset.level = cur.level;
+    chip.dataset.w = String(cur.w);
+  }
+  function commit(next){
+    cur = normLv(next, rs ? rs.def : null, rs);
+    paint();
+    onChange(cur);
+  }
+  chip.addEventListener('click', ()=>popover(chip, (close, refresh)=>{
+    const tierName = v=>t(v<=3 ? 'lvLight' : (v<=6 ? 'lvNormal' : 'lvStrong'));
+    const seg = Seg([{value:'must', label:t('lvMust')}, {value:'prefer', label:t('lvPrefer')}], cur.level, v=>{ commit({level:v, w:cur.w}); refresh(); }, {cls:'sm'});
+    if(rs && rs.preferOnly){
+      const mustBtn = seg.querySelector('button');
+      mustBtn.disabled = true;
+      mustBtn.title = t('lvPreferOnlyTip');
+    }
+    const slider = Slider(cur.w, v=>commit({level:cur.level, w:v}), {min:1, max:10, step:1, tiers:tierName, label:cur.level==='must' ? t('lvPriority') : t('lvWeight')});
+    const kids = [
+      el('div', {class:'pop-title'}, rs ? t(rs.name) : t('lvChipLabel')),
+      seg,
+      el('div', {class:'lv-lab'}, cur.level==='must' ? t('lvPriority') : t('lvWeight')),
+      slider
+    ];
+    if(opts.extra) kids.push(opts.extra(()=>refresh()));
+    if(rs) kids.push(el('div', {class:'hint lv-hint'}, (rs.preferOnly ? '' : t('lvMustMeans')+': ')+t(rs.must)));
+    return kids;
+  }, {width:280}));
+  paint();
+  chip.set = v=>{ cur = normLv(v, rs ? rs.def : null, rs); paint(); };
+  chip.get = ()=>cur;
+  return chip;
+}
+
+function AlwaysTag(nameKey){
+  return el('span', {class:'tag always', title:t('lvStructuralTip')+(nameKey ? ' · '+t(nameKey) : '')}, [el('span', {class:'lk', html:ICON.lock}), t('lvAlways')]);
 }

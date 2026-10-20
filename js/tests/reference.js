@@ -52,9 +52,11 @@ const Ref = {
         const cands = members[pl.id].filter(p=>!used.has(p.id) && (opts.skipAvail || personAvailable(p, ord)) && !(p.blocked||[]).includes(f.id));
         if(cands.length<n){ if(!opts.allowOpen) return; }
         const take = Math.min(n, cands.length);
-        for(const c of Ref.combos(cands, take)){
-          team[pl.id] = c.map(p=>p.id);
-          rec(pi+1, team);
+        for(let k=take; k>=(opts.allowOpen ? 0 : take); k--){
+          for(const c of Ref.combos(cands, k)){
+            team[pl.id] = c.map(p=>p.id);
+            rec(pi+1, team);
+          }
         }
         delete team[pl.id];
       };
@@ -91,6 +93,21 @@ const Ref = {
     };
     place(0, new Map(), {});
     return {found, leaves, truncated, valid};
+  },
+
+  best(opts){
+    opts = Object.assign({}, opts || {}, {all:true});
+    let best = null, leaves = 0;
+    const r = Ref.solve(plan=>{
+      leaves++;
+      if(opts.targets) plan.targets = opts.targets;
+      const st = makeState(plan);
+      const units = {};
+      for(const x of st.eval.violations) units[x.rule] = (units[x.rule] || 0)+x.units;
+      if(!best || st.hard<best.hard || (st.hard===best.hard && st.soft<best.soft)) best = {hard:st.hard, soft:st.soft, units};
+      return false;
+    }, opts);
+    return {best, leaves, truncated:r.truncated, error:r.error};
   },
 
   build(vs, staffed, win, days){

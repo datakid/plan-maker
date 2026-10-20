@@ -7,7 +7,6 @@ function t(key){
   if(typeof v==='function'){ const a = Array.prototype.slice.call(arguments, 1); return v.apply(null, a); }
   return v;
 }
-function fmtNum(n){ return String(n); }
 function wdName(i, style){ return t(style==='short' ? 'wdShort' : (style==='min' ? 'wdMin' : 'wdFull'))[i]; }
 function monthName(m){ return t('months')[m]; }
 function fmtDate(iso, style){
@@ -422,3 +421,126 @@ defs({
   requireEvery:['زيارة في كل يوم مؤهل','Require a visit on every eligible plan day'], requireEveryHint:['إذا فُعّل صار كل يوم عمل مؤهل في الخطة يحتاج زيارة مكتملة الفريق. افتراضيًا مُعطّل.','When on, every eligible workday in the plan needs a fully staffed visit. Off by default.']
 });
 defs({gAddFor_pattern:['نمط عمل/راحة','Work/rest pattern']});
+
+const RULE_TEXT = {
+  'day.cap':['حد الزيارات في اليوم','Weekday max visits','زيارة زائدة','1 visit over','لا يتجاوز العدد الحد في هذا اليوم أبدًا','The day never goes over its maximum'],
+  'day.min':['حد أدنى للزيارات في اليوم','Weekday min visits','زيارة ناقصة','1 visit short','يصل اليوم إلى الحد الأدنى دائمًا','The day always reaches its minimum'],
+  'day.kind':['نوع الجهات في اليوم','Weekday kind lean','زيارة من النوع الآخر','1 visit of the other kind','كل زيارات اليوم (أو واحدة على الأقل) من النوع المحدد','All visits that day (or at least one) are of the chosen kind'],
+  'day.band':['بُعد الجهات في اليوم','Weekday distance lean','زيارة في النطاق الآخر','1 visit in the other band','كل زيارات اليوم (أو واحدة على الأقل) في النطاق المحدد','All visits that day (or at least one) are in the chosen band'],
+  'day.category':['فئات مفضلة في اليوم','Weekday favoured categories','زيارة خارج الفئات','1 visit outside the categories','كل زيارات اليوم (أو واحدة على الأقل) من الفئات المحددة','All visits that day (or at least one) are in the chosen categories'],
+  'day.only':['فئات مسموحة في اليوم','Weekday allowed categories','زيارة خارج المسموح','1 visit outside','لا توجد زيارة خارج الفئات المسموحة','No visit falls outside the allowed categories'],
+  'fac.weekdays':['أيام زيارة الجهة','Facility weekdays','زيارة في يوم آخر','1 visit on another weekday','لا تُزار الجهة إلا في أيامها','The facility is only visited on its weekdays'],
+  'vol.week':['حد الزيارات في الأسبوع','Max visits per week','زيارة زائدة','1 visit over','لا يتجاوز الأسبوع الحد أبدًا','No week goes over the cap'],
+  'vol.everyDay':['زيارة في كل يوم متاح','A visit every eligible day','يوم فارغ','1 empty day','لا يبقى يوم متاح بلا زيارة','No eligible day stays empty'],
+  'vol.exact':['أعداد محددة للأساسية والمتعاقدة','Exact basic/contracted counts','زيارة عن الهدف','1 visit off target','تطابق الأعداد المحددة تمامًا','Counts match the targets exactly'],
+  'vol.share':['نسبة الأساسية','Basic share','زيارة عن الحصة','1 visit off the share','تطابق الحصة بعد التقريب تمامًا','The share matches after rounding exactly'],
+  'vol.quota':['حصص الفئات','Category quotas','زيارة ناقصة أو زائدة','1 visit short or over','تتطابق حصة كل فئة تمامًا','Every category quota is met exactly'],
+  'vol.gap':['الفاصل بين أيام النشاط','Gap between active days','زوج أيام متقاربة','1 pair too close','لا يوجد زوج أيام أقرب من الفاصل','No pair of active days is closer than the gap'],
+  'vol.activity':['نمط النشاط في الخطة','Plan activity pattern','مخالفة','1 breach','لا يخالف الخطة نمط النشاط','The plan never breaks the activity pattern'],
+  'fac.pinned':['جهة مثبّتة','Pinned facility','جهة مثبّتة غائبة','1 pinned facility missing','تُدرج كل جهة مثبّتة','Every pinned facility is included'],
+  'dist.pick':['اختيار الجهات حسب البُعد','Pick facilities by distance','زيارة في النطاق المعاكس','1 visit in the opposite band','لا زيارة في النطاق المعاكس','No visit in the opposite band'],
+  'p.blocked':['جهات ممنوعة على الفرد','Person blocked facilities','تكليف ممنوع','1 assignment','لا يُكلَّف الفرد بجهة ممنوعة عليه','The person is never assigned to a blocked facility'],
+  'p.avail':['توفر الفرد','Person availability','تكليف في يوم غير متاح','1 assignment on an off day','لا تكليف خارج نمط التوفر','No assignment outside the availability pattern'],
+  'p.maxRun':['أقصى أيام متتالية','Person max run','مخالفة','1 breach','لا يتجاوز الفرد الحد','The person never goes over the limit'],
+  'p.maxWeek':['أقصى زيارات أسبوعيًا','Person max per week','مخالفة','1 breach','لا يتجاوز الفرد الحد','The person never goes over the limit'],
+  'p.rest':['راحة الفرد بين الزيارات','Person rest pattern','مخالفة','1 breach','لا يُخالف الفرد نمط الراحة','The person never breaks the rest pattern'],
+  'p.quota':['عدد زيارات الفرد في الخطة','Person visits per plan','زيارة خارج المدى','1 visit outside the range','يقع عدد الزيارات داخل المدى','The visit count stays inside the range'],
+  'p.dist':['تفضيل بُعد الفرد','Person distance preference','تكليف في النطاق المعاكس','1 assignment in the opposite band','لا تكليف في النطاق المعاكس','No assignment in the opposite band'],
+  'fair.load':['عدالة التوزيع','Fairness by share','انحراف عن المتوقع','Σ max(0, |load − expected| − 0.5)','يقع حِمل كل فرد ضمن ±1 من المتوقع','Every person stays within ±1 of the expected load'],
+  'gender.rule':['قاعدة الجنس في الفريق','Team gender rule','فريق غير مطابق','1 invalid team','كل فريق ضمن النطاق مطابق','Every in-scope team is valid'],
+  'gender.pref.m':['تفضيل الذكور','Male preference','عدم تطابق','1 mismatch per dimension','لا يوجد عدم تطابق','No mismatch'],
+  'gender.pref.f':['تفضيل الإناث','Female preference','عدم تطابق','1 mismatch per dimension','لا يوجد عدم تطابق','No mismatch'],
+  'senior':['الأقدمية','Seniority','فريق بلا عضو مؤهل','1 team with no qualified member','في كل فريق عضو مؤهل متى أمكن','Every team has a qualified member when attainable'],
+  'pair':['قاعدة الثنائيات','Pair rule','زيارة تخالف القاعدة','1 visit breaking it','لا زيارة تخالف القاعدة','No visit breaks the rule'],
+  'rotate':['تدوير الأفراد','People rotation','تكرار على الجهة','Prefer: prior visits to the facility; Must: each assignment over N','لا يزيد عدد مرات التكرار على الحد','Repeats on a facility never exceed the limit'],
+  'dist.short':['رحلات قصيرة من المقر','Short trips','رحلة بعيدة','1 far-band trip','لا رحلات في النطاق البعيد','No far-band trips'],
+  'dist.balanceFar':['توازن الرحلات البعيدة','Balance far trips','فرق في الرحلات البعيدة','Σ max(0, far − minFar − 1)','لا يزيد الفرق على 1','The spread stays within 1'],
+  'goal.cover':['هدف التغطية','Cover goal','زيارة ناقصة','1 missing visit','يتحقق الهدف','The goal is met'],
+  'goal.atLeast':['هدف حد أدنى','At-least goal','زيارة ناقصة','1 missing visit','يتحقق الهدف','The goal is met'],
+  'goal.atMost':['هدف حد أقصى','At-most goal','زيارة زائدة','1 extra visit','يتحقق الهدف','The goal is met'],
+  'goal.maxGap':['هدف أقصى فاصل','Max-gap goal','جهة متأخرة','1 late facility','يتحقق الهدف','The goal is met'],
+  'goal.person':['هدف فرد','Person goal','زيارة مخالفة','1 offending visit','يتحقق الهدف','The goal is met'],
+  'goal.together':['هدف معًا','Together goal','زيارات دون النسبة','Visits below the % target','يتحقق الهدف','The goal is met'],
+  'goal.special':['زيارة خاصة','Special visit','زيارة غائبة','1 missing visit','تتحقق الزيارة','The visit happens'],
+  'goal.pattern':['نمط فرد','Person pattern goal','مخالفة','1 breach','يتحقق النمط','The pattern holds'],
+  'due.priority':['أولوية المتأخرة','Overdue priority','مكافأة','Reward by overdue percentile','هذه القاعدة تفضيل فقط لأنها ترتيب نسبي لا شرط يمكن إثباته','This is a ranking objective, not a condition that can hold or fail'],
+  'skill.match':['تطابق المهارة','Skill match','فرق مهارة','Skill gap','هذه القاعدة تفضيل فقط لأنها درجة تطابق وليست شرطًا','This is a degree of fit, not a condition that can hold or fail'],
+  'space.shape':['شكل التوزيع الزمني','Spacing shape','انحراف','Deviation from the shape','هذه القاعدة تفضيل فقط لأنها شكل مفضّل وليست شرطًا','This is a preferred shape, not a condition that can hold or fail'],
+  'p.spread':['تباعد أيام الفرد','Consecutive-day spread','أيام متتالية','Consecutive days','هذه القاعدة تفضيل فقط لأنها درجة تباعد وليست شرطًا','This is a degree of spread, not a condition that can hold or fail']
+};
+for(const id in RULE_TEXT){
+  const r = RULE_TEXT[id];
+  I18N.ar['rn_'+id] = r[0]; I18N.en['rn_'+id] = r[1];
+  I18N.ar['ru_'+id] = r[2]; I18N.en['ru_'+id] = r[3];
+  I18N.ar['rm_'+id] = r[4]; I18N.en['rm_'+id] = r[5];
+}
+defs2({
+  rs_calendar:['التقويم يحدد أيام العمل والإجازات','The calendar defines workdays and holidays'],
+  rs_daysOff:['الإجازات وأيام الغياب','Days off and leave'],
+  rs_retired:['الأفراد المتقاعدون أو غير النشطين','Retired or inactive people'],
+  rs_onePlace:['مكان واحد للفرد في اليوم','One place per person per day'],
+  rs_facilityOnce:['الجهة مرة واحدة في اليوم','The same facility at most once per day'],
+  rs_seats:['المقاعد من المجموعة الصحيحة ولا مقعد شاغر','Seats come from the right pool and none is left open'],
+  rs_perDay:['سعة اليوم العامة','The global per-day capacity'],
+  rs_fixedVisit:['تاريخ الزيارة الثابتة وجهتها','A fixed visit date and facility'],
+  lvMust:['إلزامي','Must'], lvPrefer:['مُفضّل','Prefer'], lvWeight:['الأهمية','Weight'], lvPriority:['الأولوية عند التعذّر','Priority if impossible'],
+  lvLight:['خفيف','Light'], lvNormal:['متوسط','Normal'], lvStrong:['قوي','Strong'], lvAlways:['ثابت','Always'],
+  lvMustMeans:['الإلزامي يعني','Must means'], lvPreferOnlyTip:['هذه القاعدة تفضيل فقط','This rule is prefer-only'], lvStructuralTip:['قاعدة ثابتة لا تُغيَّر','A fixed rule that cannot be changed'],
+  lvChipLabel:['مستوى القاعدة','Rule level']
+});
+
+defs2({
+  dMinDay:[(d,n,m)=>`${fmtDate(d,'short')}: ${n} من ${m} زيارة`, (d,n,m)=>`${fmtDate(d,'short')}: ${n} of ${m} visits`],
+  dDayKind:[(d,k,u)=>`${fmtDate(d,'short')}: ${u} خارج النوع (${k})`, (d,k,u)=>`${fmtDate(d,'short')}: ${u} outside the kind (${k})`],
+  dDayBand:[(d,k,u)=>`${fmtDate(d,'short')}: ${u} خارج النطاق (${k})`, (d,k,u)=>`${fmtDate(d,'short')}: ${u} outside the band (${k})`],
+  dDayCategory:[(d,k,u)=>`${fmtDate(d,'short')}: ${u} خارج الفئات (${k})`, (d,k,u)=>`${fmtDate(d,'short')}: ${u} outside the categories (${k})`],
+  dExactOff:[(nb,tb,nc,tc)=>`أساسية ${nb}/${tb} · متعاقدة ${nc}/${tc}`, (nb,tb,nc,tc)=>`Basic ${nb}/${tb} · Contracted ${nc}/${tc}`],
+  dShareOff:[(n,w)=>`أساسية ${n} والمطلوب ${w}`, (n,w)=>`Basic ${n}, wanted ${w}`],
+  dQuotaOff:[u=>`${u} زيارة عن حصص الفئات`, u=>`${u} visits off the category quotas`],
+  dPinnedMissing:[n=>`${n} مثبّتة وغير مُدرجة`, n=>`${n} is pinned but not included`],
+  dDistPick:[(f,d)=>`${f} · ${fmtDate(d,'short')}: في النطاق المعاكس`, (f,d)=>`${f} · ${fmtDate(d,'short')}: in the opposite band`],
+  dPersonDist:[(p,f)=>`${p} ← ${f}: يخالف تفضيل البُعد`, (p,f)=>`${p} → ${f}: against the distance preference`],
+  dGenderPref:[(p,f)=>`${p} ← ${f}: يخالف التفضيل`, (p,f)=>`${p} → ${f}: against the preference`],
+  dFairLoad:[(pl,u)=>`انحراف العدالة ${u}`, (pl,u)=>`Fairness deviation ${u}`],
+  dRotate:[(p,f)=>`${p} زار ${f} من قبل`, (p,f)=>`${p} has visited ${f} before`],
+  dShortTrip:[(p,f)=>`${p} ← ${f}: رحلة بعيدة`, (p,f)=>`${p} → ${f}: a far trip`],
+  dBalanceFar:[(pl,u)=>`فرق الرحلات البعيدة ${u}`, (pl,u)=>`Far-trip spread ${u}`],
+  cPrefs:['التفضيلات','Preferences']
+});
+
+defs2({
+  xDayKindCapacity:[(k,n,c)=>`العدد المحدد للنوع ${k} هو ${n} لكن الأيام المسموحة لا تتسع إلا لـ ${c} بسبب قاعدة نوع اليوم`, (k,n,c)=>`The exact ${k} count is ${n} but the days that still allow it hold only ${c}, because of the day kind rule`],
+  xExactOverFacilities:[(k,n,c)=>`العدد المحدد للنوع ${k} هو ${n} وعدد الجهات المتاحة ${c}`, (k,n,c)=>`The exact ${k} count is ${n} but only ${c} facilities exist`],
+  xDayRuleNone:[(d,r)=>`${d}: قاعدة «${r}» إلزامية ولا توجد زيارة ممكنة تحققها`, (d,r)=>`${d}: the Must rule "${r}" cannot be met by any possible visit`]
+});
+
+defs2({lvHowAll:['كل زيارات اليوم','Every visit that day'], lvHowOne:['زيارة واحدة على الأقل','At least one visit'], lvHowMany:['ينطبق على','Applies to'], rn_structural:['قواعد ثابتة','Fixed rules'], rn_dueNote:['أولوية الجهات المتأخرة','Prioritise overdue facilities']});
+
+defs2({dSpread:[(p,u)=>`${p}: ${u} أيام متتالية`, (p,u)=>`${p}: ${u} consecutive days`], rn_spreadHint:['توزيع أيام الأفراد بلا تتابع','Spread each person across non-consecutive days']});
+
+defs2({
+  ptSearch:['بحث عن فرد','Search people'], ptShowRetired:['عرض المتقاعدين','Show retired'], ptColumns:['الأعمدة','Columns'],
+  ptgBasic:['الأساسي','Basics'], ptgSkills:['المهارة','Skills'], ptgPlan:['الحِمل','Load'], ptgAvail:['التوفر والغياب','Availability and leave'], ptgRules:['الممنوعات والقواعد','Blocked and rules'], ptgLimits:['الحدود والتفضيلات','Limits and preferences'],
+  ptName:['الاسم','Name'], ptPool:['المجموعة','Pool'], ptGender:['الجنس','Gender'], ptActive:['نشط','Active'], ptSkillB:['مهارة أساسية','Basic skill'], ptSkillC:['مهارة متعاقدة','Contracted skill'],
+  ptPerPlan:['في الخطة','Per plan'], ptShare:['النسبة','Share'], ptMaxRun:['أقصى متتالية','Max run'], ptMaxWeek:['أقصى/أسبوع','Max/week'], ptDist:['البُعد','Distance'],
+  ptAvail:['التوفر','Availability'], ptOff:['الغياب','Days off'], ptBlocked:['الممنوع','Blocked'], ptRules:['القواعد','Rules'], ptLoad:['الحِمل','Load'],
+  ptSeats:[(b,c)=>`${b} أساسية · ${c} متعاقدة`, (b,c)=>`${b} basic · ${c} contracted`],
+  ptDetails:['فتح التفاصيل','Open details'], ptDuplicate:['تكرار','Duplicate'], ptPrev:['السابق','Previous'], ptNext:['التالي','Next'], ptClosePanel:['إغلاق اللوحة','Close panel'],
+  ptSelected:[n=>`${n} محدد`, n=>`${n} selected`], ptUndo:['تراجع','Undo'], ptBulkDone:[n=>`تم تعديل ${n}`, n=>`Edited ${n}`],
+  ptSetPool:['المجموعة','Set pool'], ptSetGender:['الجنس','Set gender'], ptSetSkill:['المهارة','Set skill'], ptSetPerPlan:['في الخطة','Set per plan'], ptSetShare:['النسبة','Set share'], ptSetMaxRun:['أقصى متتالية','Set max run'], ptSetMaxWeek:['أقصى/أسبوع','Set max/week'], ptSetDist:['البُعد','Set distance'], ptSetLevel:['مستوى قاعدة','Set level'], ptAddOff:['إضافة غياب','Add days off'], ptAddBlocked:['إضافة ممنوع','Add blocked'], ptApply:['تطبيق','Apply'],
+  ptFrom:['من','From'], ptTo:['إلى','To'], ptNoLimit:['بلا حد','No limit'], ptNoMatch:['لا نتائج','No matches'], ptCopySuffix:[' (نسخة)',' (copy)'], ptActiveOn:['نشط','Active'], ptActiveOff:['غير نشط','Inactive']
+});
+
+defs2({
+  gFilter_all:['الكل','All'], gFilter_fac:['الجهات','Facility'], gFilter_people:['الأفراد','People'], gFilter_must:['إلزامي','Must'], gFilter_prefer:['مُفضّل','Prefer'], gFilter_off:['متوقف','Off'], gFilter_failing:['غير محقق','Failing'],
+  gMoveUp:['لأعلى','Move up'], gMoveDown:['لأسفل','Move down'], gDeleted:['حُذف الهدف','Goal deleted'],
+  gfTimes:['المرات','Times'], gfN:['العدد','Count'], gfDays:['الأيام','Days'], gfPct:['النسبة','Percent']
+});
+
+defs2({
+  wNotProbed:['لم يُفحص ضمن الميزانية الزمنية','Not probed within the time budget'],
+  wNoFix:['لا يوجد تغيير واحد يعالج هذا البند','No single change fixes this item'],
+  wFixFree:['يمكن معالجته بتغيير واحد دون كسر قاعدة أخرى','A single change fixes it without breaking another rule'],
+  wBreaks:[r=>`معالجته تكسر: ${r}`, r=>`Fixing it would break: ${r}`],
+  wWhyTitle:['لماذا لم يتحقق','Why this is unmet'], rcTitle:['مساهمة القواعد','Rule contributions'], rcUnits:['وحدات','units'], rcWeight:['الأهمية','weight'], rcScore:['الدرجة','score'], rcDue:['أولوية المتأخرة','Overdue priority']
+});

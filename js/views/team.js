@@ -1,3 +1,7 @@
+function pChip(p, key, rule, save){
+  return LevelChip(personLvOf(p)[key], rule, v=>{ p.lv = Object.assign(personLvOf(p), {[key]:v}); save(); }, {sm:true});
+}
+
 function availSummary(p){
   const a = p.avail||{mode:'plan'};
   if(a.mode==='weekdays') return [6,0,1,2,3,4,5].filter(d=>(a.weekdays||[]).includes(d)).map(d=>wdName(d,'short')).join(' · ') || '—';
@@ -21,61 +25,120 @@ function analyzeLoadGuess(p){
   return seats / Math.max(1, activePeople().filter(x=>x.pool===p.pool).length);
 }
 
-function renderTeam(root){
-  root.appendChild(Mount(node=>{
-    const out = [];
-    const card = el('section', {class:'card', id:'team-card'});
-    card.appendChild(el('div', {class:'card-head'}, [el('h2', null, t('tTitle')), el('span', {class:'sub'}, t('teamActive', activePeople().length)), el('div', {class:'spacer'}),
-      el('button', {type:'button', class:'btn primary sm', onclick:()=>{ const p = freshPerson({name:'', pool:S().pools[0].id, origin:locIdFor('دمنهور')}); openPerson(null, p, ()=>node.render()); }}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('tAdd')])]));
-    const counts = App.data.history.counts||{};
-    for(const pl of S().pools){
-      const members = teamPeople().filter(p=>p.pool===pl.id);
-      card.appendChild(el('div', {class:'pool-block-h'}, [el('span', {class:'dot', style:{background:poolIndex(pl.id)===0?'var(--primary)':(poolIndex(pl.id)===1?'var(--ink-3)':'var(--contracted)')}}), el('b', null, poolName(pl)), el('span', null, members.filter(p=>p.active!==false).length+' · '+t('tSeatsBasic')+' '+seatsFor(pl,'basic')+' · '+t('tSeatsContracted')+' '+seatsFor(pl,'contracted'))]));
-      const grid = el('div', {class:'people-grid'});
-      for(const p of members) grid.appendChild(personCard(p, counts, ()=>node.render()));
-      if(!members.length) grid.appendChild(el('div', {class:'empty'}, '—'));
-      card.appendChild(grid);
-    }
-    const retired = App.data.people.filter(p=>p.retired);
-    if(retired.length){
-      const tog = el('button', {type:'button', class:'btn ghost sm', style:{margin:'0 16px 14px'}, onclick:()=>{ App.ui.teamShowRetired = !App.ui.teamShowRetired; node.render(); }}, [el('span', {html:ICON.down, style:{display:'flex', transform:App.ui.teamShowRetired?'rotate(180deg)':''}}), t('tShowRetired', retired.length)]);
-      card.appendChild(tog);
-      if(App.ui.teamShowRetired){ const g = el('div', {class:'people-grid', style:{paddingTop:'0'}}); for(const p of retired) g.appendChild(personCard(p, counts, ()=>node.render())); card.appendChild(g); }
-    }
-    out.push(card);
-    out.push(renderPoolsCard(()=>node.render()));
-    return out;
-  }));
+function personParts(p, api, saveP){
+  const R = ()=>api.render();
+  const basics = el('section', {class:'sheet-sec stack', style:{gap:'12px'}}, [
+    el('div', {class:'grid-2'}, [
+      el('div', {class:'field'}, [el('label', null, t('pName')), el('input', {class:'input', value:p.name, placeholder:t('pNewName'), onchange:e=>{ p.name = e.target.value.trim(); saveP(); R(); }})]),
+      el('div', {class:'field'}, [el('label', null, t('pTitle')), el('input', {class:'input', value:p.title||'', onchange:e=>{ p.title = e.target.value.trim()||null; saveP(); }})])
+    ]),
+    el('div', {class:'grid-2'}, [
+      el('div', {class:'field'}, [el('label', null, t('pPool')), Select(S().pools.map(pl=>({value:pl.id, label:poolName(pl)})), p.pool, v=>{ p.pool = v; saveP(); R(); })]),
+      el('div', {class:'field'}, [el('label', null, t('pGender')), Seg([{value:'m',label:t('pMale')},{value:'f',label:t('pFemale')},{value:'',label:t('pUnset')}], p.gender||'', v=>{ p.gender = v||null; saveP(); }, {cls:'block'})])
+    ]),
+    setting(t('pActive'), null, Switch(p.active!==false, v=>{ p.active = v; saveP(); }))
+  ]);
+  const skill = el('section', {class:'sheet-sec'}, [
+    el('div', {class:'section-title'}, t('pSkill')),
+    el('div', {class:'hint', style:{marginBottom:'6px'}}, t('pSkillHint')),
+    setting(t('kBasic'), null, null, {full:Slider(p.skill.basic, v=>{ p.skill.basic = v; saveP(); }, {min:0, max:100, step:5, tiers:skillTier})}),
+    setting(t('kContracted'), null, null, {full:Slider(p.skill.contracted, v=>{ p.skill.contracted = v; saveP(); }, {min:0, max:100, step:5, tiers:skillTier})})
+  ]);
+  const bc = p.skill.byCategory||{};
+  for(const cat of Object.keys(bc)){
+    skill.appendChild(setting(cat, null, el('button', {type:'button', class:'icon-btn sm', html:ICON.x, 'aria-label':t('del'), onclick:()=>{ delete bc[cat]; saveP(); R(); }}), {full:Slider(bc[cat], v=>{ bc[cat] = v; saveP(); }, {min:0, max:100, step:5, tiers:skillTier})}));
+  }
+  const addCat = el('button', {type:'button', class:'btn sm ghost', style:{marginTop:'6px'}}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('pSkillCat')]);
+  addCat.addEventListener('click', ()=>menu(addCat, App.data.categories.filter(c=>c.kind!=='excluded' && bc[c.name]==null).map(c=>({label:c.name, meta:kindLabel(c.kind), onClick:()=>{ p.skill.byCategory = Object.assign(bc, {[c.name]:skillOf(p, c.kind)}); saveP(); R(); }}))));
+  skill.appendChild(addCat);
+
+  const load = el('section', {class:'sheet-sec'}, [el('div', {class:'section-title'}, t('pLoad'))]);
+  const q = p.quota;
+  const qMode = q.min==null && q.max==null ? 'auto' : (q.min!=null && q.min===q.max ? 'exact' : 'range');
+  load.appendChild(setting(t('pPerPlan'), t('pPerPlanHint'), [pChip(p, 'quota', 'p.quota', saveP), Seg([{value:'auto', label:t('pQAuto')},{value:'exact', label:t('pQExact')},{value:'range', label:t('pQRange')}], qMode, v=>{
+    const cur = Math.round(analyzeLoadGuess(p));
+    if(v==='auto') p.quota = {min:null, max:null};
+    else if(v==='exact') p.quota = {min:q.min!=null ? q.min : cur, max:q.min!=null ? q.min : cur};
+    else p.quota = {min:q.min, max:q.max!=null ? q.max : cur+2};
+    saveP(); R();
+  }, {cls:'sm'})], {full: qMode==='auto' ? null : qMode==='exact'
+    ? Stepper(q.min, v=>{ p.quota = {min:v, max:v}; saveP(); }, {min:0, max:99, unit:t('gPerPlan')})
+    : el('div', {class:'grid-2'}, [
+        el('div', {class:'field'}, [el('label', null, t('pQMin')), Stepper(q.min, v=>{ p.quota = normalizeQuota({min:v, max:p.quota.max}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})]),
+        el('div', {class:'field'}, [el('label', null, t('pQMax')), Stepper(q.max, v=>{ p.quota = normalizeQuota({min:p.quota.min, max:v}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})])
+      ])}));
+  if(qMode!=='exact') load.appendChild(setting(t('pShare'), t('pShareHint'), null, {full:Slider(Math.round((p.share==null?1:p.share)*100), v=>{ p.share = v/100; saveP(); }, {min:0, max:200, step:10, format:v=>v+'%'})}));
+  const myGoals = S().goals.filter(g=>(g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)) || ((g.type==='special' || g.type==='pattern') && g.people.includes(p.id)));
+  const gBox = el('div', {class:'stack', style:{gap:'6px', marginTop:'10px'}});
+  for(const g of myGoals) gBox.appendChild(el('div', {class:'goal-row'+(g.on?'':' off')}, [el('span', {class:'goal-ic', html:ICON.target}), el('div', {class:'gl-main', style:{cursor:'pointer'}, onclick:()=>{ closePop(); openGoals(g.id); }}, [el('b', null, goalTitle(g)), el('span', null, goalTypeLabel(g.type))]), LevelChip(g.lv, goalRuleId(g), v=>{ g.lv = v; commit('settings'); }, {sm:true})]));
+  const addG = type=>el('button', {type:'button', class:'btn sm ghost'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('gAddFor_'+type)]);
+  const b1 = addG('person'), b2 = addG('together'), b3 = addG('special'), b4 = addG('pattern');
+  const make = (type, fill)=>{ if(!App.data.people.includes(p)) { toast(t('pNewName')); return; } const g = newGoal(type); fill(g); S().goals.push(g); commit('settings'); api.close(); openGoals(g.id); };
+  b1.addEventListener('click', ()=>make('person', g=>{ g.people = [p.id]; }));
+  b2.addEventListener('click', ()=>make('together', g=>{ g.a = p.id; }));
+  b3.addEventListener('click', ()=>make('special', g=>{ g.people = [p.id]; g.fill = true; }));
+  b4.addEventListener('click', ()=>make('pattern', g=>{ g.people = [p.id]; }));
+  gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b1, b2, b3, b4]));
+  const goalsSec = el('div', {class:'stack', style:{gap:'6px'}}, [el('div', {class:'section-title', style:{marginTop:'14px'}}, t('pGoals')), gBox]);
+
+  const a = p.avail;
+  const availSec = el('section', {class:'sheet-sec'});
+  availSec.appendChild(el('div', {class:'section-title'}, [t('pAvail'), pChip(p, 'avail', 'p.avail', saveP)]));
+  availSec.appendChild(Seg([{value:'plan',label:t('pAvailPlan')},{value:'weekdays',label:t('pAvailWeekdays')},{value:'cycle',label:t('pAvailCycle')}], a.mode, v=>{ a.mode = v; if(v==='weekdays' && !(a.weekdays&&a.weekdays.length)) a.weekdays = S().calendar.workdays.slice(); saveP(); R(); }, {cls:'block'}));
+  if(a.mode==='weekdays') availSec.appendChild(el('div', {style:{marginTop:'12px'}}, DaySet(a.weekdays, v=>{ a.weekdays = v; saveP(); R(); })));
+  if(a.mode==='cycle'){
+    availSec.appendChild(el('div', {class:'grid-3', style:{marginTop:'12px'}}, [
+      el('div', {class:'field'}, [el('label', null, t('pCycleOn')), Stepper(a.cycle.on, v=>{ a.cycle.on = v; saveP(); R(); }, {min:1, max:14})]),
+      el('div', {class:'field'}, [el('label', null, t('pCycleOff')), Stepper(a.cycle.off, v=>{ a.cycle.off = v; saveP(); R(); }, {min:0, max:14})]),
+      el('div', {class:'field'}, [el('label', null, t('pCycleAnchor')), DateInput(a.cycle.anchor, v=>{ a.cycle.anchor = v; saveP(); R(); })])
+    ]));
+  }
+  availSec.appendChild(el('div', {style:{marginTop:'12px'}}, [el('div', {class:'muted', style:{fontSize:'11.5px', marginBottom:'4px'}}, t('pCyclePreview')), weekStrip(p, 14)]));
+  availSec.appendChild(el('div', {class:'grid-2', style:{marginTop:'14px'}}, [
+    el('div', {class:'field'}, [el('label', null, [t('pMaxRun'), pChip(p, 'maxRun', 'p.maxRun', saveP)]), Stepper(p.maxRun, v=>{ p.maxRun = v; saveP(); }, {min:1, max:14, nullable:true, placeholder:t('noLimit')})]),
+    el('div', {class:'field'}, [el('label', null, [t('pMaxWeek'), pChip(p, 'maxWeek', 'p.maxWeek', saveP)]), Stepper(p.maxPerWeek, v=>{ p.maxPerWeek = v; saveP(); }, {min:1, max:14, nullable:true, placeholder:t('noLimit')})])
+  ]));
+
+  const pat = p.pattern = p.pattern || {mode:'inherit', minRest:0};
+  const prSec = el('section', {class:'sheet-sec stack', style:{gap:'8px'}});
+  prSec.appendChild(el('div', {class:'section-title'}, [t('prTitle'), pChip(p, 'rest', 'p.rest', saveP)]));
+  prSec.appendChild(el('div', {class:'hint'}, t('prHint')));
+  prSec.appendChild(Seg([{value:'inherit', label:t('prInherit')}, {value:'custom', label:t('prCustom')}, {value:'none', label:t('prNone')}], pat.mode, v=>{ pat.mode = v; if(v==='custom' && !(pat.minRest>0)) pat.minRest = 1; saveP(); R(); }, {cls:'block'}));
+  if(pat.mode==='custom'){
+    prSec.appendChild(el('div', {class:'chips'}, [
+      el('button', {type:'button', class:'chip'+(pat.minRest===1 ? ' on' : ''), onclick:()=>{ pat.minRest = 1; saveP(); R(); }}, t('patPresetNoRun'))
+    ]));
+    prSec.appendChild(setting(t('patMinRest'), null, Stepper(pat.minRest||0, v=>{ pat.minRest = v; saveP(); R(); }, {min:0, max:60, sm:true, unit:t('daysU')})));
+  }
+  const w = planWindow();
+  if(!w.error){
+    const eligible = w.days.filter(o=>(normalWorkday(o) || isOverrideDate(isoOf(o))) && personAvailable(p, o)).length;
+    const assigned = App.plan ? App.plan.visits.filter(v=>visitTeamIds(v).includes(p.id)).length : 0;
+    prSec.appendChild(el('div', {class:'muted', style:{fontSize:'12px'}}, t('prPreview', eligible, assigned)));
+  }
+
+  const offSec = el('section', {class:'sheet-sec'});
+  offSec.appendChild(el('div', {class:'row'}, [el('div', {class:'section-title', style:{margin:'0'}}, t('pOff')), el('div', {class:'spacer'}), (p.off||[]).length ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ p.off = []; saveP(); R(); }}, t('pOffClear')) : null]));
+  offSec.appendChild(el('div', {class:'hint', style:{margin:'4px 0 10px'}}, t('pOffHint')));
+  const cal = MiniCal({isSelected:iso=>isOff(p, iso), isWork:iso=>personPatternOn(p, ordOf(iso)), onPick:iso=>{ p.off = isOff(p, iso) ? removeOffDay(p.off, iso) : normalizeOff((p.off||[]).concat([{from:iso, to:iso}])); saveP(); paintSpans(); }, onRange:(x,y)=>{ p.off = normalizeOff((p.off||[]).concat([{from:x, to:y}])); saveP(); paintSpans(); }});
+  const spans = el('div', {class:'chips', style:{marginTop:'10px'}});
+  function paintSpans(){ clear(spans); for(const r of (p.off||[])) spans.appendChild(el('span', {class:'chip'}, [r.from===r.to ? fmtDate(r.from,'wdm') : fmtDate(r.from,'dm')+' – '+fmtDate(r.to,'dm'), el('button', {type:'button', class:'x', html:ICON.x, onclick:()=>{ p.off = p.off.filter(x=>x!==r); saveP(); paintSpans(); cal.repaint(); }})])); }
+  paintSpans();
+  offSec.appendChild(cal); offSec.appendChild(spans);
+
+  const origin = el('section', {class:'sheet-sec'}, [
+    el('div', {class:'section-title'}, t('rDistance')),
+    setting(t('pOrigin'), null, Select(App.data.locations.slice().sort((a,b)=>a.km-b.km).map(l=>({value:l.id, label:l.name+' · '+l.km+' '+t('km')})), p.origin||'', v=>{ p.origin = v; saveP(); })),
+    setting(t('pDistPref'), null, [Seg([{value:'near',label:t('pDistNear')},{value:'',label:t('pDistAny')},{value:'far',label:t('pDistFar')}], p.distPref||'', v=>{ p.distPref = v||null; saveP(); }, {cls:'sm'}), pChip(p, 'dist', 'p.dist', saveP)]),
+    el('div', {class:'field', style:{paddingTop:'10px'}}, [el('label', null, [t('pBlocked'), pChip(p, 'blocked', 'p.blocked', saveP)]), FacilityPicker(p.blocked, ids=>{ p.blocked = ids; saveP(); }, {filter:f=>{ const k = facilityKind(f); return k==='basic'||k==='contracted'; }})])
+  ]);
+  return {basics, skill, load, goalsSec, availSec, prSec, offSec, origin};
 }
 
-function personCard(p, counts, rerender){
-  const sb = p.skill.basic, sc = p.skill.contracted;
-  const tags = [];
-  const ql = quotaLabel(p.quota);
-  if(ql) tags.push(el('span', {class:'tag ok'}, ql+' '+t('pPerPlanShort')));
-  if(p.share!=null && p.share!==1 && !(p.quota && p.quota.min!=null && p.quota.min===p.quota.max)) tags.push(el('span', {class:'tag'}, t('pShare')+' '+Math.round(p.share*100)+'%'));
-  if(p.maxRun) tags.push(el('span', {class:'tag'}, '≤'+p.maxRun+' '+(App.ui.lang==='ar'?'متتالية':'in a row')));
-  if(p.maxPerWeek) tags.push(el('span', {class:'tag'}, '≤'+p.maxPerWeek+'/'+(App.ui.lang==='ar'?'أسبوع':'wk')));
-  if(p.distPref) tags.push(el('span', {class:'tag '+p.distPref}, t(p.distPref==='near'?'pDistNear':'pDistFar')));
-  if((p.blocked||[]).length) tags.push(el('span', {class:'tag danger'}, (p.blocked||[]).length+' '+t('rBlocked')));
-  const pg = S().goals.filter(g=>g.on && ((g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)))).length;
-  if(pg) tags.push(el('span', {class:'tag', html:ICON.target+' '+pg}));
-  const upcomingOff = (p.off||[]).filter(r=>r.to>=todayISO()).length;
-  if(upcomingOff) tags.push(el('span', {class:'tag warn'}, upcomingOff+' '+t('pOff')));
-  const origin = locationById(p.origin);
-  return el('button', {type:'button', class:'pcard'+(p.active===false||p.retired?' inactive':''), onclick:()=>openPerson(p.id, null, rerender)}, [
-    el('div', {class:'pcard-head'}, [
-      el('span', {class:'avatar'+(p.gender==='f'?' f':'')}, (p.name||'?').slice(0,1)),
-      el('div', {style:{flex:'1', minWidth:'0'}}, [el('b', null, p.name||'—'), el('span', null, [p.gender ? t(p.gender==='m'?'pMale':'pFemale') : t('pUnset'), origin ? ' · '+origin.name : '', ' · '+t('pStats', counts[p.id]||0)].join(''))]),
-      p.active===false ? el('span', {class:'tag'}, t('off')) : null
-    ]),
-    el('div', {class:'skill-mini'}, [
-      el('span', null, t('kBasic')), el('i', {style:{'--p':sb+'%'}}), el('span', {class:'num'}, String(sb)),
-      el('span', null, t('kContracted')), el('i', {class:'c', style:{'--p':sc+'%'}}), el('span', {class:'num'}, String(sc))
-    ]),
-    el('div', null, [el('div', {class:'muted', style:{fontSize:'11.5px', marginBottom:'4px'}}, t('pAvail')+': '+availSummary(p)), weekStrip(p, 14)]),
-    tags.length ? el('div', {class:'chips', style:{gap:'4px'}}, tags) : null
-  ]);
+function personEditor(p, api, saveP){
+  const x = personParts(p, api, saveP);
+  x.load.appendChild(x.goalsSec);
+  return [x.basics, x.skill, x.load, x.availSec, x.prSec, x.offSec, x.origin];
 }
 
 function openPerson(id, draft, rerender){
@@ -86,116 +149,7 @@ function openPerson(id, draft, rerender){
   sheet({
     title:()=>p.name || t('tAdd'),
     sub:()=>[el('span', {class:'tag'}, poolName(poolById(p.pool))), p.retired ? el('span', {class:'tag warn'}, t('tRetired')) : null],
-    body:api=>{
-      const R = ()=>api.render();
-      const basics = el('section', {class:'sheet-sec stack', style:{gap:'12px'}}, [
-        el('div', {class:'grid-2'}, [
-          el('div', {class:'field'}, [el('label', null, t('pName')), el('input', {class:'input', value:p.name, placeholder:t('pNewName'), onchange:e=>{ p.name = e.target.value.trim(); saveP(); R(); }})]),
-          el('div', {class:'field'}, [el('label', null, t('pTitle')), el('input', {class:'input', value:p.title||'', onchange:e=>{ p.title = e.target.value.trim()||null; saveP(); }})])
-        ]),
-        el('div', {class:'grid-2'}, [
-          el('div', {class:'field'}, [el('label', null, t('pPool')), Select(S().pools.map(pl=>({value:pl.id, label:poolName(pl)})), p.pool, v=>{ p.pool = v; saveP(); R(); })]),
-          el('div', {class:'field'}, [el('label', null, t('pGender')), Seg([{value:'m',label:t('pMale')},{value:'f',label:t('pFemale')},{value:'',label:t('pUnset')}], p.gender||'', v=>{ p.gender = v||null; saveP(); }, {cls:'block'})])
-        ]),
-        setting(t('pActive'), null, Switch(p.active!==false, v=>{ p.active = v; saveP(); }))
-      ]);
-      const skill = el('section', {class:'sheet-sec'}, [
-        el('div', {class:'section-title'}, t('pSkill')),
-        el('div', {class:'hint', style:{marginBottom:'6px'}}, t('pSkillHint')),
-        setting(t('kBasic'), null, null, {full:Slider(p.skill.basic, v=>{ p.skill.basic = v; saveP(); }, {min:0, max:100, step:5, tiers:skillTier})}),
-        setting(t('kContracted'), null, null, {full:Slider(p.skill.contracted, v=>{ p.skill.contracted = v; saveP(); }, {min:0, max:100, step:5, tiers:skillTier})})
-      ]);
-      const bc = p.skill.byCategory||{};
-      for(const cat of Object.keys(bc)){
-        skill.appendChild(setting(cat, null, el('button', {type:'button', class:'icon-btn sm', html:ICON.x, 'aria-label':t('del'), onclick:()=>{ delete bc[cat]; saveP(); R(); }}), {full:Slider(bc[cat], v=>{ bc[cat] = v; saveP(); }, {min:0, max:100, step:5, tiers:skillTier})}));
-      }
-      const addCat = el('button', {type:'button', class:'btn sm ghost', style:{marginTop:'6px'}}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('pSkillCat')]);
-      addCat.addEventListener('click', ()=>menu(addCat, App.data.categories.filter(c=>c.kind!=='excluded' && bc[c.name]==null).map(c=>({label:c.name, meta:kindLabel(c.kind), onClick:()=>{ p.skill.byCategory = Object.assign(bc, {[c.name]:skillOf(p, c.kind)}); saveP(); R(); }}))));
-      skill.appendChild(addCat);
-
-      const load = el('section', {class:'sheet-sec'}, [el('div', {class:'section-title'}, t('pLoad'))]);
-      const q = p.quota;
-      const qMode = q.min==null && q.max==null ? 'auto' : (q.min!=null && q.min===q.max ? 'exact' : 'range');
-      load.appendChild(setting(t('pPerPlan'), t('pPerPlanHint'), Seg([{value:'auto', label:t('pQAuto')},{value:'exact', label:t('pQExact')},{value:'range', label:t('pQRange')}], qMode, v=>{
-        const cur = Math.round(analyzeLoadGuess(p));
-        if(v==='auto') p.quota = {min:null, max:null};
-        else if(v==='exact') p.quota = {min:q.min!=null ? q.min : cur, max:q.min!=null ? q.min : cur};
-        else p.quota = {min:q.min, max:q.max!=null ? q.max : cur+2};
-        saveP(); R();
-      }, {cls:'sm'}), {full: qMode==='auto' ? null : qMode==='exact'
-        ? Stepper(q.min, v=>{ p.quota = {min:v, max:v}; saveP(); }, {min:0, max:99, unit:t('gPerPlan')})
-        : el('div', {class:'grid-2'}, [
-            el('div', {class:'field'}, [el('label', null, t('pQMin')), Stepper(q.min, v=>{ p.quota = normalizeQuota({min:v, max:p.quota.max}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})]),
-            el('div', {class:'field'}, [el('label', null, t('pQMax')), Stepper(q.max, v=>{ p.quota = normalizeQuota({min:p.quota.min, max:v}); saveP(); R(); }, {min:0, max:99, nullable:true, placeholder:t('noLimit')})])
-          ])}));
-      if(qMode!=='exact') load.appendChild(setting(t('pShare'), t('pShareHint'), null, {full:Slider(Math.round((p.share==null?1:p.share)*100), v=>{ p.share = v/100; saveP(); }, {min:0, max:200, step:10, format:v=>v+'%'})}));
-      const myGoals = S().goals.filter(g=>(g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)) || ((g.type==='special' || g.type==='pattern') && g.people.includes(p.id)));
-      const gBox = el('div', {class:'stack', style:{gap:'6px', marginTop:'10px'}});
-      for(const g of myGoals) gBox.appendChild(el('div', {class:'goal-row'+(g.on?'':' off')}, [el('span', {class:'goal-ic', html:ICON.target}), el('div', {class:'gl-main'}, [el('b', null, goalTitle(g)), el('span', null, [el('span', {class:'tag '+(g.strict==='must'?'warn':'')}, t(g.strict==='must'?'gMust':'gTry')), ' '+goalTypeLabel(g.type)])])]));
-      const addG = type=>el('button', {type:'button', class:'btn sm ghost'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('gAddFor_'+type)]);
-      const b1 = addG('person'), b2 = addG('together'), b3 = addG('special'), b4 = addG('pattern');
-      const make = (type, fill)=>{ if(!App.data.people.includes(p)) { toast(t('pNewName')); return; } const g = newGoal(type); fill(g); S().goals.push(g); commit('settings'); api.close(); openGoals(g.id); };
-      b1.addEventListener('click', ()=>make('person', g=>{ g.people = [p.id]; }));
-      b2.addEventListener('click', ()=>make('together', g=>{ g.a = p.id; }));
-      b3.addEventListener('click', ()=>make('special', g=>{ g.people = [p.id]; g.fill = true; }));
-      b4.addEventListener('click', ()=>make('pattern', g=>{ g.people = [p.id]; }));
-      gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b1, b2, b3, b4]));
-      load.appendChild(el('div', {class:'section-title', style:{marginTop:'14px'}}, t('pGoals')));
-      load.appendChild(gBox);
-
-      const a = p.avail;
-      const availSec = el('section', {class:'sheet-sec'});
-      availSec.appendChild(el('div', {class:'section-title'}, t('pAvail')));
-      availSec.appendChild(Seg([{value:'plan',label:t('pAvailPlan')},{value:'weekdays',label:t('pAvailWeekdays')},{value:'cycle',label:t('pAvailCycle')}], a.mode, v=>{ a.mode = v; if(v==='weekdays' && !(a.weekdays&&a.weekdays.length)) a.weekdays = S().calendar.workdays.slice(); saveP(); R(); }, {cls:'block'}));
-      if(a.mode==='weekdays') availSec.appendChild(el('div', {style:{marginTop:'12px'}}, DaySet(a.weekdays, v=>{ a.weekdays = v; saveP(); R(); })));
-      if(a.mode==='cycle'){
-        availSec.appendChild(el('div', {class:'grid-3', style:{marginTop:'12px'}}, [
-          el('div', {class:'field'}, [el('label', null, t('pCycleOn')), Stepper(a.cycle.on, v=>{ a.cycle.on = v; saveP(); R(); }, {min:1, max:14})]),
-          el('div', {class:'field'}, [el('label', null, t('pCycleOff')), Stepper(a.cycle.off, v=>{ a.cycle.off = v; saveP(); R(); }, {min:0, max:14})]),
-          el('div', {class:'field'}, [el('label', null, t('pCycleAnchor')), DateInput(a.cycle.anchor, v=>{ a.cycle.anchor = v; saveP(); R(); })])
-        ]));
-      }
-      availSec.appendChild(el('div', {style:{marginTop:'12px'}}, [el('div', {class:'muted', style:{fontSize:'11.5px', marginBottom:'4px'}}, t('pCyclePreview')), weekStrip(p, 14)]));
-      availSec.appendChild(el('div', {class:'grid-2', style:{marginTop:'14px'}}, [
-        el('div', {class:'field'}, [el('label', null, t('pMaxRun')), Stepper(p.maxRun, v=>{ p.maxRun = v; saveP(); }, {min:1, max:14, nullable:true, placeholder:t('noLimit')})]),
-        el('div', {class:'field'}, [el('label', null, t('pMaxWeek')), Stepper(p.maxPerWeek, v=>{ p.maxPerWeek = v; saveP(); }, {min:1, max:14, nullable:true, placeholder:t('noLimit')})])
-      ]));
-
-      const pat = p.pattern = p.pattern || {mode:'inherit', minRest:0};
-      const prSec = el('section', {class:'sheet-sec stack', style:{gap:'8px'}});
-      prSec.appendChild(el('div', {class:'section-title'}, t('prTitle')));
-      prSec.appendChild(el('div', {class:'hint'}, t('prHint')));
-      prSec.appendChild(Seg([{value:'inherit', label:t('prInherit')}, {value:'custom', label:t('prCustom')}, {value:'none', label:t('prNone')}], pat.mode, v=>{ pat.mode = v; if(v==='custom' && !(pat.minRest>0)) pat.minRest = 1; saveP(); R(); }, {cls:'block'}));
-      if(pat.mode==='custom'){
-        prSec.appendChild(el('div', {class:'chips'}, [
-          el('button', {type:'button', class:'chip'+(pat.minRest===1 ? ' on' : ''), onclick:()=>{ pat.minRest = 1; saveP(); R(); }}, t('patPresetNoRun'))
-        ]));
-        prSec.appendChild(setting(t('patMinRest'), null, Stepper(pat.minRest||0, v=>{ pat.minRest = v; saveP(); R(); }, {min:0, max:60, sm:true, unit:t('daysU')})));
-      }
-      const w = planWindow();
-      if(!w.error){
-        const eligible = w.days.filter(o=>(normalWorkday(o) || isOverrideDate(isoOf(o))) && personAvailable(p, o)).length;
-        const assigned = App.plan ? App.plan.visits.filter(v=>visitTeamIds(v).includes(p.id)).length : 0;
-        prSec.appendChild(el('div', {class:'muted', style:{fontSize:'12px'}}, t('prPreview', eligible, assigned)));
-      }
-
-      const offSec = el('section', {class:'sheet-sec'});
-      offSec.appendChild(el('div', {class:'row'}, [el('div', {class:'section-title', style:{margin:'0'}}, t('pOff')), el('div', {class:'spacer'}), (p.off||[]).length ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ p.off = []; saveP(); R(); }}, t('pOffClear')) : null]));
-      offSec.appendChild(el('div', {class:'hint', style:{margin:'4px 0 10px'}}, t('pOffHint')));
-      const cal = MiniCal({isSelected:iso=>isOff(p, iso), isWork:iso=>personPatternOn(p, ordOf(iso)), onPick:iso=>{ p.off = isOff(p, iso) ? removeOffDay(p.off, iso) : normalizeOff((p.off||[]).concat([{from:iso, to:iso}])); saveP(); paintSpans(); }, onRange:(x,y)=>{ p.off = normalizeOff((p.off||[]).concat([{from:x, to:y}])); saveP(); paintSpans(); }});
-      const spans = el('div', {class:'chips', style:{marginTop:'10px'}});
-      function paintSpans(){ clear(spans); for(const r of (p.off||[])) spans.appendChild(el('span', {class:'chip'}, [r.from===r.to ? fmtDate(r.from,'wdm') : fmtDate(r.from,'dm')+' – '+fmtDate(r.to,'dm'), el('button', {type:'button', class:'x', html:ICON.x, onclick:()=>{ p.off = p.off.filter(x=>x!==r); saveP(); paintSpans(); cal.repaint(); }})])); }
-      paintSpans();
-      offSec.appendChild(cal); offSec.appendChild(spans);
-
-      const origin = el('section', {class:'sheet-sec'}, [
-        el('div', {class:'section-title'}, t('rDistance')),
-        setting(t('pOrigin'), null, Select(App.data.locations.slice().sort((a,b)=>a.km-b.km).map(l=>({value:l.id, label:l.name+' · '+l.km+' '+t('km')})), p.origin||'', v=>{ p.origin = v; saveP(); })),
-        setting(t('pDistPref'), null, Seg([{value:'near',label:t('pDistNear')},{value:'',label:t('pDistAny')},{value:'far',label:t('pDistFar')}], p.distPref||'', v=>{ p.distPref = v||null; saveP(); }, {cls:'sm'})),
-        el('div', {class:'field', style:{paddingTop:'10px'}}, [el('label', null, t('pBlocked')), FacilityPicker(p.blocked, ids=>{ p.blocked = ids; saveP(); }, {filter:f=>{ const k = facilityKind(f); return k==='basic'||k==='contracted'; }})])
-      ]);
-      return [basics, skill, load, availSec, prSec, offSec, origin];
-    },
+    body:api=>personEditor(p, api, saveP),
     foot:api=>{
       const exists = App.data.people.includes(p);
       return [
