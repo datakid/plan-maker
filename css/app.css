@@ -126,13 +126,19 @@ button.select.open{border-color:var(--primary); box-shadow:0 0 0 3px var(--focus
 textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 .input-group{display:inline-flex; align-items:center; height:var(--h); border:1px solid var(--line-2); border-radius:var(--r-md); background:var(--raised); overflow:hidden}
 .input-group:focus-within{border-color:var(--primary); box-shadow:0 0 0 3px var(--focus)}
-.input-group input{border:0; background:transparent; height:100%; width:58px; text-align:center; font-family:var(--font-num); font-size:13.5px; outline:none}
+.input-group input{border:0; background:transparent; height:100%; min-width:0; width:9ch; min-inline-size:3.2ch; text-align:center; font-family:var(--font-num); font-size:13.5px; outline:none}
 .input-group .unit{padding-inline:0 10px; color:var(--ink-3); font-size:12.5px}
-.input-group button{width:30px; height:100%; color:var(--ink-3); display:grid; place-items:center}
+.input-group button{flex:none; width:30px; height:100%; color:var(--ink-3); display:grid; place-items:center}
 .input-group button:hover{background:var(--hover); color:var(--ink)}
 .input-group button:disabled{opacity:.35}
 .input-group.sm{height:var(--h-sm)}
-.input-group.sm input{width:44px; font-size:12.5px}
+.input-group.sm input{width:52px; font-size:12.5px}
+@supports (field-sizing:content){
+  .input-group input, .input-group.sm input{width:auto; field-sizing:content}
+}
+.seg.block{flex-wrap:nowrap}
+.pt-panel .seg, .pop .seg{flex-wrap:nowrap; max-width:100%; overflow-x:auto}
+.pt-panel .seg button, .pop .seg button{flex-shrink:0}
 .input-group.sm button{width:24px}
 
 .slider{display:flex; align-items:center; gap:10px; min-width:200px}
@@ -599,23 +605,31 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 td .chip.level{margin-inline-start:6px; vertical-align:middle}
 .setting .ctl .chip.level{flex:none}
 
-.pt-layout{display:flex; align-items:flex-start; gap:16px}
+.page.page-wide{max-width:none}
+.pt-layout{display:flex; align-items:flex-start; gap:16px; min-width:0}
 .pt-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:16px}
-.pt-panel{width:420px; flex:none; position:sticky; top:calc(var(--topbar-h, 60px) + 12px); max-height:calc(100vh - var(--topbar-h, 60px) - 24px); overflow:auto; background:var(--raised); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--elev-2)}
+.pt-panel{position:fixed; top:var(--topbar-h); bottom:0; inset-inline-end:0; width:min(440px, 100vw); z-index:30; display:flex; flex-direction:column; background:var(--surface); border-inline-start:1px solid var(--line); box-shadow:var(--elev-3); transform:none; transition:transform 200ms var(--ease)}
+.pt-layout.with-panel .pt-main{margin-inline-end:456px}
+@media (max-width:1279px){.pt-layout.with-panel .pt-main{margin-inline-end:0}}
 .pt-panel[hidden]{display:none}
-.pt-panel-head{display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--raised); z-index:2}
+.pt-panel-head{display:flex; flex:none; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); background:var(--surface); z-index:2}
 .pt-panel-head h2{font-size:15px; margin:0}
-.pt-panel-body{padding:4px 14px 18px}
+.pt-panel-body{flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:4px 16px 24px}
+.pt-panel .setting{grid-template-columns:1fr}
+.pt-panel .setting .ctl{justify-content:flex-start}
+.pt-panel .grid-2 > *, .pop .grid-2 > *{min-width:0}
+.sheet-sec button[hidden]{display:none}
 .pt-toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line)}
 .pt-search{width:200px}
 .pt-bulk{position:sticky; top:calc(var(--topbar-h, 60px) + 4px); z-index:4; display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 16px; background:var(--primary-soft); border-bottom:1px solid var(--line)}
 .pt-bulk[hidden]{display:none}
-.pt-wrap{overflow-x:auto; max-width:100%}
+.pt-wrap{overflow:auto; max-width:100%; max-height:calc(100vh - var(--topbar-h) - 140px); overscroll-behavior:contain}
 table.pt{border-collapse:separate; border-spacing:0; width:100%; min-width:max-content}
 table.pt th{position:sticky; top:0; z-index:3; background:var(--sunken); text-align:start; font-size:12px; font-weight:600; color:var(--ink-3); padding:8px 10px; white-space:nowrap; border-bottom:1px solid var(--line)}
 table.pt td{padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap}
-table.pt .pt-c-sel{width:34px; position:sticky; inset-inline-start:0; z-index:2; background:var(--raised)}
-table.pt .pt-c-name{position:sticky; inset-inline-start:34px; z-index:2; background:var(--raised); min-width:190px}
+table.pt td > *{flex-wrap:nowrap}
+table.pt .pt-c-sel{width:40px; min-width:40px; max-width:40px; padding-inline:10px 6px; position:sticky; inset-inline-start:0; z-index:2; background:var(--surface)}
+table.pt .pt-c-name{position:sticky; inset-inline-start:40px; z-index:2; background:var(--surface); min-width:190px}
 table.pt th.pt-c-sel, table.pt th.pt-c-name{z-index:4; background:var(--sunken)}
 tr.pt-pool td{background:var(--sunken); font-size:12.5px; padding:6px 12px}
 tr.pt-row.sel td{background:var(--primary-soft)}
@@ -624,13 +638,12 @@ tr.pt-row.open td{box-shadow:inset 0 -1px 0 var(--primary)}
 tr.pt-row.inactive{opacity:.6}
 tr.pt-row:focus-visible{outline:2px solid var(--primary); outline-offset:-2px}
 .pt-namecell{display:flex; align-items:center; gap:8px}
-.pt-namecell .input{width:150px}
+.pt-namecell .input{width:150px; min-width:0; overflow:hidden; text-overflow:ellipsis}
 .pt-namecell .avatar{flex:none; cursor:pointer}
 .pt-chip{min-width:34px; justify-content:center}
 .pt-c-menu{width:40px}
 @media (max-width: 979px){
   .pt-layout{display:block}
-  .pt-panel{display:none}
 }
 @media (max-width: 720px){
   table.pt th:not(.pt-c-sel):not(.pt-c-name):not(.pt-c-pool):not(.pt-c-load):not(.pt-c-menu), table.pt td:not(.pt-c-sel):not(.pt-c-name):not(.pt-c-pool):not(.pt-c-load):not(.pt-c-menu){display:none}

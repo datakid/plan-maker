@@ -8,7 +8,21 @@ function ptPersonGoals(p){
 function ptChip(text, build, opts){
   opts = opts || {};
   const b = el('button', {type:'button', class:'chip pt-chip'+(opts.on ? ' on' : '')+(opts.cls ? ' '+opts.cls : ''), 'aria-haspopup':'dialog'}, text);
-  b.addEventListener('click', e=>{ e.stopPropagation(); popover(b, build, {width:opts.width || 380}); });
+  b.addEventListener('click', e=>{
+    e.stopPropagation();
+    const row = b.closest('tr[data-pid]');
+    const cell = b.closest('td');
+    const index = row && cell ? [...row.cells].indexOf(cell) : -1;
+    const wasFocused = document.activeElement===b;
+    popover(b, (close, refresh)=>build(close, refresh), {width:opts.width || 380, onClose:()=>{
+      if(opts.onClose) opts.onClose();
+      if(wasFocused && row && !b.isConnected){
+        const next = [...document.querySelectorAll('tr[data-pid]')].find(r=>r.dataset.pid===row.dataset.pid);
+        const chip = next && next.cells[index] && next.cells[index].querySelector('button.pt-chip');
+        if(chip) chip.focus({preventScroll:true});
+      }
+    }});
+  });
   return b;
 }
 
@@ -34,6 +48,8 @@ function ptQuotaEditor(p, save, rerender){
 }
 
 function renderTeam(root){
+  if(renderTeam.api && renderTeam.api.dispose) renderTeam.api.dispose();
+  root.classList.add('page-wide');
   const U = App.ui;
   if(!U.teamSel) U.teamSel = new Set();
   if(!U.teamCols) U.teamCols = Object.assign({}, PT_DEFAULTS);
@@ -50,6 +66,18 @@ function renderTeam(root){
   const info = el('span', {class:'sub'});
   const tableWrap = el('div', {class:'pt-wrap'});
   let table = null, tbody = null;
+  const pendingRefresh = new Set();
+  let returnFocusId = null;
+  const lifecycle = new MutationObserver(()=>{ if(!layout.isConnected) dispose(); });
+  lifecycle.observe(root, {childList:true});
+
+  function dispose(){
+    popOverlay(closePanel);
+    lifecycle.disconnect();
+    window.removeEventListener('resize', onResize);
+  }
+  function onResize(){ if(!wide() && U.teamPanel) closePanel(); }
+  window.addEventListener('resize', onResize);
 
   const save = ()=>{ commit('data'); paintMeta(); };
   const list = ()=>{
@@ -70,13 +98,13 @@ function renderTeam(root){
     C.push({id:'sel', g:'basic', fixed:true, cls:'pt-c-sel', head:()=>el('input', {type:'checkbox', 'aria-label':t('all'), onchange:e=>{ if(e.target.checked) for(const id of orderIds()) U.teamSel.add(id); else U.teamSel.clear(); paintTable(); }}), cell:p=>el('input', {type:'checkbox', checked:U.teamSel.has(p.id), 'aria-label':p.name, onclick:e=>e.stopPropagation(), onchange:e=>{ if(e.target.checked) U.teamSel.add(p.id); else U.teamSel.delete(p.id); e.target.closest('tr').classList.toggle('sel', e.target.checked); paintBulk(); }})});
     C.push({id:'name', g:'basic', fixed:true, cls:'pt-c-name', label:'ptName', cell:p=>el('div', {class:'pt-namecell'}, [el('button', {type:'button', class:'avatar'+(p.gender==='f' ? ' f' : ''), 'aria-label':t('ptDetails'), onclick:e=>{ e.stopPropagation(); openPanel(p.id); }}, (p.name||'?').slice(0, 1)), el('input', {class:'input sm pt-name', value:p.name||'', placeholder:t('pNewName'), 'aria-label':t('ptName'), onchange:e=>{ p.name = e.target.value.trim(); save(); const av = e.target.previousSibling; if(av) av.textContent = (p.name||'?').slice(0, 1); if(U.teamPanel===p.id) paintPanel(); }})])});
     C.push({id:'pool', g:'basic', fixed:true, cls:'pt-c-pool', label:'ptPool', cell:p=>Select(S().pools.map(pl=>({value:pl.id, label:poolName(pl)})), p.pool, v=>{ p.pool = v; commit('data'); paintTable(); }, {sm:true, width:'120px'})});
-    C.push({id:'gender', g:'basic', cls:'pt-c-gender', label:'ptGender', cell:p=>Seg([{value:'m', label:t('pMale')}, {value:'f', label:t('pFemale')}], p.gender||'', v=>{ p.gender = v; save(); }, {cls:'sm'})});
-    C.push({id:'active', g:'basic', cls:'pt-c-active', label:'ptActive', cell:p=>Switch(p.active!==false, v=>{ p.active = v; save(); })});
+    C.push({id:'gender', g:'basic', cls:'pt-c-gender', label:'ptGender', cell:p=>Seg([{value:'m', label:t('pMale')}, {value:'f', label:t('pFemale')}], p.gender||'', v=>{ p.gender = v; save(); refreshRow(p); }, {cls:'sm'})});
+    C.push({id:'active', g:'basic', cls:'pt-c-active', label:'ptActive', cell:p=>Switch(p.active!==false, v=>{ p.active = v; save(); refreshRow(p); })});
     C.push({id:'skillB', g:'skills', cls:'pt-c-skill', label:'ptSkillB', cell:p=>Stepper(p.skill.basic, v=>{ p.skill.basic = v; save(); }, {min:0, max:100, step:5, sm:true, label:t('ptSkillB')})});
     C.push({id:'skillC', g:'skills', cls:'pt-c-skill', label:'ptSkillC', cell:p=>Stepper(p.skill.contracted, v=>{ p.skill.contracted = v; save(); }, {min:0, max:100, step:5, sm:true, label:t('ptSkillC')})});
     C.push({id:'quota', g:'plan', cls:'pt-c-quota', label:'ptPerPlan', cell:p=>{
       const label = ()=>quotaLabel(p.quota) || t('pQAuto');
-      const chip = ptChip(label(), ()=>{ const box = el('div', {class:'stack', style:{gap:'10px'}}); const paint = ()=>{ clear(box); appendKids(box, ptQuotaEditor(p, ()=>{ save(); chip.textContent = label(); }, paint)); }; paint(); return [box]; }, {on:!!quotaLabel(p.quota), width:340});
+      const chip = ptChip(label(), ()=>{ const box = el('div', {class:'stack', style:{gap:'10px'}}); const paint = ()=>{ clear(box); appendKids(box, ptQuotaEditor(p, ()=>{ save(); chip.textContent = label(); chip.classList.toggle('on', !!quotaLabel(p.quota)); }, paint)); }; paint(); return [box]; }, {on:!!quotaLabel(p.quota), width:340, onClose:()=>flushRow(p)});
       return chip;
     }});
     C.push({id:'share', g:'limits', cls:'pt-c-num', label:'ptShare', cell:p=>Stepper(Math.round((p.share==null ? 1 : p.share)*100), v=>{ p.share = v/100; save(); }, {min:0, max:200, step:10, sm:true, unit:'%'})});
@@ -84,21 +112,21 @@ function renderTeam(root){
     C.push({id:'maxWeek', g:'limits', cls:'pt-c-num', label:'ptMaxWeek', cell:p=>el('div', {class:'row', style:{gap:'4px', flexWrap:'nowrap'}}, [Stepper(p.maxPerWeek, v=>{ p.maxPerWeek = v; save(); }, {min:1, max:14, nullable:true, sm:true, placeholder:'—'}), pChip(p, 'maxWeek', 'p.maxWeek', save)])});
     C.push({id:'dist', g:'limits', cls:'pt-c-dist', label:'ptDist', cell:p=>el('div', {class:'row', style:{gap:'4px', flexWrap:'nowrap'}}, [Seg([{value:'near', label:t('pDistNear')}, {value:'', label:t('pDistAny')}, {value:'far', label:t('pDistFar')}], p.distPref||'', v=>{ p.distPref = v||null; save(); }, {cls:'sm'}), pChip(p, 'dist', 'p.dist', save)])});
     C.push({id:'avail', g:'avail', cls:'pt-c-avail', label:'ptAvail', cell:p=>{
-      const chip = ptChip(availSummary(p), ()=>{ const x = personParts(p, {render:()=>{}, close:closePanel}, ()=>{ save(); chip.textContent = availSummary(p); }); return [x.availSec]; }, {on:(p.avail||{}).mode && p.avail.mode!=='plan', width:400});
+      const chip = ptChip(availSummary(p), (close, refresh)=>{ const x = personParts(p, {render:refresh, close}, ()=>{ save(); refreshRow(p); }); return [x.availSec]; }, {on:(p.avail||{}).mode && p.avail.mode!=='plan', width:440, onClose:()=>flushRow(p)});
       return chip;
     }});
     C.push({id:'off', g:'avail', cls:'pt-c-off', label:'ptOff', cell:p=>{
       const n = ()=>(p.off||[]).filter(r=>r.to>=todayISO()).length;
-      const chip = ptChip(String(n()), ()=>{ const x = personParts(p, {render:()=>{}, close:closePanel}, ()=>{ save(); chip.textContent = String(n()); chip.classList.toggle('on', n()>0); }); return [x.offSec]; }, {on:n()>0, width:360});
+      const chip = ptChip(String(n()), (close, refresh)=>{ const x = personParts(p, {render:refresh, close}, ()=>{ save(); refreshRow(p); }); return [x.offSec]; }, {on:n()>0, width:360, onClose:()=>flushRow(p)});
       return chip;
     }});
     C.push({id:'blocked', g:'rules', cls:'pt-c-blocked', label:'ptBlocked', cell:p=>{
-      const chip = ptChip(String((p.blocked||[]).length), ()=>[el('div', {class:'field'}, [el('label', null, [t('pBlocked'), pChip(p, 'blocked', 'p.blocked', save)]), FacilityPicker(p.blocked, ids=>{ p.blocked = ids; save(); chip.textContent = String(ids.length); chip.classList.toggle('on', ids.length>0); }, {filter:f=>{ const k = facilityKind(f); return k==='basic' || k==='contracted'; }})])], {on:(p.blocked||[]).length>0, width:400});
+      const chip = ptChip(String((p.blocked||[]).length), ()=>[el('div', {class:'field'}, [el('label', null, [t('pBlocked'), pChip(p, 'blocked', 'p.blocked', save)]), FacilityPicker(p.blocked, ids=>{ p.blocked = ids; save(); chip.textContent = String(ids.length); chip.classList.toggle('on', ids.length>0); }, {filter:f=>{ const k = facilityKind(f); return k==='basic' || k==='contracted'; }})])], {on:(p.blocked||[]).length>0, width:400, onClose:()=>flushRow(p)});
       return chip;
     }});
     C.push({id:'rules', g:'rules', cls:'pt-c-rules', label:'ptRules', cell:p=>{
       const n = ptPersonGoals(p).length;
-      return ptChip(String(n), ()=>{ const x = personParts(p, {render:()=>{}, close:()=>closePop()}, save); return [x.goalsSec]; }, {on:n>0, width:380});
+      return ptChip(String(n), (close, refresh)=>{ const x = personParts(p, {render:refresh, close:()=>closePop()}, ()=>{ save(); refreshRow(p); }); return [x.goalsSec]; }, {on:n>0, width:380, onClose:()=>flushRow(p)});
     }});
     C.push({id:'load', g:'plan', cls:'pt-c-load', label:'ptLoad', cell:p=>el('span', {class:'num pt-load', 'data-load':p.id}, loadText(p, null))});
     C.push({id:'menu', g:'basic', fixed:true, cls:'pt-c-menu', cell:p=>{
@@ -114,8 +142,21 @@ function renderTeam(root){
     return C.filter(c=>c.fixed || on(c.g));
   }
 
+  const currentAnalysis = ()=>App.plan && !App.plan.stale ? analyzePlan(App.plan) : null;
+
+  function rowFor(p, C, an){
+    const tr = el('tr', {class:'pt-row'+(U.teamSel.has(p.id) ? ' sel' : '')+(U.teamPanel===p.id ? ' open' : '')+(p.active===false || p.retired ? ' inactive' : ''), 'data-pid':p.id, 'data-pool':p.pool, tabindex:'0'});
+    for(const c of C){
+      const td = el('td', {class:c.cls || ''}, c.cell(p));
+      if(c.id==='load') td.firstChild.textContent = loadText(p, an);
+      tr.appendChild(td);
+    }
+    tr.addEventListener('click', e=>{ if(e.target.closest('input,button,select,.seg,.switch,.stepper,.chip')) return; openPanel(p.id); });
+    return tr;
+  }
+
   function paintTable(){
-    const keepX = tableWrap.scrollLeft, keepY = window.scrollY;
+    const keepX = tableWrap.scrollLeft, keepTop = tableWrap.scrollTop, keepY = window.scrollY;
     clear(tableWrap);
     const people = list();
     const C = cols();
@@ -133,22 +174,14 @@ function renderTeam(root){
       if(!members.length) continue;
       any = true;
       tbody.appendChild(el('tr', {class:'pt-pool'}, el('td', {colSpan:C.length}, el('div', {class:'row', style:{gap:'8px'}}, [el('b', null, poolName(pl)), el('span', {class:'muted'}, t('ptSeats', pl.seats.basic, pl.seats.contracted))]))));
-      for(const p of members){
-        const tr = el('tr', {class:'pt-row'+(U.teamSel.has(p.id) ? ' sel' : '')+(U.teamPanel===p.id ? ' open' : '')+(p.active===false || p.retired ? ' inactive' : ''), 'data-pid':p.id, tabindex:'0'});
-        for(const c of C){
-          const td = el('td', {class:c.cls || ''}, c.cell(p));
-          if(c.id==='load') td.firstChild.textContent = loadText(p, an);
-          tr.appendChild(td);
-        }
-        tr.addEventListener('click', e=>{ if(e.target.closest('input,button,select,.seg,.switch,.stepper,.chip')) return; openPanel(p.id); });
-        tbody.appendChild(tr);
-      }
+      for(const p of members) tbody.appendChild(rowFor(p, C, an));
     }
     if(!any) tbody.appendChild(el('tr', null, el('td', {colSpan:C.length, class:'empty'}, t('ptNoMatch'))));
     table.appendChild(tbody);
     tbody.addEventListener('keydown', onKey);
     tableWrap.appendChild(table);
     tableWrap.scrollLeft = keepX;
+    tableWrap.scrollTop = keepTop;
     paintMeta();
     paintBulk();
     window.scrollTo(0, keepY);
@@ -198,14 +231,21 @@ function renderTeam(root){
     const p = personById(id);
     if(!p) return;
     if(!wide()){ openPersonSheetNav(p.id, orderIds(), ()=>paintTable()); return; }
+    if(U.teamPanel===id){ closePanel(); return; }
+    if(!U.teamPanel) returnFocusId = id;
     U.teamPanel = id;
     paintPanel();
     markOpen();
   }
   function closePanel(){
+    const id = returnFocusId || U.teamPanel;
+    popOverlay(closePanel);
     U.teamPanel = null;
     paintPanel();
     markOpen();
+    const row = tbody && [...tbody.querySelectorAll('tr[data-pid]')].find(r=>r.dataset.pid===id);
+    if(row && row.isConnected) row.focus({preventScroll:true});
+    returnFocusId = null;
   }
   function stepPanel(d){
     const ids = orderIds();
@@ -214,11 +254,15 @@ function renderTeam(root){
     if(n) openPanel(n);
   }
   function paintPanel(){
+    const oldBody = panelEl.querySelector('.pt-panel-body');
+    const keepScroll = oldBody ? oldBody.scrollTop : 0;
     clear(panelEl);
     const p = U.teamPanel ? personById(U.teamPanel) : null;
     panelEl.hidden = !p;
     layout.classList.toggle('with-panel', !!p);
+    popOverlay(closePanel);
     if(!p) return;
+    pushOverlay(closePanel);
     const ids = orderIds();
     const i = ids.indexOf(p.id);
     const api = {render:paintPanel, close:closePanel};
@@ -229,16 +273,42 @@ function renderTeam(root){
       el('button', {type:'button', class:'icon-btn sm', 'aria-label':t('ptClosePanel'), html:ICON.x, onclick:closePanel})
     ]));
     const body = el('div', {class:'pt-panel-body'});
-    const keepScroll = panelEl.scrollTop;
-    appendKids(body, personEditor(p, api, ()=>{ commit('data'); refreshRowOf(p); }));
+    appendKids(body, personEditor(p, api, ()=>{ commit('data'); refreshRow(p); }));
     panelEl.appendChild(body);
-    panelEl.scrollTop = keepScroll;
+    body.scrollTop = keepScroll;
   }
-  function refreshRowOf(p){
-    const tr = tbody && tbody.querySelector('tr[data-pid="'+p.id+'"]');
+  function flushRow(p){
+    if(pendingRefresh.has(p.id)) refreshRow(p);
+  }
+  function refreshRow(p){
+    const tr = tbody && [...tbody.querySelectorAll('tr[data-pid]')].find(r=>r.dataset.pid===p.id);
     if(!tr) return;
-    const nm = tr.querySelector('input.pt-name');
-    if(nm && document.activeElement!==nm) nm.value = p.name || '';
+    if(popStack.some(pop=>tr.contains(pop.anchor))){
+      pendingRefresh.add(p.id);
+      const update = (cls, text, on)=>{
+        const chip = tr.querySelector(cls+' button.pt-chip');
+        if(chip){ chip.textContent = text; chip.classList.toggle('on', !!on); }
+      };
+      update('.pt-c-avail', availSummary(p), p.avail.mode!=='plan');
+      const off = (p.off||[]).filter(r=>r.to>=todayISO()).length;
+      update('.pt-c-off', String(off), off>0);
+      paintMeta();
+      return;
+    }
+    pendingRefresh.delete(p.id);
+    const focusable = row=>[...row.querySelectorAll('input,button,select,textarea,[tabindex]')].filter(n=>!n.disabled);
+    const active = document.activeElement;
+    const hadFocus = tr.contains(active);
+    const index = hadFocus ? focusable(tr).indexOf(active) : -1;
+    let next;
+    if(tr.dataset.pool!==p.pool){
+      paintTable();
+      next = [...tbody.querySelectorAll('tr[data-pid]')].find(r=>r.dataset.pid===p.id);
+    } else {
+      next = rowFor(p, cols(), currentAnalysis());
+      tr.replaceWith(next);
+    }
+    if(hadFocus && next) (focusable(next)[index] || next).focus({preventScroll:true});
     paintMeta();
   }
 
@@ -302,7 +372,7 @@ function renderTeam(root){
   main.appendChild(renderPoolsCard(()=>renderTab()));
   paintTable();
   paintPanel();
-  renderTeam.api = {openPanel, closePanel, stepPanel, paintTable, orderIds, bulk};
+  renderTeam.api = {openPanel, closePanel, stepPanel, paintTable, refreshRow, orderIds, bulk, dispose};
 }
 
 function openPersonSheetNav(id, order, rerender){

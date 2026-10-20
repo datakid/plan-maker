@@ -87,10 +87,10 @@ function personParts(p, api, saveP){
   availSec.appendChild(Seg([{value:'plan',label:t('pAvailPlan')},{value:'weekdays',label:t('pAvailWeekdays')},{value:'cycle',label:t('pAvailCycle')}], a.mode, v=>{ a.mode = v; if(v==='weekdays' && !(a.weekdays&&a.weekdays.length)) a.weekdays = S().calendar.workdays.slice(); saveP(); R(); }, {cls:'block'}));
   if(a.mode==='weekdays') availSec.appendChild(el('div', {style:{marginTop:'12px'}}, DaySet(a.weekdays, v=>{ a.weekdays = v; saveP(); R(); })));
   if(a.mode==='cycle'){
-    availSec.appendChild(el('div', {class:'grid-3', style:{marginTop:'12px'}}, [
+    availSec.appendChild(el('div', {class:'grid-2', style:{marginTop:'12px'}}, [
       el('div', {class:'field'}, [el('label', null, t('pCycleOn')), Stepper(a.cycle.on, v=>{ a.cycle.on = v; saveP(); R(); }, {min:1, max:14})]),
       el('div', {class:'field'}, [el('label', null, t('pCycleOff')), Stepper(a.cycle.off, v=>{ a.cycle.off = v; saveP(); R(); }, {min:0, max:14})]),
-      el('div', {class:'field'}, [el('label', null, t('pCycleAnchor')), DateInput(a.cycle.anchor, v=>{ a.cycle.anchor = v; saveP(); R(); })])
+      el('div', {class:'field', style:{gridColumn:'1 / -1'}}, [el('label', null, t('pCycleAnchor')), DateInput(a.cycle.anchor, v=>{ a.cycle.anchor = v; saveP(); R(); })])
     ]));
   }
   availSec.appendChild(el('div', {style:{marginTop:'12px'}}, [el('div', {class:'muted', style:{fontSize:'11.5px', marginBottom:'4px'}}, t('pCyclePreview')), weekStrip(p, 14)]));
@@ -118,11 +118,12 @@ function personParts(p, api, saveP){
   }
 
   const offSec = el('section', {class:'sheet-sec'});
-  offSec.appendChild(el('div', {class:'row'}, [el('div', {class:'section-title', style:{margin:'0'}}, t('pOff')), el('div', {class:'spacer'}), (p.off||[]).length ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ p.off = []; saveP(); R(); }}, t('pOffClear')) : null]));
+  const clearOff = el('button', {type:'button', class:'btn sm ghost', hidden:!(p.off||[]).length, onclick:()=>{ p.off = []; saveP(); R(); }}, t('pOffClear'));
+  offSec.appendChild(el('div', {class:'row'}, [el('div', {class:'section-title', style:{margin:'0'}}, t('pOff')), el('div', {class:'spacer'}), clearOff]));
   offSec.appendChild(el('div', {class:'hint', style:{margin:'4px 0 10px'}}, t('pOffHint')));
   const cal = MiniCal({isSelected:iso=>isOff(p, iso), isWork:iso=>personPatternOn(p, ordOf(iso)), onPick:iso=>{ p.off = isOff(p, iso) ? removeOffDay(p.off, iso) : normalizeOff((p.off||[]).concat([{from:iso, to:iso}])); saveP(); paintSpans(); }, onRange:(x,y)=>{ p.off = normalizeOff((p.off||[]).concat([{from:x, to:y}])); saveP(); paintSpans(); }});
   const spans = el('div', {class:'chips', style:{marginTop:'10px'}});
-  function paintSpans(){ clear(spans); for(const r of (p.off||[])) spans.appendChild(el('span', {class:'chip'}, [r.from===r.to ? fmtDate(r.from,'wdm') : fmtDate(r.from,'dm')+' – '+fmtDate(r.to,'dm'), el('button', {type:'button', class:'x', html:ICON.x, onclick:()=>{ p.off = p.off.filter(x=>x!==r); saveP(); paintSpans(); cal.repaint(); }})])); }
+  function paintSpans(){ clearOff.hidden = !(p.off||[]).length; clear(spans); for(const r of (p.off||[])) spans.appendChild(el('span', {class:'chip'}, [r.from===r.to ? fmtDate(r.from,'wdm') : fmtDate(r.from,'dm')+' – '+fmtDate(r.to,'dm'), el('button', {type:'button', class:'x', html:ICON.x, onclick:()=>{ p.off = p.off.filter(x=>x!==r); saveP(); paintSpans(); cal.repaint(); }})])); }
   paintSpans();
   offSec.appendChild(cal); offSec.appendChild(spans);
 

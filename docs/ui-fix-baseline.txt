@@ -1,0 +1,17 @@
+Source: datakid/plan-maker 5fa9c7f62f6d8773b4d138d9441525be5951b934
+Recorded before application edits, 2026-10-20.
+
+Full test.html execution exceeded this environment's browser tool time limit.
+Final RESULT pass=… fail=…: NOT CAPTURED. Do not treat this as a green baseline.
+
+Direct console run (tool default viewport, not confirmed desktop):
+FAIL pattern goal editor renders and edits without NaN
+The first 100 console lines reached PASS C2; no other FAIL was visible in that capped output.
+
+Desktop attempt: docs/ui-check.html embeds unchanged test.html at 1280px.
+No FAIL captured before the 120-second wait expired; final RESULT was not reached.
+A desktop screenshot waiting for final RESULT also timed out.
+
+Required follow-up: run test.html in a normal desktop browser at >=1280px until
+RESULT appears; save the full result and FAIL list before accepting changes.
+The reporting wrapper changes console forwarding only, not test logic or counters.

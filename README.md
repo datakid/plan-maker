@@ -49,6 +49,11 @@ The default is one goal: *Cover all facilities ×1, no deadline, Try*. This make
 
 The engine merges all goals into a demand list (per facility: count, priority tier, deadline). Must goals come first, smaller goals before bigger ones, and the total is capped by the period's capacity. Leftover room is filled by the normal volume settings, which prefer facilities the goals still need. The Summary view shows progress for each goal. An unmet Must goal is a hard violation and blocks approval; an unmet Try goal is only reported.
 
+## People editor
+The People table uses a non-modal drawer docked to the viewport's inline-end edge (left in Arabic, right in English), below the topbar. At 1280 px and wider the table reserves room for the drawer; at 980–1279 px it overlays without a scrim. Below 980 px the editor remains a modal sheet with previous/next navigation. The drawer header stays pinned while its body scrolls. Escape closes the drawer and returns focus to its opening row; clicking the same row toggles it.
+
+Availability and days-off popovers update in place, including weekday/cycle controls and the clear action. Panel edits repaint the complete table row; an open row popover keeps its anchor until closing. The table scrolls internally with sticky headers and selection/name columns.
+
 ## People goals (v3.2)
 Goals come in two groups. **Facility goals** are listed above. **People goals** are new:
 - **Person rule**: one or more people, with a rule and a scope. *Never* (e.g. never goes to contracted), *Only* (only goes to this scope), or *Exactly / At least / At most N* visits in this plan, counted inside the scope.
@@ -223,6 +228,10 @@ Saved data without `rulesRev` (or older than 7) is migrated on load without remo
 - `js/tests/phase1.js` to `phase7.js` hold the v4 tests: registry and migration, every rule flipped between Must and Prefer, delta against full evaluation, flow and Hungarian cross-checks, T1 to T9, LevelChip reachability, People table, Goals manager and explanations.
 - `js/tests/regress.js` holds the regression cases (L1 to L15 cover the backup week of a real failing plan, gender, pair, quota, every-day and deadline fixtures, LNS repair and preflight proofs; K2 compares the generator with the reference across five fixture families and needs at least 99% valid; K3 checks determinism): audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
 - The old seed-data self-test alone is not evidence of readiness.
+- `people-test.html` runs the four existing People cases plus five UI regressions and the uncaught-error check using isolated in-memory storage. Focused result: `RESULT pass=10 fail=0`.
+- `docs/people-matrix.html` checks the actual app at 1440, 1280, 1100 and 390 px, Arabic/English, light/dark, first/last row: `MATRIX pass=32 fail=0`. This is automated geometry/interaction coverage, not a substitute for visual review of every combination.
+- `people-preview.html` opens an isolated People editor for visual review; optional query parameters: `?lang=en&theme=dark`. `docs/ui-check.html` wraps the unchanged full suite at 1280 px.
+- Full-suite baseline and final comparison remain unverified because the browser tool timed out. See `docs/ui-fix-baseline.txt` and `docs/SONNET-HANDOFF.md`; do not treat focused results as release approval.
 
 ## Performance
 Seed data (about 150 facilities, 11 people), measured in headless jsdom on Node 22, full pipeline including LNS polish and explanations:
@@ -240,7 +249,7 @@ Budgets: week under 400 ms, month under 1.5 s, quarter under 5 s (test T8).
 2. Generate week, month and quarter plans from a fresh seed: zero hard violations, summary quantities match the plan.
 3. Break a Must rule in the visit sheet: the dialog names it; approval is refused until fixed.
 4. Rules tab: open every section and flip a few level chips between Must and Prefer; regenerate; the Summary shows the rule contributions and the why lines.
-5. People tab: edit a name, pool, skill, per-plan and max run inline; keep the panel open while moving between rows with the arrow keys; bulk-edit two people and undo.
+5. People tab: edit a name, pool, skill, per-plan and max run inline; edit availability (weekdays and cycle) and days off (add and clear) through table popovers; keep the docked drawer open while moving between rows with the arrow keys; check Escape and row-toggle closure; bulk-edit two people and undo.
 6. Goals: add each goal type, edit its number inline, filter by Failing, duplicate, delete and undo, in the Rules tab, in the wide sheet and from a person's Rules popover.
 7. Check Arabic and English, light and dark, and 390 px width (no horizontal page scroll).
 8. Export XLSX/CSV and print preview.

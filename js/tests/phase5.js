@@ -141,3 +141,94 @@ regress('v4: People table works at narrow width and in Arabic and English', ()=>
   } finally { if(sheet.current) sheet.current.close(true); closePop(); Object.assign(App.ui, keepUi); document.documentElement.dir = keepUi.lang==='ar' ? 'rtl' : 'ltr'; App.data = keepData; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'ar and en', bad.join(' | '));
 });
+
+P5.check = function(fn){
+  const ui = Object.assign({}, App.ui), data = App.data, plan = App.plan;
+  const dir = document.documentElement.dir;
+  try{ P5.open(); fn(); return verdict(true, 'verified'); }
+  finally {
+    closePop();
+    if(sheet.current) sheet.current.close(true);
+    if(renderTeam.api) renderTeam.api.closePanel();
+    Object.assign(App.ui, ui);
+    App.data = data;
+    App.plan = plan;
+    document.documentElement.dir = dir;
+  }
+};
+P5.assert = function(value, message){ if(!value) throw new Error(message); };
+P5.button = function(scope, text){
+  const b = [...document.querySelectorAll(scope+' button')].find(n=>n.textContent===text);
+  P5.assert(b, 'missing button: '+text);
+  return b;
+};
+
+regress('team: availability popover re-renders on mode change', ()=>P5.check(()=>{
+  const row = P5.rows()[0], p = personById(row.dataset.pid);
+  p.avail.mode = 'plan';
+  renderTeam.api.refreshRow(p);
+  const chip = P5.rows()[0].querySelector('.pt-c-avail .chip');
+  chip.click();
+  P5.button('.pop .seg', t('pAvailWeekdays')).click();
+  P5.assert(document.querySelector('.pop .dayset'), 'weekday picker missing');
+  const before = chip.textContent, days = p.avail.weekdays.slice();
+  document.querySelectorAll('.pop .dayset button')[3].click();
+  P5.assert(chip.textContent!==before && JSON.stringify(days)!==JSON.stringify(p.avail.weekdays), 'weekday edit not reflected');
+  P5.assert(chip.isConnected, 'popover anchor was replaced');
+  P5.button('.pop .seg', t('pAvailCycle')).click();
+  P5.assert(document.querySelectorAll('.pop .grid-2 .input-group').length>=2, 'cycle steppers missing');
+  closePop();
+  const updated = P5.rows().find(r=>r.dataset.pid===p.id);
+  P5.assert(updated!==row && updated.querySelector('.pt-c-avail .chip').textContent===availSummary(p), 'deferred row refresh missing');
+}));
+
+regress('team: off-days popover clear works from table', ()=>P5.check(()=>{
+  const row = P5.rows()[0], p = personById(row.dataset.pid);
+  p.off = [];
+  renderTeam.api.refreshRow(p);
+  const chip = P5.rows()[0].querySelector('.pt-c-off .chip');
+  chip.click();
+  const day = document.querySelector('.pop .mini-cal .mc-day.today');
+  P5.assert(day, 'today missing from calendar');
+  day.click();
+  P5.assert(p.off.length===1 && chip.textContent==='1', 'off day not added');
+  const clear = P5.button('.pop', t('pOffClear'));
+  P5.assert(!clear.hidden, 'clear hidden after first addition');
+  clear.click();
+  P5.assert(p.off.length===0 && chip.textContent==='0', 'clear did not reset model and count');
+  P5.assert(!document.querySelector('.pop .mc-day.sel, .pop .chips .chip'), 'stale selected days or chips');
+}));
+
+regress('team: panel edits repaint the row', ()=>P5.check(()=>{
+  const id = P5.rows()[0].dataset.pid, p = personById(id);
+  p.avail.mode = 'plan';
+  renderTeam.api.openPanel(id);
+  P5.button('.pt-panel .seg', t('pAvailWeekdays')).click();
+  const row = P5.rows().find(r=>r.dataset.pid===id);
+  P5.assert(row.querySelector('.pt-c-avail .chip').textContent===availSummary(p), 'availability cell stale');
+  P5.assert(row.classList.contains('open'), 'open row marker lost');
+}));
+
+regress('team: drawer is docked to the viewport edge', ()=>P5.check(()=>{
+  const id = P5.rows()[0].dataset.pid;
+  renderTeam.api.openPanel(id);
+  const panel = document.querySelector('.pt-panel');
+  P5.assert(panel.parentElement.classList.contains('pt-layout'), 'drawer parent changed');
+  for(const dir of ['ltr', 'rtl']){
+    document.documentElement.dir = dir;
+    const r = panel.getBoundingClientRect();
+    P5.assert(getComputedStyle(panel).position==='fixed', 'drawer not fixed');
+    const viewport = document.documentElement.getBoundingClientRect();
+    P5.assert(Math.abs(dir==='rtl' ? r.left-viewport.left : r.right-viewport.right)<=1, 'drawer not flush in '+dir);
+  }
+}));
+
+regress('team: table header is sticky inside the wrap', ()=>P5.check(()=>{
+  const wrap = document.querySelector('.pt-wrap');
+  wrap.style.height = '140px';
+  wrap.scrollTop = 100;
+  P5.assert(wrap.scrollTop>0, 'wrap did not scroll');
+  const th = wrap.querySelector('th');
+  P5.assert(getComputedStyle(th).position==='sticky', 'header not sticky');
+  P5.assert(Math.abs(th.getBoundingClientRect().top-wrap.getBoundingClientRect().top)<=1, 'header scrolled out of wrap');
+}));
