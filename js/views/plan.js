@@ -245,10 +245,10 @@ function renderResults(){
     el('div', {style:{minWidth:'0'}}, [el('h2', null, t('cycle', plan.cycle)), el('div', {class:'range'}, fmtDate(plan.start,'dm')+' – '+fmtDate(plan.end)+' · '+t('workdaysN', plan.days.length))]),
     el('div', {class:'spacer'}),
     App.ui.focusPerson ? el('button', {type:'button', class:'chip on', onclick:()=>{ App.ui.focusPerson = null; renderResults(); }}, [t('focusing', (personById(App.ui.focusPerson)||{}).name||''), el('span', {class:'x', html:ICON.x})]) : null,
-    Seg(views, App.ui.view, v=>{ App.ui.view = v; localStorage.setItem('alkhitta.view', v); renderResults(); })
+    Seg(views, App.ui.view, v=>{ App.ui.view = v; localStorage.setItem('alkhitta.view', v); PlanView.swap = true; renderResults(); })
   ]);
   card.appendChild(head);
-  const body = el('div');
+  const body = el('div', {class:(PlanView.animate || PlanView.swap) ? 'view-enter' : ''});
   if(!plan.visits.length) body.appendChild(el('div', {class:'empty'}, t('emptyPlan')));
   else if(App.ui.view==='calendar') body.appendChild(viewCalendar(plan, A));
   else if(App.ui.view==='matrix') body.appendChild(viewMatrix(plan, A));
@@ -257,7 +257,7 @@ function renderResults(){
   card.appendChild(body);
   root.appendChild(card);
   root.appendChild(buildActionBar(plan, A));
-  PlanView.animate = false;
+  PlanView.animate = false; PlanView.swap = false;
 }
 
 function planStatusBanner(plan, A){

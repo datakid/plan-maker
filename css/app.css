@@ -682,3 +682,61 @@ tr.pt-row:focus-visible{outline:2px solid var(--primary); outline-offset:-2px}
 .rc-line .rc-name{flex:1; min-width:0}
 .rc-line .rc-num{color:var(--ink-3); white-space:nowrap}
 .rc-why{display:flex; flex-direction:column; gap:2px; font-size:12.5px; padding:4px 0}
+
+:root{--spring:cubic-bezier(.32,.72,0,1); --out:cubic-bezier(.16,1,.3,1); --t:160ms var(--out)}
+html{-webkit-tap-highlight-color:transparent}
+button, .chip, .tab, .menu-item, .gm-row, .setup-tile{touch-action:manipulation; -webkit-user-select:none; user-select:none}
+
+.tabs.has-ind{position:relative; isolation:isolate}
+.tab-ind{position:absolute; top:50%; left:0; height:36px; margin-top:-18px; border-radius:var(--r-pill); background:var(--primary-soft); z-index:-1; pointer-events:none}
+.tabs.anim .tab-ind{transition:transform 380ms var(--spring), width 380ms var(--spring)}
+.tabs.has-ind .tab[aria-selected="true"]{background:transparent}
+.tab{transition:background var(--t), color 220ms var(--out), transform 160ms var(--out)}
+.tab:active{transform:scale(.95)}
+.tab svg{transition:transform 380ms var(--spring)}
+.tab[aria-selected="true"] svg{transform:scale(1.08)}
+
+.page.enter > *{animation:rise 360ms var(--out) both}
+.page.enter > *:nth-child(2){animation-delay:40ms}
+.page.enter > *:nth-child(3){animation-delay:80ms}
+.page.enter > *:nth-child(n+4){animation-delay:110ms}
+.page.enter > :has(.actionbar, .pt-panel, [style*="fixed"]){animation-name:fade}
+.view-enter{animation:rise 300ms var(--out) both}
+@keyframes fade{from{opacity:0}}
+@keyframes rise{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+
+.btn, .gen-btn, .icon-btn, .chip, .seg button, .dayset button, .mc-day, .menu-item, .setup-tile, .gm-row, .switch, .input-group button{transition:background 160ms var(--out), color 160ms var(--out), border-color 160ms var(--out), box-shadow 200ms var(--out), transform 220ms var(--spring), opacity 160ms var(--out)}
+.btn:active:not(:disabled), .icon-btn:active, .chip:active, .dayset button:active, .mc-day:active, .input-group button:active:not(:disabled){transform:scale(.96); transition-duration:60ms}
+.gen-btn{position:relative; overflow:hidden}
+.gen-btn:hover:not(:disabled){transform:translateY(-1px)}
+.gen-btn:active:not(:disabled){transform:scale(.97); transition-duration:60ms}
+.seg button:active{transform:scale(.95)}
+.menu-item:active:not(:disabled), .gm-row:active, .setup-tile:active{transform:scale(.985)}
+.gm-row:hover:not(.sel){border-color:var(--line-2); background:var(--hover)}
+.switch::after{transition:inset-inline-start 260ms var(--spring), width 200ms var(--spring), background 160ms}
+.switch:active::after{width:20px}
+.switch[aria-checked="true"]:active::after{inset-inline-start:15px}
+.gen-btn.busy{cursor:progress}
+.gen-btn.busy::after{content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(100deg, transparent 30%, rgba(255,255,255,.22) 50%, transparent 70%); background-size:220% 100%; animation:sheen 1.1s linear infinite; pointer-events:none}
+@keyframes sheen{from{background-position:120% 0} to{background-position:-120% 0}}
+
+.pop{animation:pop-in 200ms var(--spring); transform-origin:top center}
+@keyframes pop-in{from{opacity:0; transform:translateY(-6px) scale(.97)} to{opacity:1; transform:none}}
+.scrim{transition:opacity 260ms var(--out)}
+.sheet{transition:transform 300ms var(--spring); will-change:transform}
+.sheet:not(.show){transition-duration:220ms; transition-timing-function:cubic-bezier(.4,0,1,1)}
+.dialog{animation:dlg-in 240ms var(--spring)}
+@keyframes dlg-in{from{opacity:0; transform:translate(-50%,-48%) scale(.96)} to{opacity:1; transform:translate(-50%,-50%)}}
+.toast{animation:toast-in 280ms var(--spring)}
+.toast.out{animation:toast-out 180ms cubic-bezier(.4,0,1,1) forwards}
+@keyframes toast-in{from{opacity:0; transform:translateY(12px) scale(.96)} to{opacity:1; transform:none}}
+@keyframes toast-out{to{opacity:0; transform:translateY(6px) scale(.97)}}
+.page.enter .actionbar-inner, .actionbar.fresh .actionbar-inner{animation:bar-in 420ms var(--spring) both}
+@keyframes bar-in{from{opacity:0; transform:translateY(24px)} to{opacity:1; transform:none}}
+.gm-detail:not([hidden]){animation:rise 240ms var(--out)}
+.card{transition:box-shadow 240ms var(--out), border-color 240ms var(--out)}
+.sheet-body, .pt-panel-body, .gm-list, .gm-detail, .pt-wrap, .pop{overscroll-behavior:contain}
+
+@media (prefers-reduced-motion:reduce){
+  *, *::before, *::after{animation:none !important; transition:none !important}
+}

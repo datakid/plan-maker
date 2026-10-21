@@ -53,16 +53,45 @@ function renderTopbar(){
       el('button', {type:'button', class:'icon-btn lang-btn', 'aria-label':t('language'), title:t('langToggle'), onclick:()=>setLang(App.ui.lang==='ar'?'en':'ar')}, [el('span', {class:'lang-long'}, t('langToggle')), el('span', {class:'lang-short'}, App.ui.lang==='ar'?'EN':'ع')])
     ])
   ]));
+  moveTabInd(true);
+}
+
+function moveTabInd(instant){
+  const nav = document.querySelector('#topbar .tabs'); if(!nav) return;
+  let ind = nav.querySelector('.tab-ind');
+  if(!ind){
+    ind = el('span', {class:'tab-ind', 'aria-hidden':'true'}); nav.insertBefore(ind, nav.firstChild); nav.classList.add('has-ind'); instant = true;
+    if(window.ResizeObserver){ const ro = new ResizeObserver(()=>{ if(!nav.isConnected) return ro.disconnect(); moveTabInd(true); }); ro.observe(nav); nav.querySelectorAll('.tab').forEach(b=>ro.observe(b)); }
+  }
+  const sel = nav.querySelector('.tab[aria-selected="true"]'); if(!sel) return;
+  if(!instant){ nav.classList.add('anim'); clearTimeout(moveTabInd.h); moveTabInd.h = setTimeout(()=>nav.classList.remove('anim'), 450); }
+  const nr = nav.getBoundingClientRect(), sr = sel.getBoundingClientRect();
+  ind.style.width = sr.width+'px';
+  ind.style.transform = 'translateX('+(sr.left-nr.left+nav.scrollLeft)+'px)';
+  if(nav.scrollWidth > nav.clientWidth) sel.scrollIntoView({inline:'nearest', block:'nearest', behavior:instant?'auto':'smooth'});
+}
+function syncTabs(){
+  const nav = document.querySelector('#topbar .tabs'); if(!nav) return false;
+  nav.querySelectorAll('.tab').forEach(b=>{ const s = b.id==='tab-'+App.ui.tab; b.setAttribute('aria-selected', s?'true':'false'); b.tabIndex = s?0:-1; });
+  moveTabInd();
+  return true;
+}
+function pageEnter(){
+  const p = document.getElementById('page');
+  p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter');
 }
 
 function goTab(id, jump){
   if(!TABS.some(x=>x.id===id)) id = 'plan';
   closePop(); if(sheet.current) sheet.current.close(true);
+  const same = App.ui.tab===id;
   tabScroll[App.ui.tab] = window.scrollY;
   App.ui.tab = id;
   if(jump) App.ui.jump = jump;
   history.replaceState(null, '', '#'+id);
-  renderTopbar(); renderTab();
+  if(!syncTabs()) renderTopbar();
+  renderTab();
+  if(!same) pageEnter();
   window.scrollTo(0, jump ? 0 : (tabScroll[id]||0));
 }
 function renderTab(){
@@ -88,6 +117,11 @@ function boot(){
   applyTheme();
   renderTopbar();
   renderTab();
+  pageEnter();
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>moveTabInd(true));
+  window.addEventListener('resize', debounce(()=>moveTabInd(true), 80));
+  window.addEventListener('load', ()=>moveTabInd(true));
+  requestAnimationFrame(()=>moveTabInd(true));
   on('plan', ()=>{ if(App.ui.tab==='plan'){ if(PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update(); renderResults(); } });
   on('settings', ()=>{ if(App.ui.tab==='plan' && PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update(); });
   on('data', ()=>{ renderTopbar(); });

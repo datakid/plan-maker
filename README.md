@@ -2,6 +2,9 @@
 
 A rebuilt planner for inspection visits. It picks which facilities are due, spreads them across workdays, and assigns balanced teams. The rules can be tuned, but the defaults work as-is: open the app and press **Generate**.
 
+## Motion polish
+The motion layer sits at the end of `css/app.css`, with small hooks in `js/app.js` (`moveTabInd`, `syncTabs`, `pageEnter`), `js/ui.js` (toast exit) and `js/views/plan.js` (`view-enter` when switching views). It adds a sliding tab indicator, staggered page entry, spring easing on sheets, popovers, dialogs and toasts, press feedback on controls, and a sheen on the Generate button while it is busy. Switching tabs updates the tab bar in place instead of rebuilding it. All motion turns off under `prefers-reduced-motion`. The engine files were not changed.
+
 ## Structure
 ```
 index.html            shell (loads scripts in order)

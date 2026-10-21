@@ -135,7 +135,7 @@ function sheet(opts){
     scrim.classList.remove('show'); panel.classList.remove('show');
     document.body.classList.remove('locked');
     const rm = ()=>{ scrim.remove(); panel.remove(); };
-    if(instant) rm(); else setTimeout(rm, 200);
+    if(instant) rm(); else setTimeout(rm, 240);
     if(sheet.current===api) sheet.current = null;
     if(opts.onClose) opts.onClose();
     if(!instant && prev && prev.focus && document.contains(prev)) prev.focus({preventScroll:true});
@@ -170,10 +170,11 @@ function confirmDialog(title, message, opts){
 function toast(msg, action){
   let region = document.querySelector('.toasts');
   if(!region){ region = el('div', {class:'toasts', role:'status', 'aria-live':'polite'}); document.body.appendChild(region); }
-  const node = el('div', {class:'toast'}, [el('span', null, msg), action ? el('button', {type:'button', onclick:()=>{ node.remove(); action.onClick(); }}, action.label) : null]);
+  const dismiss = ()=>{ if(node.classList.contains('out')) return; node.classList.add('out'); setTimeout(()=>node.remove(), 180); };
+  const node = el('div', {class:'toast'}, [el('span', null, msg), action ? el('button', {type:'button', onclick:()=>{ dismiss(); action.onClick(); }}, action.label) : null]);
   while(region.children.length>=3) region.firstChild.remove();
   region.appendChild(node);
-  setTimeout(()=>node.remove(), action ? 7000 : 2600);
+  setTimeout(dismiss, action ? 7000 : 2600);
 }
 
 function Seg(options, value, onChange, opts){
