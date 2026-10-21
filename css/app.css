@@ -618,6 +618,8 @@ td .chip.level{margin-inline-start:6px; vertical-align:middle}
 .pt-panel .setting{grid-template-columns:1fr}
 .pt-panel .setting .ctl{justify-content:flex-start}
 .pt-panel .grid-2 > *, .pop .grid-2 > *{min-width:0}
+.pt-panel .grid-2 > .field:has(> .seg){grid-column:1 / -1}
+.pt-panel .grid-2, .pop .grid-2{align-items:end}
 .sheet-sec button[hidden]{display:none}
 .pt-toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line)}
 .pt-search{width:200px}

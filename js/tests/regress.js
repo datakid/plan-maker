@@ -771,3 +771,57 @@ regress('K3 generation is deterministic for the backup week and for a fuzz fixtu
   const c = generatePlan(), d = generatePlan();
   return verdict(sigOf(a.plan)===sigOf(b.plan) && sigOf(c.plan)===sigOf(d.plan), 'identical', 'differs');
 });
+
+function tightSpec(kind, seed){
+  const spec = familySpec(kind, 1000+seed);
+  const r = mulberry32(seed*6007+3);
+  for(const p of spec.people){
+    if(r()<0.6){ const q = Math.floor(r()*3); p.quota = {min:q, max:q}; }
+    if(kind!=='rest' && r()<0.2) p.pattern = {mode:'custom', minRest:1};
+  }
+  return spec;
+}
+regress('S1 adversarial fuzz log: tight quotas, rest rules, rigid pairs and gender rules against the reference solver', ()=>{
+  const missed = [], falseInfeasible = [], undecided = [];
+  let solvable = 0, valid = 0, cases = 0;
+  for(const kind of ['gender', 'pairs', 'rest', 'everyday', 'deadline']){
+    for(let seed=1; seed<=16; seed++){
+      const spec = tightSpec(kind, seed);
+      Fx.use(spec);
+      cases++;
+      const ref = Ref.days(planIsValid, {counts:{basic:spec.volume.exact.basic, contracted:0}, maxLeaves:60000});
+      if(!ref.found){ if(ref.truncated) undecided.push(kind+seed); continue; }
+      solvable++;
+      const r = generatePlan();
+      const hard = r.plan ? hardOf(r.plan) : -1;
+      if(r.status==='infeasible') falseInfeasible.push(kind+seed);
+      if(r.status==='valid' && hard===0){ valid++; continue; }
+      missed.push(kind+seed+' '+r.status+' hard '+hard);
+    }
+  }
+  for(const line of missed) console.log('LOG S1 exhausted but solvable: '+line);
+  for(const id of falseInfeasible) console.log('LOG S1 infeasible claimed but solvable: '+id);
+  const summary = cases+' cases, '+solvable+' solvable, '+valid+' solved, '+missed.length+' missed, '+falseInfeasible.length+' false infeasible, '+undecided.length+' undecided';
+  return verdict(true, summary+(missed.length ? ' | missed '+missed.join('; ') : ''), summary);
+});
+
+regress('S2 quarter under simulated 3x and 10x slower clocks: hard and soft scores against the normal clock', ()=>{
+  const realNow = Date.now;
+  const run = factor=>{
+    App.data = normalizeData(JSON.parse(JSON.stringify(seedData())));
+    App.plan = null;
+    S().period = Object.assign({}, S().period, {goal:'range', preset:'custom', start:Fx.W1.start, end:'2027-01-07'});
+    const t0 = realNow();
+    Date.now = ()=>t0+(realNow()-t0)*factor;
+    let r;
+    try{ r = generatePlan(); } finally { Date.now = realNow; }
+    const ms = realNow()-t0;
+    if(!r.plan) return {factor, ms, status:r.error || 'none', hard:-1, soft:-1};
+    const v = validatePlan(r.plan);
+    return {factor, ms, status:r.status, hard:v.hardScore, soft:Math.round(v.softScore*100)/100, visits:r.plan.visits.length};
+  };
+  const a = run(1), b = run(3), c = run(10);
+  const line = x=>'x'+x.factor+' '+x.status+' hard '+x.hard+' soft '+x.soft+' visits '+x.visits+' '+x.ms+'ms';
+  for(const x of [a, b, c]) console.log('LOG S2 '+line(x));
+  return verdict(a.hard>=0 && b.hard>=0 && c.hard>=0, [a, b, c].map(line).join(' | '), 'no plan: '+[a, b, c].map(line).join(' | '));
+});

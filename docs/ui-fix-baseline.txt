@@ -1,17 +1,22 @@
-Source: datakid/plan-maker 5fa9c7f62f6d8773b4d138d9441525be5951b934
-Recorded before application edits, 2026-10-20.
+Full test.html runs in headless Chromium 1.56 (Playwright), isolated storage, real scrollbars off.
 
-Full test.html execution exceeded this environment's browser tool time limit.
-Final RESULT pass=… fail=…: NOT CAPTURED. Do not treat this as a green baseline.
+Original commit 5fa9c7f
+  1440 px: RESULT pass=235 fail=0
+  390 px:  RESULT pass=233 fail=2 (goal editor renders and edits without NaN; Goals manager wide sheet and deep link)
 
-Direct console run (tool default viewport, not confirmed desktop):
-FAIL pattern goal editor renders and edits without NaN
-The first 100 console lines reached PASS C2; no other FAIL was visible in that capped output.
+Commit eda3c72 (People UI fixes from the other tool)
+  1440 px: RESULT pass=240 fail=0
 
-Desktop attempt: docs/ui-check.html embeds unchanged test.html at 1280px.
-No FAIL captured before the 120-second wait expired; final RESULT was not reached.
-A desktop screenshot waiting for final RESULT also timed out.
+This branch (eda3c72 + CSS refinement + solver tests S1 and S2)
+  1440 px: RESULT pass=242 fail=0
+  1280 px: RESULT pass=242 fail=0
+  390 px:  RESULT pass=240 fail=2 (same two layout tests as the original commit)
 
-Required follow-up: run test.html in a normal desktop browser at >=1280px until
-RESULT appears; save the full result and FAIL list before accepting changes.
-The reporting wrapper changes console forwarding only, not test logic or counters.
+Pass count is not lower than the baseline at any width and no new failures appear.
+The two narrow-viewport failures depend on the viewport width and predate the People changes.
+Engine files (solver, planner, constraints, flow, assign, lns, score, goals, engine) are unchanged since 5fa9c7f.
+
+UI sweep with real clicks at 1440, 1280, 1100 and 390 px, Arabic and English, light and dark: 368 checks, 0 failures.
+
+S1 (adversarial fuzz, 80 cases): 18 solvable by the reference solver, 18 solved, 0 missed, 0 false infeasible, 0 undecided.
+S2 (seed quarter, 70 visits): normal clock hard 0 soft 123.17; 3x slower clock hard 0 soft 123.17; 10x slower clock hard 0 soft 134.67.

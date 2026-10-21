@@ -231,7 +231,7 @@ Saved data without `rulesRev` (or older than 7) is migrated on load without remo
 - `people-test.html` runs the four existing People cases plus five UI regressions and the uncaught-error check using isolated in-memory storage. Focused result: `RESULT pass=10 fail=0`.
 - `docs/people-matrix.html` checks the actual app at 1440, 1280, 1100 and 390 px, Arabic/English, light/dark, first/last row: `MATRIX pass=32 fail=0`. This is automated geometry/interaction coverage, not a substitute for visual review of every combination.
 - `people-preview.html` opens an isolated People editor for visual review; optional query parameters: `?lang=en&theme=dark`. `docs/ui-check.html` wraps the unchanged full suite at 1280 px.
-- Full-suite baseline and final comparison remain unverified because the browser tool timed out. See `docs/ui-fix-baseline.txt` and `docs/SONNET-HANDOFF.md`; do not treat focused results as release approval.
+- Full-suite results (Chromium 1280 px and 1440 px): original `5fa9c7f` `RESULT pass=235 fail=0`; this branch `RESULT pass=242 fail=0` (five People UI tests plus solver cases S1 and S2). The suite needs a desktop-width viewport: at 390 px two layout tests fail identically on the original commit and on this branch. Details are in `docs/ui-fix-baseline.txt`.
 
 ## Performance
 Seed data (about 150 facilities, 11 people), measured in headless jsdom on Node 22, full pipeline including LNS polish and explanations:
