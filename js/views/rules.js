@@ -31,15 +31,19 @@ function personDefaultLv(){
 function dayLvChip(wd, field, rule, paint, extra){
   const e = (S().days[wd] || {})[field];
   if(!e) return null;
-  return LevelChip(e.lv, rule, v=>{ S().days[wd][field].lv = v; commit('settings'); if(paint) paint(); }, extra ? {extra:()=>extra(e)} : {});
+  return LevelChip(e.lv, rule, v=>{ S().days[wd][field].lv = v; commit('settings'); if(paint) paint(); }, extra ? {extra:()=>extra(e), simple:App.ui.rulesMode==='simple'} : {simple:App.ui.rulesMode==='simple'});
 }
 
 function howManyExtra(wd, field, paint){
   return e=>Seg([{value:'all', label:t('lvHowAll')}, {value:'one', label:t('lvHowOne')}], e.howMany, v=>{ S().days[wd][field].howMany = v; commit('settings'); paint(); }, {cls:'sm'});
 }
 
+const ADV_RULES = ['rule-fixed', 'rule-rest', 'rule-days', 'rule-seniority', 'rule-fairness', 'rule-distance'];
+
 function renderRules(root){
   const set = S();
+  if(!App.ui.rulesMode){ try{ App.ui.rulesMode = localStorage.getItem('alkhitta.rulesmode')==='advanced' ? 'advanced' : 'simple'; }catch(e){ App.ui.rulesMode = 'simple'; } }
+  const simple = App.ui.rulesMode==='simple';
   const sections = [
     ['rule-goals', t('goalsTitle'), ICON.target],
     ['rule-fixed', t('sFixed'), ICON.flag],
@@ -60,10 +64,14 @@ function renderRules(root){
   let navLock = 0;
   function markNav(id){ nav.querySelectorAll('a').forEach(a=>a.classList.toggle('active', a.getAttribute('href')==='#'+id)); const a = nav.querySelector('a.active'); if(a && nav.scrollWidth>nav.clientWidth){ const nb = nav.getBoundingClientRect(), ab = a.getBoundingClientRect(); const delta = (ab.left + ab.width/2) - (nb.left + nb.width/2); if(Math.abs(delta)>8) nav.scrollBy({left:delta, behavior:'smooth'}); } }
   const main = el('div', {class:'stack'});
-  const layout = el('div', {class:'layout-side'}, [nav, main]);
+  const layout = el('div', {class:'layout-side'+(simple ? ' rules-simple' : '')}, [nav, main]);
+  const search = el('input', {type:'search', class:'input sm', id:'rules-search', placeholder:t('rulesSearch'), 'aria-label':t('rulesSearch')});
+  const modeSeg = Seg([{value:'simple', label:t('rulesSimple')}, {value:'advanced', label:t('rulesAdvanced')}], App.ui.rulesMode, v=>{ App.ui.rulesMode = v; try{ localStorage.setItem('alkhitta.rulesmode', v); }catch(e){} renderTab(); }, {cls:'sm'});
+  const noMatch = el('div', {class:'muted', id:'rules-nomatch', hidden:true, style:{padding:'12px 4px'}}, t('rulesNoMatch'));
+  root.appendChild(el('div', {class:'rules-bar'}, [modeSeg, search, simple ? el('span', {class:'muted', style:{fontSize:'12px'}}, t('rulesSimpleHint')) : null]));
   root.appendChild(layout);
 
-  const gl = (id, opts)=>LevelChip(lvOf(id), id, v=>{ if(!set.lv) set.lv = {}; set.lv[id] = v; commit('settings'); if(opts && opts.repaint) opts.repaint(); }, opts);
+  const gl = (id, opts)=>LevelChip(lvOf(id), id, v=>{ if(!set.lv) set.lv = {}; set.lv[id] = v; commit('settings'); if(opts && opts.repaint) opts.repaint(); }, Object.assign({simple}, opts));
   main.appendChild(ruleSection('rule-goals', t('goalsTitle'), t('goalsHint'), ()=>{ const n = set.goals.filter(g=>g.on).length; return n ? {text:String(n), cls:'ok'} : {text:t('off')}; }, paint=>[GoalsManager({onChange:()=>{}})]));
   main.appendChild(ruleSection('rule-fixed', t('sFixed'), t('fixedHint'), ()=>{ const n = set.overrides.filter(o=>o.on!==false && o.facilityId).length; return n ? {text:String(n), cls:'ok'} : null; }, ()=>[overridesEditor(()=>renderTab())]));
 
@@ -97,7 +105,7 @@ function renderRules(root){
       const c = P[key];
       const box = el('div', {class:'rule-card'+(c.on ? '' : ' off')}, [
         el('div', {class:'rc-head'}, [Switch(c.on, v=>{ c.on = v; commit('settings'); paint(); }), el('div', {class:'gl-main'}, [el('b', null, t(titleKey)), el('span', null, t(hintKey))]), el('div', {class:'spacer'}),
-          key==='activity' ? gl('vol.activity') : LevelChip(personDefaultLv(), 'p.rest', v=>{ for(const p of App.data.people) p.lv = Object.assign(personLvOf(p), {rest:v}); commit('settings'); })])
+          key==='activity' ? gl('vol.activity') : LevelChip(personDefaultLv(), 'p.rest', v=>{ for(const p of App.data.people) p.lv = Object.assign(personLvOf(p), {rest:v}); commit('settings'); }, {simple})])
       ]);
       if(c.on) box.appendChild(PatternEditor(c.pattern, ()=>commit('settings')));
       return box;
@@ -143,7 +151,7 @@ function renderRules(root){
       const upd = ()=>{ commit('settings'); paint(); };
       const sizes = [...new Set(schedulableFacilities().filter(f=>(!r.kinds.length || r.kinds.includes(facilityKind(f))) && (!r.categories.length || r.categories.includes(f.category))).map(f=>teamSizeFor(facilityKind(f), f.category)))].sort();
       const examples = sizes.map(n=>{ const min = genderMinCount(r, n); const combos = []; for(let m=0;m<=n;m++){ if(genderValid(r, m, n-m, n)) combos.push(m+'+'+(n-m)); } return t('gPreview', n)+': '+(combos.length ? combos.join(' / ') : '✕'); }).join('   ·   ');
-      card.appendChild(el('div', {class:'rc-head'}, [Switch(r.on, v=>{ r.on = v; upd(); }), el('b', null, (r.kinds.length ? r.kinds.map(kindLabel).join(' + ') : t('gAllKinds')) + (r.categories.length ? ' · '+r.categories.join('، ') : '') + (r.facilities.length ? ' · '+r.facilities.length+' '+t('tabFacilities') : '')), el('div', {class:'spacer'}), LevelChip(r.lv, 'gender.rule', v=>{ r.lv = v; commit('settings'); }),
+      card.appendChild(el('div', {class:'rc-head'}, [Switch(r.on, v=>{ r.on = v; upd(); }), el('b', null, (r.kinds.length ? r.kinds.map(kindLabel).join(' + ') : t('gAllKinds')) + (r.categories.length ? ' · '+r.categories.join('، ') : '') + (r.facilities.length ? ' · '+r.facilities.length+' '+t('tabFacilities') : '')), el('div', {class:'spacer'}), LevelChip(r.lv, 'gender.rule', v=>{ r.lv = v; commit('settings'); }, {simple}),
         i>0 ? el('button', {type:'button', class:'icon-btn sm', title:'↑', html:svg('<path d="M12 19V5M5 12l7-7 7 7"/>',14), onclick:()=>{ const a = set.genderRules; [a[i-1], a[i]] = [a[i], a[i-1]]; upd(); }}) : null,
         el('button', {type:'button', class:'icon-btn sm', html:ICON.trash, 'aria-label':t('del'), onclick:()=>{ set.genderRules.splice(i,1); upd(); }})]));
       card.appendChild(el('div', {class:'rc-row'}, [el('span', {class:'lab'}, t('gKinds')), ChipToggles([{value:'basic',label:t('kBasic')},{value:'contracted',label:t('kContracted')}], r.kinds, v=>{ r.kinds = v; upd(); })]));
@@ -206,7 +214,7 @@ function renderRules(root){
           Seg([{value:'together',label:t('prTogether')},{value:'avoid',label:t('prAvoid')}], r.type, v=>{ r.type = v; upd(); }, {cls:'sm'}),
           Select(opts, r.b, v=>{ r.b = v; upd(); }, {sm:true, width:'130px'}),
           el('div', {class:'spacer'}),
-          LevelChip(r.lv, 'pair', v=>{ r.lv = v; commit('settings'); }),
+          LevelChip(r.lv, 'pair', v=>{ r.lv = v; commit('settings'); }, {simple}),
           el('button', {type:'button', class:'icon-btn sm', html:ICON.trash, 'aria-label':t('del'), onclick:()=>{ set.pairs.splice(i,1); upd(); }})
         ])
       ]));
@@ -218,7 +226,7 @@ function renderRules(root){
   main.appendChild(ruleSection('rule-fairness', t('rFairness'), null, ()=>({text:[set.fairness.carry, set.rotation.on].filter(Boolean).length+'/2'}), paint=>{
     const R = set.rotation, B = set.repeatBlock;
     return [
-      setting(t('rn_p.spread'), t('rn_spreadHint'), LevelChip(personDefaultSpreadLv(), 'p.spread', v=>{ for(const p of App.data.people) p.lv = Object.assign(personLvOf(p), {spread:v}); commit('settings'); })),
+      setting(t('rn_p.spread'), t('rn_spreadHint'), LevelChip(personDefaultSpreadLv(), 'p.spread', v=>{ for(const p of App.data.people) p.lv = Object.assign(personLvOf(p), {spread:v}); commit('settings'); }, {simple})),
       setting(t('fairCarry'), t('fairCarryHint'), [Switch(set.fairness.carry, v=>{ set.fairness.carry = v; commit('settings'); paint(); }), gl('fair.load')]),
       setting(t('rotOn'), null, [R.on && lvMust('rotate') ? Stepper(B.times, v=>{ B.times = v; commit('settings'); }, {min:1, max:50, sm:true, unit:t('rbTimes')}) : null, Switch(R.on, v=>{ R.on = v; B.on = v; commit('settings'); paint(); }), R.on ? gl('rotate', {repaint:paint}) : null])
     ];
@@ -242,13 +250,35 @@ function renderRules(root){
 
   main.appendChild(el('div', {class:'row', style:{justifyContent:'flex-end'}}, el('button', {type:'button', class:'btn ghost sm', onclick:()=>confirmDialog(t('rsSettings'), t('rsSettingsQ'), {danger:true, label:t('reset'), onConfirm:()=>{ const pools = S().pools; App.data.settings = Object.assign(defaultSettings(), {pools}); migrateLv(App.data); commit('settings'); renderTab(); }})}, t('rsSettings'))));
 
+  for(const id of ADV_RULES){
+    const sec = main.querySelector('#'+id); if(sec) sec.setAttribute('data-adv', '1');
+    const a = nav.querySelector('a[href="#'+id+'"]'); if(a) a.setAttribute('data-adv', '1');
+  }
+  main.appendChild(noMatch);
+  function applySearch(){
+    const q = search.value.trim().toLowerCase();
+    layout.classList.toggle('rules-searching', !!q);
+    let shown = 0;
+    for(const sec of main.querySelectorAll('.rule-sec')){
+      const hit = !q || sec.textContent.toLowerCase().includes(q);
+      sec.classList.toggle('rs-hide', !hit);
+      if(hit) shown++;
+      const titleHit = !q || sec.querySelector('h2').textContent.toLowerCase().includes(q);
+      sec.querySelectorAll('.setting').forEach(r=>r.classList.toggle('rs-hide', !!q && !titleHit && !r.textContent.toLowerCase().includes(q)));
+    }
+    nav.querySelectorAll('a').forEach(a=>{ const sec = document.getElementById(a.getAttribute('href').slice(1)); a.classList.toggle('rs-hide', !!(sec && sec.classList.contains('rs-hide'))); });
+    noMatch.hidden = !q || shown>0;
+  }
+  search.addEventListener('input', applySearch);
   function spy(){
     if(!layout.isConnected){ window.removeEventListener('scroll', spy); return; }
     if(Date.now()<navLock) return;
     const off = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'))||60) + 80;
-    let cur = sections[0][0];
-    for(const [id] of sections){ const n = document.getElementById(id); if(n && n.getBoundingClientRect().top <= off) cur = id; }
-    if(window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) cur = sections[sections.length-1][0];
+    const vis = sections.filter(([id])=>{ const n = document.getElementById(id); return n && n.offsetParent!==null; });
+    if(!vis.length) return;
+    let cur = vis[0][0];
+    for(const [id] of vis){ const n = document.getElementById(id); if(n.getBoundingClientRect().top <= off) cur = id; }
+    if(window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) cur = vis[vis.length-1][0];
     markNav(cur);
   }
   window.addEventListener('scroll', spy, {passive:true});

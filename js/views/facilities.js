@@ -42,6 +42,7 @@ function renderFacilities(root){
   card.appendChild(bulk);
   const info = el('div', {class:'muted', style:{padding:'8px 16px', fontSize:'12.5px'}});
   card.appendChild(info);
+  if(!App.data.facilities.length) card.appendChild(el('div', {class:'empty', id:'fac-empty'}, t('emptyFacilities')));
   const tableWrap = el('div', {class:'tbl-wrap'});
   card.appendChild(tableWrap);
   root.appendChild(card);

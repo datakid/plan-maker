@@ -44,7 +44,7 @@ These are NOT a full manual visual review of every matrix combination.
 
 ## Blocking release checks / next work
 
-1. Full-suite baseline was attempted BEFORE application edits, but the complete suite exceeded the browser tool time limit. `docs/ui-fix-baseline.txt` records this honestly; no final baseline RESULT was obtained. The default-width attempt exposed the already documented pattern-goal editor failure. A 1280px wrapper produced no failure before timing out, but that is not a passing baseline.
+1. Full-suite baseline: obtained later in a normal headless Chromium run to the final RESULT line, `pass=242 fail=0` at 1280 px and 1440 px. See `docs/baseline-ship.txt`. The earlier attempt in the original tool timed out and produced no RESULT line.
 2. In a normal desktop browser, run original source commit test.html at >=1280px until final RESULT, record every FAIL, then run the patched full test.html and compare. Require pass count >= baseline and no new failures. The focused suite does not establish this release condition.
 3. Run the final visual sweep at all four widths, languages and themes, especially every panel field (pool regrouping, quota, skills, blocked facilities), nested popovers, and last-row/scroll interactions. Matrix coverage is automated and should not be represented as the requested full hand check.
 4. Create the requested branch and per-task commits in the real git repository. Upstream files can be diffed against the pinned SHA above.
@@ -56,7 +56,7 @@ No new independent solver audit was performed in this workspace. The supplied re
 
 ## Entry paths and storage
 
-- `index.html#team`: normal app People page. Existing browser localStorage persistence remains unchanged (`alkhitta.v4`, language/theme/view preferences); there is no server database.
+- `index.html#team`: normal app People page. Existing browser localStorage persistence remains unchanged (`alkhitta.v5` and `alkhitta.plan.v5`, plus language/theme/view preferences; `alkhitta.v4` is only read once to migrate old data); there is no server database.
 - `test.html`: unchanged full test runner.
 - `people-test.html`: focused People regressions with in-memory isolated storage.
 - `people-preview.html`: actual app with isolated storage, automatically opens People editor; optional `?lang=en&theme=dark` for visual inspection.

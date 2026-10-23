@@ -1,7 +1,27 @@
 const DAY_MS = 86400000;
 function pad2(n){ return String(n).padStart(2,'0'); }
-function ordOf(iso){ const p = String(iso).split('-').map(Number); return Math.round(Date.UTC(p[0], p[1]-1, p[2]) / DAY_MS); }
-function isoOf(ord){ const d = new Date(ord*DAY_MS); return d.getUTCFullYear()+'-'+pad2(d.getUTCMonth()+1)+'-'+pad2(d.getUTCDate()); }
+const ORD_CACHE = new Map(), ISO_CACHE = new Map();
+function ordOf(iso){
+  const key = typeof iso==='string' ? iso : String(iso);
+  let v = ORD_CACHE.get(key);
+  if(v===undefined){
+    const p = key.split('-').map(Number);
+    v = Math.round(Date.UTC(p[0], p[1]-1, p[2]) / DAY_MS);
+    if(ORD_CACHE.size>60000) ORD_CACHE.clear();
+    ORD_CACHE.set(key, v);
+  }
+  return v;
+}
+function isoOf(ord){
+  let v = ISO_CACHE.get(ord);
+  if(v===undefined){
+    const d = new Date(ord*DAY_MS);
+    v = d.getUTCFullYear()+'-'+pad2(d.getUTCMonth()+1)+'-'+pad2(d.getUTCDate());
+    if(ISO_CACHE.size>60000) ISO_CACHE.clear();
+    ISO_CACHE.set(ord, v);
+  }
+  return v;
+}
 function ymdOf(ord){ const d = new Date(ord*DAY_MS); return {y:d.getUTCFullYear(), m:d.getUTCMonth(), d:d.getUTCDate()}; }
 function wdOf(ord){ return ((ord+4)%7+7)%7; }
 function weekKey(ord){ return ord - wdOf(ord); }
@@ -85,13 +105,19 @@ function parseDateList(text){
   return {accepted, rejected};
 }
 
+function setSafeHtml(node, v){
+  const str = String(v==null ? '' : v);
+  if(/^\s*<svg[\s>]/i.test(str) && !/<script|<foreignObject|\son[a-z]+\s*=|javascript:/i.test(str)) node.innerHTML = str;
+  else node.textContent = str;
+}
+
 function el(tag, attrs, children){
   const e = document.createElement(tag);
   if(attrs) for(const k in attrs){
     const v = attrs[k];
     if(v==null || v===false) continue;
     if(k==='class') e.className = v;
-    else if(k==='html') e.innerHTML = v;
+    else if(k==='html') setSafeHtml(e, v);
     else if(k==='style' && typeof v==='object'){ for(const sk in v){ if(v[sk]==null) continue; if(sk.startsWith('--')) e.style.setProperty(sk, v[sk]); else e.style[sk] = v[sk]; } }
     else if(k.startsWith('on') && typeof v==='function') e.addEventListener(k.slice(2), v);
     else if(k==='value' && (tag==='input' || tag==='textarea' || tag==='select')) e.value = v;
@@ -135,6 +161,8 @@ const ICON = {
   moon: svg('<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>'),
   auto: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 010 17z" fill="currentColor" stroke="none"/>'),
   search: svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', 15),
+  undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>', 15),
+  redo: svg('<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/>', 15),
   refresh: svg('<path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 5v6h-6"/>', 15),
   download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', 15),
   upload: svg('<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>', 15),

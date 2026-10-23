@@ -71,22 +71,34 @@ function renderData(root){
     restoreInput.addEventListener('change', async ()=>{
       const f = restoreInput.files[0]; if(!f) return;
       try{
-        const raw = JSON.parse(await f.text());
-        let next;
-        if(raw && raw.version===5 && Array.isArray(raw.facilities)) next = normalizeData(raw);
-        else if(raw && Array.isArray(raw.facilities) && Array.isArray(raw.people) && raw.settings) next = normalizeData(migrateV4(raw));
-        else throw new Error('shape');
+        const r = restoreBackupObject(JSON.parse(await f.text()));
+        if(!r.ok) throw new Error(r.error);
+        takeSnapshot('restore');
         const before = JSON.stringify(App.data);
-        App.data = next; commit('data');
-        toast(t('bkRestored'), {label:t('undo'), onClick:()=>{ App.data = normalizeData(JSON.parse(before)); commit('data'); }});
+        App.data = r.data; commit('data');
+        toast(t('bkRestored'), {label:t('undo'), onClick:()=>{ App.data = normalizeData(sanitizeBackup(JSON.parse(before))); commit('data'); node.render(); }});
         node.render();
       }catch(e){ toast(t('bkError')); }
+      restoreInput.value = '';
     });
     bk.appendChild(el('div', {class:'card-pad row wrap'}, [
-      el('button', {type:'button', class:'btn outline', onclick:()=>downloadBlob(new TextEncoder().encode(JSON.stringify(Object.assign({exportedAt:todayISO()}, App.data), null, 1)), 'alkhitta-'+todayISO()+'.json', 'application/json')}, [el('span', {html:ICON.download, style:{display:'flex'}}), t('bkExport')]),
+      el('button', {type:'button', class:'btn outline', onclick:downloadBackupNow}, [el('span', {html:ICON.download, style:{display:'flex'}}), t('bkExport')]),
       el('button', {type:'button', class:'btn outline', onclick:()=>restoreInput.click()}, [el('span', {html:ICON.upload, style:{display:'flex'}}), t('bkRestore')]),
       restoreInput
     ]));
+    const snaps = readSnapshots();
+    const snapBox = el('div', {class:'card-pad stack', id:'snapshot-list', style:{gap:'6px', paddingTop:'0'}}, [el('h3', {class:'sub'}, t('snapTitle'))]);
+    if(!snaps.length) snapBox.appendChild(el('div', {class:'muted'}, t('snapEmpty')));
+    snaps.map((sn, i)=>({sn, i})).reverse().forEach(({sn, i})=>{
+      snapBox.appendChild(el('div', {class:'row', style:{padding:'4px 0', borderBottom:'1px dashed var(--line)'}}, [
+        el('span', {class:'num'}, new Date(sn.at).toLocaleString(App.ui.lang==='ar' ? 'ar-EG' : 'en-GB')),
+        el('span', {class:'muted'}, t('snapR_'+sn.reason)),
+        el('div', {class:'spacer'}),
+        el('button', {type:'button', class:'btn sm outline', onclick:()=>{ if(restoreSnapshot(i)){ toast(t('bkRestored')); node.render(); } else toast(t('bkError')); }}, t('snapRestore'))
+      ]));
+    });
+    bk.appendChild(snapBox);
+    bk.appendChild(el('div', {class:'card-pad muted num', id:'storage-size', style:{paddingTop:'0'}}, t('storageLabel')+' '+Math.round(storageSize()/1024)+' KB · '+t('appVersion')+' '+APP_VERSION));
     out.push(bk);
 
     const ap = el('section', {class:'card', id:'appearance-card'});
@@ -100,7 +112,7 @@ function renderData(root){
     const rs = el('section', {class:'card', id:'reset-card'});
     rs.appendChild(el('div', {class:'card-head'}, [el('h2', null, t('rsTitle'))]));
     rs.appendChild(el('div', {class:'card-pad row wrap'}, [
-      el('button', {type:'button', class:'btn danger', onclick:()=>confirmDialog(t('rsAll'), t('rsQ'), {danger:true, label:t('rsAll'), onConfirm:()=>{ for(const k of Object.keys(localStorage)) if(k.startsWith('alkhitta.')) localStorage.removeItem(k); location.hash = ''; location.reload(); }})}, t('rsAll'))
+      el('button', {type:'button', class:'btn danger', onclick:()=>confirmDialog(t('rsAll'), t('rsQ'), {danger:true, label:t('rsAll'), onConfirm:()=>{ eraseAllData(); }})}, t('rsAll'))
     ]));
     out.push(rs);
     return out;

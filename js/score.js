@@ -148,22 +148,71 @@ function evaluateState(st){
   return st;
 }
 
+function fastCopy(x){
+  if(x===null || typeof x!=='object') return x;
+  if(Array.isArray(x)){
+    const n = new Array(x.length);
+    for(let i=0; i<x.length; i++) n[i] = fastCopy(x[i]);
+    return n;
+  }
+  const o = {};
+  for(const k in x){
+    if(!Object.prototype.hasOwnProperty.call(x, k)) continue;
+    const v = x[k];
+    if(v!==undefined) o[k] = fastCopy(v);
+  }
+  return o;
+}
+
+function stateVisit(st, id){
+  const visits = st.plan.visits;
+  if(st.vIdxArr!==visits || st.vIdxLen!==visits.length){
+    st.vIdx = new Map();
+    for(const v of visits) st.vIdx.set(v.id, v);
+    st.vIdxArr = visits; st.vIdxLen = visits.length;
+  }
+  return st.vIdx.get(id);
+}
+
+function busyBump(m, v, d){
+  if(!v || !v.date) return;
+  let c = m.get(v.date);
+  if(!c){ if(d<0) return; c = new Map(); m.set(v.date, c); }
+  for(const id of visitTeamIds(v)){
+    const n = (c.get(id) || 0)+d;
+    if(n>0) c.set(id, n); else c.delete(id);
+  }
+}
+
+function busyIndexBuild(plan){
+  const m = new Map();
+  for(const v of plan.visits) busyBump(m, v, 1);
+  return m;
+}
+
 function applyMove(st, move){
   const inv = [];
   const visits = st.plan.visits;
+  const bi = st.busyIdx || null;
   for(const op of move.ops){
     if(op.op==='set'){
-      const v = visits.find(x=>x.id===op.id);
+      const v = stateVisit(st, op.id);
       const prev = {};
-      for(const k of Object.keys(op.fields)){ prev[k] = JSON.parse(JSON.stringify(v[k]===undefined ? null : v[k])); v[k] = JSON.parse(JSON.stringify(op.fields[k])); }
+      if(bi) busyBump(bi, v, -1);
+      for(const k of Object.keys(op.fields)){ prev[k] = fastCopy(v[k]===undefined ? null : v[k]); v[k] = fastCopy(op.fields[k]); }
       if(op.fields.facilityId!==undefined && op.fields.kind===undefined){ prev.kind = v.kind; v.kind = visitKindOf(facilityById(v.facilityId)); }
+      if(bi) busyBump(bi, v, 1);
       inv.unshift({op:'set', id:op.id, fields:prev});
     } else if(op.op==='add'){
       visits.splice(op.at==null ? visits.length : op.at, 0, op.visit);
+      if(st.vIdxArr===visits){ st.vIdx.set(op.visit.id, op.visit); st.vIdxLen = visits.length; }
+      if(bi) busyBump(bi, op.visit, 1);
       inv.unshift({op:'remove', id:op.visit.id});
     } else if(op.op==='remove'){
       const i = visits.findIndex(x=>x.id===op.id);
       const [v] = visits.splice(i, 1);
+      if(st.vIdxArr===visits){ st.vIdx.delete(v.id); st.vIdxLen = visits.length; }
+      if(bi) busyBump(bi, v, -1);
       inv.unshift({op:'add', visit:v, at:i});
     }
   }

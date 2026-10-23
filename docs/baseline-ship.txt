@@ -1,0 +1,43 @@
+Ship-readiness baseline (Phase 0). Source: main at 89ecf83, run from a clean worktree, no edits.
+
+Environment
+  Browser:  headless Chromium 153 (puppeteer-core with @sparticuz/chromium), file:// pages, isolated in-memory storage
+  Machine:  1 vCPU Intel Xeon 2.80 GHz, 4 GB RAM, Linux x86_64
+  Runner:   test.html opened to its final RESULT line
+
+Full suite (test.html)
+  1280 px:  RESULT pass=242 fail=0   wall 158 s
+  1440 px:  RESULT pass=242 fail=0   wall 248 s (another browser process was running on the same single core)
+  No FAIL, EXC or uncaught page error lines at either width.
+
+Generation timings (bench.html, seed data, seed 20260101, start 2026-10-04, default rules)
+  Spans: week = 7 days, month = 28 days, quarter = 95 days. Two runs per row, milliseconds, main thread.
+
+  CPU    span     run 1   run 2   visits  status  soft    polish iters
+  1x     week       132      83       5    valid    27.665       40
+  1x     month      480     304      20    valid    87.835      150
+  1x     quarter   2132    1873      69    valid   134          500
+  4x     week       383     220       5    valid    27.665    16 / 40
+  4x     month     1276    1061      20    valid    87.835   112 / 150
+  4x     quarter   4765    4358      69    valid   146 / 134  192 / 272
+  10x    quarter   7120       -      69    valid   156           80
+
+Findings that matter
+  - Generation runs on the main thread. At 4x CPU slowdown the quarter blocks the page for about 4.5 s, at 10x about 7 s.
+  - The wall-clock caps end the polish early on a slow clock: the quarter polish ran 500 iterations at 1x but 192 to 272 at 4x, 80 at 10x, and the same seed gave soft score 134, 146 and 156. Same seed does not mean same plan on every device.
+  - Only the polish stage is cut short; hard violations stayed at 0 in every run.
+
+Doc contradictions found and fixed in this branch
+  - docs/SONNET-HANDOFF.md named alkhitta.v4 as the storage key; the code uses alkhitta.v5 and alkhitta.plan.v5 (alkhitta.v4 is only read for migration).
+  - docs/SONNET-HANDOFF.md said no full-suite RESULT was ever obtained; the numbers above are that result.
+  - docs/v4-report.md said js/anneal.js was deleted but the file was still in the repo and not loaded by any page. It is now removed.
+
+Branch verification (ship-readiness, after the last commit)
+  Full suite over http (worker used), headless Chromium 153:
+    390 px   RESULT pass=279 fail=0
+    1280 px  RESULT pass=279 fail=0   (through scripts/ci-run.js with Playwright)
+  Earlier full runs on the same branch at the commit before the last one (pass=276 fail=0): 390, 1100, 1440 px over http, and 1280 px from local files (inline fallback).
+  scripts/ci-run.js app end to end: CSP clean, generation in the worker, self-hosted fonts, no external requests, every asset precached, offline reload and offline generation.
+  docs/people-matrix.html: MATRIX pass=32 fail=0.
+  Quarter generation, same seed and same plan hash as before the solver changes: about 1.9 s before, about 0.9 s after at normal speed.
+  Not done: key-partitioned incremental score, insert/remove-visit moves, native-speaker review of the Arabic explanations, a human visual check of every language, theme and width, a run of the GitHub workflow on GitHub.

@@ -225,8 +225,8 @@ function preflightPlan(info, plan){
       for(const kind of ['basic', 'contracted']) if(!k || k===kind) capBy[kind] += dayCap(o);
     }
     for(const kind of ['basic', 'contracted']){
-      if(exact[kind]>capBy[kind]) add('xDayKindCapacity', [kindLabel(kind), exact[kind], capBy[kind]], {rules:['day.kind', 'vol.exact']});
-      if(exact[kind]>cands.filter(f=>visitKindOf(f)===kind).length) add('xExactOverFacilities', [kindLabel(kind), exact[kind], cands.filter(f=>visitKindOf(f)===kind).length], {rules:['vol.exact']});
+      if(exact[kind]>capBy[kind]) add('xDayKindCapacity', [kindLabel(kind), exact[kind], capBy[kind]], {rules:['day.kind', 'vol.exact'], fix:{type:'setExact', kind, to:capBy[kind]}});
+      if(exact[kind]>cands.filter(f=>visitKindOf(f)===kind).length) add('xExactOverFacilities', [kindLabel(kind), exact[kind], cands.filter(f=>visitKindOf(f)===kind).length], {rules:['vol.exact'], fix:{type:'setExact', kind, to:cands.filter(f=>visitKindOf(f)===kind).length}});
     }
   }
   for(const o of eligibleDays){
@@ -236,7 +236,7 @@ function preflightPlan(info, plan){
       const e = dr[field];
       if(!e || e.lv.level!=='must' || e.howMany!=='one') continue;
       const exactZero = field==='kind' && volume.mode==='exact' && (volume.exact[e.kind]|0)===0;
-      if(exactZero || !cands.some(ok)) add('xDayRuleNone', [wdName(wdOf(o)), t(rule)], {rules:exactZero ? [rule, 'vol.exact'] : [rule]});
+      if(exactZero || !cands.some(ok)) add('xDayRuleNone', [wdName(wdOf(o)), t(rule)], {rules:exactZero ? [rule, 'vol.exact'] : [rule], fix:{type:'dayPrefer', wd:wdOf(o), field}});
     }
   }
   if(plan && pools.every(pl=>!Object.keys(pl.byCategory||{}).length)){
@@ -260,14 +260,14 @@ function preflightPlan(info, plan){
     if(g.type==='atLeast' && (g.n||0)>0){
       const fac = goalFacilities(g);
       const distinct = g.repeat ? Infinity : fac.length;
-      if(!fac.length || distinct<g.n) add('xAtLeastPool', [goalTitle(g), g.n, fac.length], {goal:g.id});
+      if(!fac.length || distinct<g.n) add('xAtLeastPool', [goalTitle(g), g.n, fac.length], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}});
     }
-    if(g.type==='person' && g.rel==='only' && liveIds(g.people).length && !goalFacilities(g).length) add('xOnlyEmpty', [goalTitle(g)], {goal:g.id});
+    if(g.type==='person' && g.rel==='only' && liveIds(g.people).length && !goalFacilities(g).length) add('xOnlyEmpty', [goalTitle(g)], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}});
     if(g.type==='atLeast'){
       for(const c of set.goals){
         if(c===g || !c.on || c.type!=='atMost' || !goalMust(c)) continue;
         const same = JSON.stringify(c.scope)===JSON.stringify(g.scope);
-        if(same && c.n<g.n) add('xCapVsMin', [goalTitle(g), goalTitle(c)], {goal:g.id});
+        if(same && c.n<g.n) add('xCapVsMin', [goalTitle(g), goalTitle(c)], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}});
       }
     }
   }
@@ -290,14 +290,14 @@ function preflightPlan(info, plan){
     const eligible = win.days.filter(normalWorkday);
     if(volume.mode==='exact'){
       const total = (volume.exact.basic|0) + (volume.exact.contracted|0);
-      if(total<eligible.length) add('xEveryDayVolume', [total, eligible.length]);
+      if(total<eligible.length) add('xEveryDayVolume', [total, eligible.length], {fix:{type:'noEveryDay'}});
     }
     if(volume.perWeek){
       const byWk = new Map();
       for(const o of eligible) byWk.set(weekKey(o), (byWk.get(weekKey(o))||0)+1);
-      for(const [wk, n] of byWk) if(n>volume.perWeek){ add('xEveryDayWeekCap', [n, volume.perWeek, isoOf(wk)]); break; }
+      for(const [wk, n] of byWk) if(n>volume.perWeek){ add('xEveryDayWeekCap', [n, volume.perWeek, isoOf(wk)], {fix:{type:'noEveryDay'}}); break; }
     }
-    for(const o of eligible) if(dayCap(o)<1){ add('xEveryDayCap', [isoOf(o)]); break; }
+    for(const o of eligible) if(dayCap(o)<1){ add('xEveryDayCap', [isoOf(o)], {fix:{type:'noEveryDay'}}); break; }
     for(const r of planDayRules()){
       if(!r.hard) continue;
       const ds = new Set(eligible);
@@ -660,7 +660,7 @@ function searchPlan(plan, info, opts){
   const rules = compilePeopleRules();
   const bounds = personBounds(rules);
   const avail = effectiveAvailability();
-  const finish = p=>{ stats.nodes = budget.nodes; stats.ms = Date.now()-t0; return {plan:p, info:stats}; };
+  const finish = p=>{ stats.nodes = budget.nodes; stats.ms = Date.now()-t0; stats.truncated = Date.now()>=budget.deadline; return {plan:p, info:stats}; };
 
   const tryTeams = (p, nodeCap, noise)=>{
     const sub = {nodes:0, maxNodes:Math.min(nodeCap, budget.maxNodes-budget.nodes), deadline:budget.deadline};

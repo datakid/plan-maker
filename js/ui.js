@@ -5,6 +5,30 @@ document.addEventListener('keydown', e=>{
   if(e.key==='Escape' && Overlay.stack.length){ e.preventDefault(); Overlay.stack[Overlay.stack.length-1](); }
 });
 
+const TrapStack = [];
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+function pruneTraps(){
+  for(let i=TrapStack.length-1; i>=0; i--) if(!TrapStack[i].root.isConnected) TrapStack.splice(i, 1);
+}
+function trapFocus(root){
+  pruneTraps();
+  const entry = {root};
+  TrapStack.push(entry);
+  return ()=>{ const i = TrapStack.indexOf(entry); if(i>=0) TrapStack.splice(i, 1); };
+}
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Tab' || activePop) return;
+  pruneTraps();
+  if(!TrapStack.length) return;
+  const root = TrapStack[TrapStack.length-1].root;
+  const list = [...root.querySelectorAll(FOCUSABLE)].filter(n=>n.offsetParent!==null || n===document.activeElement);
+  if(!list.length){ e.preventDefault(); root.focus(); return; }
+  const first = list[0], last = list[list.length-1];
+  if(!root.contains(document.activeElement)){ e.preventDefault(); first.focus(); return; }
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+});
+
 let activePop = null;
 const popStack = [];
 function popover(anchor, build, opts){
@@ -115,7 +139,7 @@ function sheet(opts){
   const body = el('div', {class:'sheet-body'});
   const foot = el('footer', {class:'sheet-foot'});
   const prev = document.activeElement;
-  let closed = false;
+  let closed = false, release = null;
   function render(){
     const y = body.scrollTop;
     clear(head); clear(body); clear(foot);
@@ -130,6 +154,7 @@ function sheet(opts){
   }
   function close(instant){
     if(closed) return; closed = true;
+    if(release) release();
     popOverlay(close);
     closePop();
     scrim.classList.remove('show'); panel.classList.remove('show');
@@ -145,6 +170,8 @@ function sheet(opts){
   scrim.addEventListener('click', ()=>close());
   document.body.appendChild(scrim); document.body.appendChild(panel);
   document.body.classList.add('locked');
+  panel.setAttribute('tabindex', '-1');
+  release = trapFocus(panel);
   render();
   requestAnimationFrame(()=>{ scrim.classList.add('show'); panel.classList.add('show'); });
   pushOverlay(close);
@@ -157,7 +184,10 @@ function confirmDialog(title, message, opts){
   opts = opts||{};
   const scrim = el('div', {class:'scrim show', style:{zIndex:89}});
   const dlg = el('div', {class:'dialog', role:'alertdialog', 'aria-modal':'true'});
-  function close(){ popOverlay(close); scrim.remove(); dlg.remove(); }
+  const prevFocus = document.activeElement;
+  const release = trapFocus(dlg);
+  dlg.setAttribute('tabindex', '-1');
+  function close(){ release(); popOverlay(close); scrim.remove(); dlg.remove(); if(prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus({preventScroll:true}); }
   const ok = el('button', {type:'button', class:'btn '+(opts.danger?'danger':'primary'), onclick:()=>{ close(); opts.onConfirm && opts.onConfirm(); }}, opts.label || t('confirm'));
   const cancel = el('button', {type:'button', class:'btn ghost', onclick:close}, t('cancel'));
   appendKids(dlg, [el('h3', null, title), message ? el('p', null, message) : null, el('div', {class:'actions'}, [cancel, ok])]);
@@ -433,6 +463,7 @@ function PatternEditor(pt, onChange, opts){
 
 function LevelChip(lv, spec, onChange, opts){
   opts = opts || {};
+  const isSimple = ()=>!!opts.simple;
   const rs = ruleSpec(spec);
   let cur = normLv(lv, rs ? rs.def : null, rs);
   const chip = el('button', {type:'button', class:'chip level', 'aria-haspopup':'dialog', 'aria-expanded':'false', 'aria-label':t('lvChipLabel')+(rs ? ' · '+t(rs.name) : '')});
@@ -441,7 +472,7 @@ function LevelChip(lv, spec, onChange, opts){
     chip.className = 'chip level '+(must ? 'must' : 'prefer')+(opts.sm ? ' sm' : '');
     clear(chip);
     if(must) chip.appendChild(el('span', {class:'lk', html:ICON.lock}));
-    chip.appendChild(document.createTextNode(must ? t('lvMust') : t('lvPrefer')+' · '+cur.w));
+    chip.appendChild(document.createTextNode(must ? t('lvMust') : t('lvPrefer')+(isSimple() ? '' : ' · '+cur.w)));
     chip.dataset.level = cur.level;
     chip.dataset.w = String(cur.w);
   }
@@ -462,8 +493,7 @@ function LevelChip(lv, spec, onChange, opts){
     const kids = [
       el('div', {class:'pop-title'}, rs ? t(rs.name) : t('lvChipLabel')),
       seg,
-      el('div', {class:'lv-lab'}, cur.level==='must' ? t('lvPriority') : t('lvWeight')),
-      slider
+      ...(isSimple() ? [] : [el('div', {class:'lv-lab'}, cur.level==='must' ? t('lvPriority') : t('lvWeight')), slider])
     ];
     if(opts.extra) kids.push(opts.extra(()=>refresh()));
     if(rs) kids.push(el('div', {class:'hint lv-hint'}, (rs.preferOnly ? '' : t('lvMustMeans')+': ')+t(rs.must)));

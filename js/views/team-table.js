@@ -176,7 +176,7 @@ function renderTeam(root){
       tbody.appendChild(el('tr', {class:'pt-pool'}, el('td', {colSpan:C.length}, el('div', {class:'row', style:{gap:'8px'}}, [el('b', null, poolName(pl)), el('span', {class:'muted'}, t('ptSeats', pl.seats.basic, pl.seats.contracted))]))));
       for(const p of members) tbody.appendChild(rowFor(p, C, an));
     }
-    if(!any) tbody.appendChild(el('tr', null, el('td', {colSpan:C.length, class:'empty'}, t('ptNoMatch'))));
+    if(!any) tbody.appendChild(el('tr', null, el('td', {colSpan:C.length, class:'empty', id:'team-empty'}, App.data.people.length ? t('ptNoMatch') : t('emptyTeam'))));
     table.appendChild(tbody);
     tbody.addEventListener('keydown', onKey);
     tableWrap.appendChild(table);

@@ -62,9 +62,10 @@ regress('v4: every registry rule is reachable through a LevelChip', ()=>{
 });
 
 regress('v4: toggling every rule chip between Must and Prefer regenerates without errors', ()=>{
-  const keep = App.data, keepPlan = App.plan, keepTab = App.ui.tab;
+  const keep = App.data, keepPlan = App.plan, keepTab = App.ui.tab, keepMode = App.ui.rulesMode;
   const bad = [];
   let toggled = 0;
+  App.ui.rulesMode = 'advanced';
   try{
     for(const [mode, spacing] of [['fill', 'even'], ['exact', 'gap'], ['quota', 'pack']]){
       P4.prepare(mode, spacing);
@@ -90,6 +91,6 @@ regress('v4: toggling every rule chip between Must and Prefer regenerates withou
         if(bad.length>6) break;
       }
     }
-  } finally { closePop(); App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
+  } finally { closePop(); App.ui.rulesMode = keepMode; App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length && toggled>30, toggled+' chips toggled', bad.slice(0, 5).join(' | ')+' toggled '+toggled);
 });

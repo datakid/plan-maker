@@ -1,0 +1,28 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="css/app.css"></head><body>
+<header class="topbar" id="topbar"></header><main class="page stack" id="page"></main><div id="printSurface"></div>
+
+
+<script src="js/tests/panel.js"></script><script src="js/tests/env.js"></script><script src="js/tests/kit.js"></script><script src="js/core.js"></script><script src="js/seed.js"></script><script src="js/store.js"></script><script src="js/i18n.js"></script><script src="js/rules-model.js"></script><script src="js/people-rules.js"></script><script src="js/engine.js"></script><script src="js/goals.js"></script><script src="js/constraints.js"></script><script src="js/score.js"></script><script src="js/flow.js"></script><script src="js/assign.js"></script><script src="js/layout.js"></script><script src="js/solver.js"></script><script src="js/lns.js"></script><script src="js/explain.js"></script><script src="js/planner.js"></script><script src="js/genrun.js"></script><script src="js/ui.js"></script><script src="js/io.js"></script><script src="js/views/plan.js"></script><script src="js/views/facilities.js"></script><script src="js/views/team.js"></script><script src="js/views/team-table.js"></script><script src="js/views/goals.js"></script><script src="js/views/goals-manager.js"></script><script src="js/views/rules.js"></script><script src="js/views/data.js"></script><script src="js/app.js"></script>
+<script>
+window.benchRun = function(){
+  const out = [];
+  const seed = JSON.stringify(App.data);
+  const spans = [['week', 6], ['month', 27], ['quarter', 94]];
+  for(const [name, add] of spans){
+    App.data = normalizeData(JSON.parse(seed));
+    const start = '2026-10-04';
+    const end = isoOf(ordOf(start)+add);
+    S().period = Object.assign({}, S().period, {goal:'range', preset:'custom', start, end});
+    const t0 = performance.now();
+    const r = generatePlan({seed:20260101, timeScale:(window.BENCH_TS || 1)});
+    const ms = Math.round(performance.now()-t0);
+    const g = r.plan && r.plan.gen && r.plan.gen.search || r.search || {};
+    let key = '';
+    if(r.plan){ const c = JSON.parse(JSON.stringify(r.plan)); const strip = o=>{ if(Array.isArray(o)) return o.forEach(strip); if(o && typeof o==='object'){ for(const k of Object.keys(o)){ if(['ms','lnsMs','createdAt','generatedAt','at','id','vid'].includes(k)) delete o[k]; else strip(o[k]); } } }; strip(c); key = JSON.stringify(c); }
+    let h = 0; for(let i=0; i<key.length; i++) h = (Math.imul(h, 31)+key.charCodeAt(i))|0;
+    out.push({name, ms, hash:h, visits:r.plan ? r.plan.visits.length : 0, status:r.status, hard:g.score ? g.score.hard : null, soft:g.score ? g.score.soft : null, iters:g.iters==null ? null : g.iters, polishIters:g.polish ? g.polish.iters : null});
+  }
+  return out;
+};
+</script>
+</body></html>

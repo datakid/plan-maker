@@ -303,11 +303,33 @@ function personTravelKm(p, f){
   return Math.abs(fk - ok) + Math.min(fk, ok) * 0.5;
 }
 
+function seatBase(p, f, ord, busy){
+  if(busy && busy.has(p.id)) return 'busy';
+  if(!personAvailable(p, ord)) return 'off';
+  if((p.blocked || []).includes(f.id)) return 'blocked';
+  return null;
+}
+function seatBlock(p, v, date, plan, o){
+  o = o || {};
+  const f = facilityById(v.facilityId);
+  if(!p || !f) return 'missing';
+  let busy = o.busy;
+  if(!busy){
+    busy = new Set();
+    for(const x of plan.visits) if(x.date===date && x.id!==v.id) for(const id of visitTeamIds(x)) busy.add(id);
+  }
+  const r = seatBase(p, f, ordOf(date), busy);
+  if(r) return r;
+  const rules = o.rules || compilePeopleRules();
+  if(rules.denied(p.id, f)==='must') return 'rule';
+  return null;
+}
+function canSeat(p, v, date, plan, o){ return !seatBlock(p, v, date, plan, o); }
+
 function hardOk(p, ord, f, ctx, used){
   const u = used || ctx.dayUsed.get(ord);
-  if(u && u.has(p.id)) return 'busy';
-  if(!personAvailable(p, ord)) return 'off';
-  if((p.blocked||[]).includes(f.id)) return 'blocked';
+  const base = seatBase(p, f, ord, u);
+  if(base) return base;
   const rb = S().repeatBlock;
   if(rotateMustActive() && (ctx.fpv[f.id+'|'+p.id]||0) >= rb.times) return 'repeat';
   if(p.maxPerWeek!=null && p.maxPerWeek>0 && (ctx.week[p.id+'|'+weekKey(ord)]||0) >= p.maxPerWeek) return 'week';
@@ -784,11 +806,8 @@ function candidatesForSeat(plan, visit, poolId, currentId){
   const baseSigs = new Map();
   for(const v of base.violations) if(v.cls==='hard') baseSigs.set(violationSig(v), (baseSigs.get(violationSig(v))||0)+1);
   return activePeople().filter(p=>p.pool===poolId && p.id!==currentId && !inTeam.has(p.id)).map(p=>{
-    let reason = null, warn = null, introduced = [];
-    if(busy.has(p.id)) reason = 'busy';
-    else if(!personAvailable(p, ord)) reason = 'off';
-    else if((p.blocked||[]).includes(f.id)) reason = 'blocked';
-    else {
+    let reason = seatBase(p, f, ord, busy), warn = null, introduced = [];
+    if(!reason){
       const trial = clonePlan(plan);
       const tv = trial.visits.find(v=>v.id===visit.id);
       const list = tv.team[poolId] = (tv.team[poolId]||[]).slice();
@@ -847,6 +866,7 @@ function approvePlan(){
   const blockers = approvalBlockers(plan);
   if(blockers.length) return {ok:false, blockers};
   const val = validatePlan(plan);
+  takeSnapshot('approve');
   const H = App.data.history;
   const snap = {facilities: plan.visits.map(v=>{ const f = facilityById(v.facilityId); return f ? {id:f.id, lastVisit:f.lastVisit, visitCount:f.visitCount, history:deepClone(f.history)} : null; }).filter(Boolean),
     fpv: Object.assign({}, H.fpv), counts: Object.assign({}, H.counts), lastCycle: H.lastCycle};

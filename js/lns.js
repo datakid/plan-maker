@@ -19,28 +19,61 @@ function refreshOpenSeats(plan){
   }
 }
 
-function lnsBusy(plan, date, exceptIds){
+let lnsRulesCache = null;
+function lnsRules(){ return lnsRulesCache || compilePeopleRules(); }
+
+let lnsState = null;
+
+function lnsBusyScan(plan, date, exceptIds){
   const busy = new Set();
   for(const v of plan.visits) if(v.date===date && !(exceptIds && exceptIds.has(v.id))) for(const id of visitTeamIds(v)) busy.add(id);
   return busy;
 }
 
+function lnsBusy(plan, date, exceptIds){
+  const st = lnsState;
+  if(!st || st.plan!==plan || !st.busyIdx) return lnsBusyScan(plan, date, exceptIds);
+  const busy = new Set();
+  const c = st.busyIdx.get(date);
+  if(c){
+    for(const id of c.keys()) busy.add(id);
+    if(exceptIds){
+      const dec = new Map();
+      for(const xid of exceptIds){
+        const x = stateVisit(st, xid);
+        if(x && x.date===date) for(const id of visitTeamIds(x)) dec.set(id, (dec.get(id) || 0)+1);
+      }
+      for(const [id, n] of dec) if((c.get(id) || 0)-n<=0) busy.delete(id);
+    }
+  }
+  if(App.debugIndex){
+    const scan = lnsBusyScan(plan, date, exceptIds);
+    if(scan.size!==busy.size || [...scan].some(id=>!busy.has(id))) throw new Error('busy index drift on '+date);
+  }
+  return busy;
+}
+
+function lnsReindex(st){
+  st.busyIdx = busyIndexBuild(st.plan);
+  st.vIdxArr = null;
+}
+
 function lnsEligible(plan, v, pool, date, busy, taken){
-  const f = facilityById(v.facilityId);
-  const ord = ordOf(date);
-  return activePeople().filter(p=>p.pool===pool && !busy.has(p.id) && !(taken && taken.has(p.id)) && personAvailable(p, ord) && !(p.blocked || []).includes(f.id) && patternCyclesAllow(p, ord));
+  const rules = lnsRules();
+  return activePeople().filter(p=>p.pool===pool && !(taken && taken.has(p.id)) && canSeat(p, v, date, plan, {busy, rules}));
 }
 
 function lnsRestaff(plan, v, date, rnd, keepFixed){
   const team = {};
   const busy = lnsBusy(plan, date, new Set([v.id]));
   const taken = new Set();
+  const rules = lnsRules();
   for(const pl of S().pools){
     const cur = ((v.team || {})[pl.id] || []).slice();
     const out = [];
     for(const id of cur){
       const p = personById(id);
-      const ok = p && !busy.has(id) && personAvailable(p, ordOf(date)) && !(p.blocked || []).includes(v.facilityId) && !taken.has(id);
+      const ok = p && !taken.has(id) && canSeat(p, v, date, plan, {busy, rules});
       if(ok || (keepFixed && v.locked && v.locked.includes(id))){ out.push(id); taken.add(id); }
     }
     const need = lnsSeatNeed(v, pl);
@@ -96,9 +129,9 @@ function lnsMoves(st, rnd, focus, focusPeople){
     const pl = poolList[Math.floor(rnd()*poolList.length)];
     const cur = ((v.team || {})[pl.id] || []).slice();
     const busy = lnsBusy(plan, v.date, new Set([v.id]));
-    const f = facilityById(v.facilityId);
+    const rules = lnsRules();
     const ord = ordOf(v.date);
-    const cand = activePeople().filter(p=>p.pool===pl.id && !cur.includes(p.id) && !busy.has(p.id) && personAvailable(p, ord) && !(p.blocked || []).includes(f.id));
+    const cand = activePeople().filter(p=>p.pool===pl.id && !cur.includes(p.id) && canSeat(p, v, v.date, plan, {busy, rules}));
     if(!cand.length) return null;
     const p = cand[Math.floor(rnd()*cand.length)];
     const nextCur = cur.length>=lnsSeatNeed(v, pl) ? cur.slice(0, -1).concat(p.id) : cur.concat(p.id);
@@ -143,9 +176,11 @@ function lnsMoves(st, rnd, focus, focusPeople){
     const people = activePeople().filter(p=>p.pool===pl.id);
     if(!seats.length || seats.length>people.length) return null;
     const skip = new Set(vs.map(x=>x.id));
+    const rules = lnsRules();
+    const noBusy = new Set();
     const cost = seats.map(s=>people.map(p=>{
       const busy = plan.visits.some(y=>!skip.has(y.id) && y.date===s.x.date && visitTeamIds(y).includes(p.id));
-      if(busy || !personAvailable(p, ordOf(s.x.date)) || (p.blocked || []).includes(s.x.facilityId)) return 1e6;
+      if(busy || !canSeat(p, s.x, s.x.date, plan, {busy:noBusy, rules})) return 1e6;
       return (((s.x.team || {})[pl.id] || [])[s.i]===p.id ? 0 : 1)+rnd()*0.9;
     }));
     const h = hungarian(cost);
@@ -171,7 +206,7 @@ function lnsMoves(st, rnd, focus, focusPeople){
   return {name:'N3swap', ops:[{op:'set', id:v.id, fields:{team:Object.assign({}, v.team, {[pl.id]:a})}}, {op:'set', id:w.id, fields:{team:Object.assign({}, w.team, {[pl.id]:b})}}]};
 }
 
-function lnsDescent(st, rnd, deadline, maxEvals){
+function lnsDescent(st, rnd, deadline, maxEvals, flag){
   const plan = st.plan;
   const days = plan.days.filter(d=>normalWorkday(ordOf(d)));
   let evals = 0;
@@ -180,7 +215,8 @@ function lnsDescent(st, rnd, deadline, maxEvals){
     const base = lnsCost(st);
     let best = null, bestCost = base;
     const tryMove = move=>{
-      if(evals>=maxEvals || Date.now()>deadline) return;
+      if(evals>=maxEvals) return;
+      if(Date.now()>deadline){ if(flag) flag.truncated = true; return; }
       evals++;
       const r = deltaMove(st, move);
       const c = lnsCost(st);
@@ -209,24 +245,29 @@ function lnsDescent(st, rnd, deadline, maxEvals){
 
 function lnsCost(st){ return st.hard*1e6+st.soft; }
 
-function lnsRun(plan, seed, maxIters, maxMs){
+function lnsRun(plan, seed, maxIters, maxMs, onProgress){
   const t0 = Date.now();
   const opts = {seed};
   const rnd = lnsRng(seed>>>0);
+  lnsRulesCache = compilePeopleRules();
   const work = clonePlan(plan);
   const st = makeState(work);
+  lnsReindex(st);
+  lnsState = st;
   const startCost = lnsCost(st);
   let best = clonePlan(work), bestCost = startCost;
   const hist = new Array(50).fill(bestCost);
   const stats = {iters:0, accepted:0, improved:0, byMove:{}, ms:0, stage:'lns', optimal:false, seed:opts.seed || 20260101};
   let sinceBest = 0;
   for(let it=0; it<maxIters; it++){
-    if((it&15)===0 && Date.now()-t0>maxMs*0.75) break;
+    if((it&15)===0 && Date.now()-t0>maxMs*0.75){ stats.truncated = true; break; }
+    if(onProgress && (it&63)===0) onProgress(it/maxIters);
     if(st.hard===0 && st.soft<=0 && it>0 && opts.stopAtZero) break;
     if(sinceBest>1500) break;
     stats.iters++;
     if(sinceBest>0 && sinceBest%400===0){
       work.visits = clonePlan(best).visits;
+      lnsReindex(st);
       evaluateState(st);
       stats.kicks = (stats.kicks || 0)+1;
       for(let k=0; k<4; k++){
@@ -263,10 +304,13 @@ function lnsRun(plan, seed, maxIters, maxMs){
   }
   {
     work.visits = clonePlan(best).visits;
+    lnsReindex(st);
     evaluateState(st);
-    stats.descentEvals = lnsDescent(st, rnd, t0+maxMs, Math.max(60, Math.floor(maxIters*0.15)));
+    stats.descentEvals = lnsDescent(st, rnd, t0+maxMs, Math.max(60, Math.floor(maxIters*0.15)), stats);
     if(lnsCost(st)<bestCost-1e-9){ best = clonePlan(work); bestCost = lnsCost(st); stats.improved++; }
   }
+  lnsRulesCache = null;
+  lnsState = null;
   refreshOpenSeats(best);
   stats.ms = Date.now()-t0;
   const bv = validatePlan(best);
@@ -289,14 +333,15 @@ function lnsPlan(plan, info, opts){
   for(let r=0; r<runs; r++){
     const left = maxMs-(Date.now()-t0);
     if(left<=5) break;
-    const out = lnsRun(plan, (base+Math.imul(r+1, 0x9E3779B1))>>>0, Math.ceil(maxIters/runs), left/(runs-r));
+    const out = lnsRun(plan, (base+Math.imul(r+1, 0x9E3779B1))>>>0, Math.ceil(maxIters/runs), left/(runs-r), opts.onProgress ? (q=>opts.onProgress((r+q)/runs)) : null);
     total.runs++; total.iters += out.info.iters; total.accepted += out.info.accepted;
+    if(out.info.truncated) total.truncated = true;
     for(const k of Object.keys(out.info.byMove)){ const m = total.byMove[k] || (total.byMove[k] = {tried:0, accepted:0, improved:0}); for(const f of ['tried', 'accepted', 'improved']) m[f] += out.info.byMove[k][f]; }
     if(!best || out.cost<best.cost) best = out;
     if(best.info.hard===0 && best.info.soft<=0) break;
   }
   if(!best) return {plan, info:{iters:0, accepted:0, ms:0, byMove:{}, stage:'lns', optimal:false, seed:base, hard:start.hardScore, soft:start.softScore}, improved:false};
   total.ms = Date.now()-t0;
-  const merged = Object.assign({}, best.info, {iters:total.iters, accepted:total.accepted, byMove:total.byMove, runs:total.runs, ms:total.ms, seed:opts.seed || 20260101});
+  const merged = Object.assign({}, best.info, {iters:total.iters, accepted:total.accepted, byMove:total.byMove, runs:total.runs, ms:total.ms, seed:opts.seed || 20260101, truncated:!!total.truncated});
   return {plan:best.plan, info:merged, improved:best.improved};
 }

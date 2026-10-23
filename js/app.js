@@ -106,6 +106,40 @@ function renderTab(){
   window.scrollTo(0, y);
 }
 
+function registerServiceWorker(){
+  if(window.__TEST_ISOLATED__ || !('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(reloaded || !hadController) return;
+    reloaded = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    const announce = ()=>toast(t('newVersion'), {label:t('reloadNow'), onClick:()=>{ if(reg.waiting) reg.waiting.postMessage('skipWaiting'); }});
+    if(reg.waiting && navigator.serviceWorker.controller) announce();
+    reg.addEventListener('updatefound', ()=>{
+      const w = reg.installing;
+      if(!w) return;
+      w.addEventListener('statechange', ()=>{ if(w.state==='installed' && navigator.serviceWorker.controller) announce(); });
+    });
+  }).catch(()=>{});
+}
+
+function showReadOnlyBanner(){
+  let b = document.getElementById('ro-banner');
+  if(b) return;
+  b = el('div', {id:'ro-banner', class:'ro-banner', role:'alert'}, [
+    el('div', {class:'ro-text'}, [el('b', null, t('roTitle')), el('span', null, t('roBody'))]),
+    el('div', {class:'ro-actions'}, [
+      el('button', {type:'button', class:'btn sm primary', onclick:()=>location.reload()}, t('roReload')),
+      el('button', {type:'button', class:'btn sm ghost', onclick:()=>confirmDialog(t('roKeep'), t('roKeepQ'), {danger:true, label:t('roKeep'), onConfirm:takeOverWrites})}, t('roKeep'))
+    ])
+  ]);
+  document.body.insertBefore(b, document.body.firstChild);
+}
+function hideReadOnlyBanner(){ const b = document.getElementById('ro-banner'); if(b) b.remove(); }
+
 function boot(){
   const lang = localStorage.getItem('alkhitta.lang'); App.ui.lang = lang==='en' ? 'en' : 'ar';
   const th = localStorage.getItem('alkhitta.theme'); App.ui.theme = (th==='light'||th==='dark') ? th : 'auto';
@@ -125,10 +159,14 @@ function boot(){
   on('plan', ()=>{ if(App.ui.tab==='plan'){ if(PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update(); renderResults(); } });
   on('settings', ()=>{ if(App.ui.tab==='plan' && PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update(); });
   on('data', ()=>{ renderTopbar(); });
-  window.addEventListener('scroll', ()=>{ const b = document.getElementById('topbar'); if(b) b.classList.toggle('scrolled', window.scrollY>4); if(window.scrollX) window.scrollTo(0, window.scrollY); }, {passive:true});
+  window.addEventListener('scroll', ()=>{ const b = document.getElementById('topbar'); if(b) b.classList.toggle('scrolled', window.scrollY>4); }, {passive:true});
   window.addEventListener('hashchange', ()=>{ const id = (location.hash||'').slice(1); if(id!==App.ui.tab && TABS.some(x=>x.id===id)) goTab(id); });
-  window.addEventListener('storage', e=>{ if(e.key===STORE_KEY) toast(App.ui.lang==='ar' ? 'تغيّرت البيانات في نافذة أخرى' : 'Data changed in another window', {label:App.ui.lang==='ar'?'إعادة التحميل':'Reload', onClick:()=>location.reload()}); });
-  window.addEventListener('beforeunload', ()=>{ clearTimeout(saveTimer); saveNow(); });
+  window.addEventListener('storage', e=>{ if(e.key===null || e.key===STORE_KEY || e.key===PLAN_KEY) markForeignWrite(e.key===null ? STORE_KEY : e.key); });
+  window.addEventListener('beforeunload', ()=>{ if(App.readOnly) return; clearTimeout(saveTimer); saveNow(); });
+  if(App.readOnly) showReadOnlyBanner();
+  if(App.recovered) toast(t('recoveredToast'));
+  if(App.corrupt) toast(t('corruptToast'));
+  registerServiceWorker();
   if(App.migrated) toast(t('migrated'));
 }
 document.addEventListener('DOMContentLoaded', boot);

@@ -40,7 +40,7 @@ function GoalsManager(opts){
   const body = el('div', {class:'gm-body'}, [listEl, detail]);
   root.appendChild(toolbar);
   root.appendChild(body);
-  const wide = ()=>opts.forceWide!=null ? opts.forceWide : window.innerWidth>=980;
+  const wide = ()=>opts.forceWide!=null ? opts.forceWide : (App.ui.gmForceWide!=null ? App.ui.gmForceWide : window.innerWidth>=980);
   let progress = [];
   const failing = g=>{ const r = progress.find(x=>x.g.id===g.id); return !!r && (r.state==='short' || r.state==='exceeded'); };
 

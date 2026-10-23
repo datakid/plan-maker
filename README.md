@@ -162,6 +162,14 @@ Stored shape: `settings.lv[ruleId]`, `settings.days[wd].<field>.lv`, `person.lv`
 ### Budgets
 Iteration caps are primary and wall-clock caps are a safety cutoff. The polish uses at most `cap / 8` iterations (40, 150 and 500 on week, month and quarter windows; caps 400 ms, 1.5 s and 5 s, polish uses 80% of the cap minus construction time). Repair of hard violations uses 3,000 / 8,000 / 15,000 iterations. The same input and seed give the same plan as long as the iteration cap is reached before the wall-clock cap, which is the case for the seed data.
 
+## Rules and first run
+The Rules tab opens in **Simple** mode: the key rules (goals, calendar, volume, gender, pairs) with Must or Prefer only, no weights. **Advanced** shows every rule and weight; the choice is remembered. The search box finds rules in either mode. A plan-less Plan tab shows a three step checklist (work days, team, generate), and facilities and team show an empty state. When a plan is infeasible or exhausted, solvable conflicts get a button that applies the fix and regenerates.
+
+## Architecture: generation in a worker
+`js/genrun.js` starts `js/worker.js`, which loads the engine files with `importScripts` and runs `generatePlan` on a JSON copy of `App.data`. The page stays responsive; the bar at the bottom shows the stage and percent, and *Cancel* terminates the worker. If workers are unavailable (or the script fails to load) the same code runs inline, which is also what `test.html` calls directly. Worker and inline runs give the same plan for the same seed: iteration counts decide the search, and the wall-clock caps are a safety net four times wider (`timeScale`, default 4). A run that still hits the clock sets `plan.gen.search.truncated`, and Summary says it stopped early on this device.
+
+After a regenerate the previous plan is kept in memory: a chip shows `+added -removed moved m team changed n` with *Keep previous plan*. Manual edits can be undone and redone (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl+Y, and the toolbar buttons; 50 steps, cleared when the plan is replaced).
+
 ## Features
 - **Plan tab**: six summary tiles (Period, Workdays, Visits, Team, Goals, Fixed visits). Each opens an in-place popover, so the page never expands, collapses or jumps. Generate/Regenerate button. Stale-plan banner.
 - **Views**: List (grouped by day), Calendar (month grid; drag a visit to another day), Matrix (people × days or facilities × days, with unavailable days shaded), Summary (KPIs, workload vs expected, checks, notes, carry-over).
@@ -183,6 +191,16 @@ Iteration caps are primary and wall-clock caps are a safety cutoff. The polish u
 
 ## Data
 Everything is stored in `localStorage` (`alkhitta.v5`, `alkhitta.plan.v5`). Existing `alkhitta.v4` data is migrated automatically on first load. No backend.
+
+### Storage safety
+- **One writer.** When another window changes `alkhitta.v5` or `alkhitta.plan.v5`, this window becomes read-only: saving and the unload save stop, and a banner offers *Reload* or *Use this window's data*. Nothing is written until the user chooses.
+- **Atomic saves.** Each save writes `<key>.tmp`, verifies it by reading it back and parsing it, then writes the main key and removes the tmp key. On load a leftover tmp value wins when the main value is broken or older, and a toast says so.
+- **Full storage.** `QuotaExceededError` never writes partial data: the in-memory data stays, and a dialog offers a JSON backup download. The Data tab shows the storage used.
+- **Snapshots.** The last 3 data snapshots (size capped at about 1.5 MB of text) are taken before *Approve*, before every import and before every restore, under `alkhitta.snap.v1`. The Data tab lists them with a *Restore* button.
+- **Corrupt data.** Stored data is sanitized before `normalizeData`: wrong types, `null` entries, duplicate ids and bad numbers are dropped or repaired per record, so one bad record never costs the valid ones. An unreadable main value is kept under `alkhitta.corrupt.v1` instead of being overwritten by seed data.
+- **Markup.** `el({html})` only accepts a static `<svg>` string; anything else is inserted as text, so names from imports or backups are never parsed as HTML.
+- **Erase all data** stops writes first, so the unload save cannot bring the data back.
+- Backups and XLSX exports carry the app version (`appVersion` in the JSON, the document description in the workbook).
 
 ## One validator
 `validatePlan(plan, {source})` in `js/constraints.js` is the only place that decides whether a plan is valid. Generation, repairs, the search, manual edits, approval, the summary and goal progress all call it (or the transactional tallies that are tested to equal it). Every finding is one record: class, group, people, facilities, dates, visits, actual vs required, message key.
@@ -226,6 +244,8 @@ Swap, fill, move, replace and remove all go through `mutatePlan`, which evaluate
 Saved data without `rulesRev` (or older than 7) is migrated on load without removing people, facilities, goals or history. It adds `settings.patterns`, `volume.requireEveryEligibleDay` (false), `spacing.strict`, and per-person `pattern` (`inherit`); malformed numbers and dates are sanitised. `alkhitta.v4` and v4 backups still import.
 
 ## Tests
+- `scripts/ci-run.js` (Playwright, run by `.github/workflows/test.yml`) serves the repo and runs: the app end to end (no CSP violations, worker used, self-hosted fonts, no external requests, service worker cache covers every asset, offline reload and offline generation), `docs/people-matrix.html`, and `test.html` at 1280 px. `ONLY=app|matrix|suite` runs one part; `CHROME_PATH` points at a local Chromium.
+- `ship-test.html` runs only the `ship:` tests in `js/tests/phase8.js` (data safety, worker, solver internals, undo, diff, focus, diagnostics, versions). It is much faster than the full suite.
 - Open `test.html`. It replaces `localStorage` with an in-memory shim first and refuses to run if it cannot, so the real data is never cleared. It runs the app self-test and then the regression suite. A results panel covers the page: green "ALL TESTS PASSED" with `RESULT pass=… fail=0`, or red with each failing test listed (tick the box to list passing ones too, or use "Show app" to see the page). The same lines are printed to the console.
 - `js/tests/reference.js` has two exhaustive solvers for small fixtures: `Ref.solve` (facilities, then days, then teams) and `Ref.days` (day by day with pruning on availability, rest, quotas and weekly caps, then the validator as the oracle).
 - `js/tests/phase1.js` to `phase7.js` hold the v4 tests: registry and migration, every rule flipped between Must and Prefer, delta against full evaluation, flow and Hungarian cross-checks, T1 to T9, LevelChip reachability, People table, Goals manager and explanations.
@@ -234,7 +254,7 @@ Saved data without `rulesRev` (or older than 7) is migrated on load without remo
 - `people-test.html` runs the four existing People cases plus five UI regressions and the uncaught-error check using isolated in-memory storage. Focused result: `RESULT pass=10 fail=0`.
 - `docs/people-matrix.html` checks the actual app at 1440, 1280, 1100 and 390 px, Arabic/English, light/dark, first/last row: `MATRIX pass=32 fail=0`. This is automated geometry/interaction coverage, not a substitute for visual review of every combination.
 - `people-preview.html` opens an isolated People editor for visual review; optional query parameters: `?lang=en&theme=dark`. `docs/ui-check.html` wraps the unchanged full suite at 1280 px.
-- Full-suite results (Chromium 1280 px and 1440 px): original `5fa9c7f` `RESULT pass=235 fail=0`; this branch `RESULT pass=242 fail=0` (five People UI tests plus solver cases S1 and S2). The suite needs a desktop-width viewport: at 390 px two layout tests fail identically on the original commit and on this branch. Details are in `docs/ui-fix-baseline.txt`.
+- Full-suite results (Chromium 1280 px and 1440 px): original `5fa9c7f` `RESULT pass=235 fail=0`; this branch `RESULT pass=242 fail=0` (five People UI tests plus solver cases S1 and S2). Ship-readiness branch: `RESULT pass=272 fail=0` at both 1280 px and 390 px (served over http, so the worker is exercised). The two tests that failed at 390 px asserted the wide Goals manager layout synchronously; they now pin it and a new test covers the narrow sheet (see `docs/v4-notes.md`). Baseline numbers and generation timings are in `docs/baseline-ship.txt`.
 
 ## Performance
 Seed data (about 150 facilities, 11 people), measured in headless jsdom on Node 22, full pipeline including LNS polish and explanations:
@@ -261,9 +281,12 @@ Budgets: week under 400 ms, month under 1.5 s, quarter under 5 s (test T8).
 
 ## Known limitations
 - The search is bounded; `exhausted` is not a proof of infeasibility.
-- Score re-evaluation after a move recomputes the whole plan (exact, checked against a fresh evaluation, but not key-partitioned), so LNS iterations cost about 1.5 ms on a week and about 3 ms on a quarter.
+- Score re-evaluation after a move recomputes the whole plan (exact, checked against a fresh evaluation, but not key-partitioned). Moves now copy fields structurally, look up visits and busy people through indexes, and date/id lookups are cached, which made a quarter about twice as fast (about 1.9 s to 0.9 s at normal speed); a key-partitioned incremental score is still open.
 - Window re-layout through the flow and a Hungarian pass over a whole day are not separate LNS neighbourhoods; layout comes from the initial flow and from day, swap and facility moves.
-- LNS never adds or removes visits or seats: with equal weights it could trade a visit for an open seat.
+- LNS never adds or removes visits or seats: with equal weights it could trade a visit for an open seat. Insert and remove moves are not implemented.
+- Touch targets are 40 px for buttons, tabs, inputs and selects; checkboxes (22 px), toggle switches (38x22) and calendar add buttons (28 px) are smaller.
+- One-click conflict fixes cover exact counts, day rules, goals and the every-day requirement; other conflicts (for example a hard volume over capacity) still need a manual change. Plain-language wording of the explanations has not been reviewed by a native Arabic speaker.
+- Two tabs writing at once is handled by making the older window read-only, not by merging.
 - No flow relaxation bound is computed: `lowerBound` is `null` and `optimal` is `false`.
 - Layout flow covers at most one "at least one visit" rule per weekday; the others are left to LNS.
 - Non-linear hard day rules (gap spacing, activity patterns) are not in the flow; when the flow breaks them the greedy placement is used.
@@ -273,9 +296,11 @@ Budgets: week under 400 ms, month under 1.5 s, quarter under 5 s (test T8).
 - Patterns are evaluated per plan; there is no cross-plan fairness for them.
 
 ## Deploy
-This is a static site with no build step. On Vercel, serve the repo root. You can drop `test.html`.
+This is a static site with no build step. On Vercel, serve the repo root: `.vercelignore` keeps the test pages, `docs/`, `scripts/` and `js/tests/` out of the deployment, and `vercel.json` adds the security headers. `index.html` also carries a Content-Security-Policy meta tag (no inline scripts or styles, same-origin only), so the policy holds on any static host.
+
+`sw.js` and `manifest.webmanifest` make the app installable and usable offline. When you change any file listed in `sw.js`, bump the version in three places: `APP_VERSION` in `js/store.js`, `VERSION` in `sw.js` and the `?v=` query on every script, stylesheet and manifest link in `index.html`. The `ship: P5.4` test fails if they disagree or an asset is missing from the precache list. Open tabs show a toast *A new version is available* with an *Update now* button.
 
 ## Possible next steps
 - People goals measured across several plans (e.g. "at most 2 far trips a month").
 - Goal templates (e.g. "all hospitals monthly"); recurring fixed visits (every first Sunday).
-- Undo history for manual plan edits; comparing several plans side by side.
+- Comparing several plans side by side.

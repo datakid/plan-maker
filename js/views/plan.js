@@ -185,25 +185,95 @@ function runGenerate(btn){
   }
   doGenerate(btn);
 }
+function genStatusNode(){
+  let n = document.getElementById('gen-status');
+  if(n) return n;
+  const label = el('span', {class:'gs-label'}, t('generating'));
+  const bar = el('span', {class:'gs-bar'}, el('span', {class:'gs-fill'}));
+  const cancel = el('button', {type:'button', class:'btn sm ghost', id:'gen-cancel', onclick:()=>{ if(GenRun.active) GenRun.active.cancel(); }}, t('cancel'));
+  n = el('div', {id:'gen-status', class:'gen-status', role:'status', 'aria-live':'polite'}, [label, bar, cancel]);
+  document.body.appendChild(n);
+  return n;
+}
+function setGenProgress(stage, pct){
+  const n = document.getElementById('gen-status'); if(!n) return;
+  const key = {select:'genStageSelect', layout:'genStageLayout', teams:'genStageTeams', repair:'genStageTeams', search:'genStageSearch', lns:'genStageSearch', polish:'genStagePolish', explain:'genStageExplain', done:'genStageExplain'}[stage];
+  const p = Math.max(0, Math.min(100, Math.round((pct||0)*100)));
+  n.querySelector('.gs-label').textContent = t('generating')+' · '+(key ? t(key) : '')+' '+p+'%';
+  n.querySelector('.gs-fill').style.width = p+'%';
+}
+function diffPlans(a, b){
+  const group = p=>{
+    const m = new Map();
+    for(const v of p.visits){ if(!m.has(v.facilityId)) m.set(v.facilityId, []); m.get(v.facilityId).push(v); }
+    for(const l of m.values()) l.sort((x, y)=>x.date<y.date ? -1 : (x.date>y.date ? 1 : 0));
+    return m;
+  };
+  const key = v=>visitTeamIds(v).slice().sort().join(',');
+  const ga = group(a), gb = group(b);
+  const out = {added:0, removed:0, moved:0, changed:0};
+  for(const id of new Set([...ga.keys(), ...gb.keys()])){
+    const A = ga.get(id) || [], B = gb.get(id) || [];
+    const used = new Set(), left = [];
+    for(const x of A){
+      const j = B.findIndex((y, k)=>!used.has(k) && y.date===x.date);
+      if(j>=0){ used.add(j); if(key(x)!==key(B[j])) out.changed++; }
+      else left.push(x);
+    }
+    const rest = B.filter((_, k)=>!used.has(k));
+    out.moved += Math.min(left.length, rest.length);
+    out.added += Math.max(0, rest.length-left.length);
+    out.removed += Math.max(0, left.length-rest.length);
+  }
+  return out;
+}
+
+function diffChipNode(d){
+  const keep = ()=>{ App.plan = d.prev; App.ui.diff = null; PlanHistory.undo = []; PlanHistory.redo = []; savePlan(); emit('plan'); };
+  return el('div', {class:'banner info', id:'diff-chip', role:'status'}, [
+    el('span', {html:ICON.info, style:{display:'flex'}}),
+    el('span', {style:{flex:'1', minWidth:'0'}}, t('diffChip', d.added, d.removed, d.moved, d.changed)),
+    el('button', {type:'button', class:'btn sm', onclick:keep}, t('diffKeep')),
+    el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ App.ui.diff = null; renderResults(); }}, t('diffDismiss'))
+  ]);
+}
+
 function doGenerate(btn){
   closePop();
-  const label = btn ? btn.querySelector('.gl') : null;
-  if(btn){ btn.disabled = true; btn.classList.add('busy'); if(label) label.textContent = t('generating'); }
-  setTimeout(()=>{
-    let res;
-    try{ res = generatePlan(); }catch(e){ console.error(e); res = {error:'fail'}; }
-    if(btn){ btn.disabled = false; btn.classList.remove('busy'); }
-    if(res.error){
-      if(label) label.textContent = App.plan ? t('regenerate') : t('generate');
-      toast(t({rangeInvalid:'errRange', noWorkdays:'errNoWorkdays', coverageUnreachable:'covUnreachable'}[res.error] || 'errNoWorkdays'));
-      return;
+  if(GenRun.active) return GenRun.active.promise;
+  const buttons = [...document.querySelectorAll('.gen-btn')];
+  const labels = buttons.map(b=>b.querySelector('.gl'));
+  for(const b of buttons){ b.disabled = true; b.classList.add('busy'); }
+  for(const l of labels) if(l) l.textContent = t('generating');
+  genStatusNode();
+  setGenProgress('select', 0);
+  const h = startGeneration({}, setGenProgress);
+  return h.promise.then(res=>{
+    const st = document.getElementById('gen-status'); if(st) st.remove();
+    for(const b of document.querySelectorAll('.gen-btn')){ b.disabled = false; b.classList.remove('busy'); }
+    if(res.cancelled){
+      for(const l of document.querySelectorAll('.gen-btn .gl')) l.textContent = App.plan ? t('regenerate') : t('generate');
+      toast(t('genCancelled'));
+      return res;
     }
+    if(res.error){
+      for(const l of document.querySelectorAll('.gen-btn .gl')) l.textContent = App.plan ? t('regenerate') : t('generate');
+      toast(t({rangeInvalid:'errRange', noWorkdays:'errNoWorkdays', coverageUnreachable:'covUnreachable'}[res.error] || 'errNoWorkdays'));
+      return res;
+    }
+    const prevPlan = App.plan;
     App.plan = res.plan; App.ui.focusPerson = null; App.ui.calMonth = null;
+    App.ui.diff = null;
+    if(prevPlan && prevPlan.visits && prevPlan.visits.length && res.plan.visits){
+      const d = diffPlans(prevPlan, res.plan);
+      if(d.added || d.removed || d.moved || d.changed) App.ui.diff = Object.assign(d, {prev:prevPlan, forPlan:res.plan});
+    }
     savePlan();
     PlanView.animate = true;
     emit('plan');
     if(res.status && res.status!=='valid') toast(t({infeasible:'toastInfeasible', exhausted:'toastExhausted', invalid:'toastInvalid'}[res.status] || 'toastInvalid'));
-  }, 30);
+    return res;
+  });
 }
 
 function renderPlan(root){
@@ -213,6 +283,21 @@ function renderPlan(root){
   root.appendChild(results);
   PlanView.results = results;
   renderResults();
+}
+function firstRunChecklist(){
+  const step = (n, title, hint, btn)=>el('li', {class:'check-step'}, [
+    el('span', {class:'check-n', 'aria-hidden':'true'}, String(n)),
+    el('div', {class:'check-main'}, [el('b', null, title), el('span', {class:'muted'}, hint)]),
+    btn
+  ]);
+  return el('section', {class:'card', id:'first-run'}, [
+    el('div', {class:'card-head'}, [el('h2', null, t('frTitle'))]),
+    el('ol', {class:'check-list'}, [
+      step(1, t('frDays'), t('frDaysHint'), el('button', {type:'button', class:'btn sm outline', id:'fr-days', onclick:()=>goTab('rules', 'rule-calendar')}, t('frOpen'))),
+      step(2, t('frTeam'), t('frTeamHint'), el('button', {type:'button', class:'btn sm outline', id:'fr-team', onclick:()=>goTab('team')}, t('frOpen'))),
+      step(3, t('frGen'), t('frGenHint'), el('button', {type:'button', class:'btn sm primary', id:'fr-gen', onclick:()=>{ const b = document.querySelector('#plan-empty .gen-btn'); if(b) runGenerate(b); }}, t('generate')))
+    ])
+  ]);
 }
 function renderResults(){
   const root = PlanView.results; if(!root) return;
@@ -229,6 +314,7 @@ function renderResults(){
       gp && (gp.must || gp.try || gp.fixed) ? el('p', null, t('goalsDemand', gp.must, gp.try)+(gp.fixed ? ' · '+t('fixedN', gp.fixed) : '')) : null,
       el('p', null, t('genHint'))
     ]));
+    root.appendChild(firstRunChecklist());
     return;
   }
   const A = analyzePlan(plan);
@@ -236,6 +322,7 @@ function renderResults(){
   if(plan.stale && !plan.approved){
     root.appendChild(el('div', {class:'banner warn', role:'status'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), t('staleMsg'), el('button', {type:'button', class:'btn sm', onclick:()=>doGenerate(document.getElementById('generate-btn'))}, [el('span', {html:ICON.refresh, style:{display:'flex'}}), t('regenerate')])]));
   }
+  if(App.ui.diff && App.ui.diff.forPlan===plan) root.appendChild(diffChipNode(App.ui.diff));
   const sb = planStatusBanner(plan, A);
   if(sb) root.appendChild(sb);
   const card = el('section', {class:'card', id:'plan-card'});
@@ -260,6 +347,34 @@ function renderResults(){
   PlanView.animate = false; PlanView.swap = false;
 }
 
+function conflictFixLabel(c){
+  const f = c && c.fix;
+  if(!f) return null;
+  if(f.type==='setExact') return t('fixSetExact', kindLabel(f.kind), f.to);
+  if(f.type==='dayPrefer') return t('fixDayPrefer', c.args[1], c.args[0]);
+  if(f.type==='goalPrefer') return t('fixGoalPrefer');
+  if(f.type==='noEveryDay') return t('fixNoEveryDay');
+  return null;
+}
+function applyConflictFix(c){
+  const f = c && c.fix, set = S();
+  if(!f) return false;
+  if(f.type==='setExact' && set.volume.exact && (f.kind==='basic' || f.kind==='contracted')) set.volume.exact[f.kind] = Math.max(0, f.to|0);
+  else if(f.type==='dayPrefer'){
+    const d = set.days[f.wd];
+    if(!d || !d[f.field] || !d[f.field].lv) return false;
+    d[f.field].lv = Object.assign({}, d[f.field].lv, {level:'prefer'});
+  }
+  else if(f.type==='goalPrefer'){
+    const g = set.goals.find(x=>x.id===f.goal);
+    if(!g) return false;
+    g.lv = Object.assign({}, g.lv, {level:'prefer'});
+  }
+  else if(f.type==='noEveryDay') set.volume.requireEveryEligibleDay = false;
+  else return false;
+  commit('settings');
+  return true;
+}
 function planStatusBanner(plan, A){
   if(plan.approved) return null;
   const hard = A.blocking;
@@ -275,7 +390,10 @@ function planStatusBanner(plan, A){
   ]);
   if(kind==='infeasible'){
     const list = el('ul', {class:'conflict-list', style:{margin:'4px 0 0', paddingInlineStart:'18px'}});
-    for(const c of conflicts.slice(0, 8)) list.appendChild(el('li', null, t.apply(null, [c.key].concat(c.args || []))));
+    for(const c of conflicts.slice(0, 8)){
+      const label = conflictFixLabel(c);
+      list.appendChild(el('li', null, [t.apply(null, [c.key].concat(c.args || [])), label ? el('button', {type:'button', class:'btn sm outline conflict-fix', style:{marginInlineStart:'8px'}, onclick:()=>{ if(applyConflictFix(c)){ const b = document.querySelector('.gen-btn'); if(b) runGenerate(b); } }}, label) : null]));
+    }
     if(conflicts.length>8) list.appendChild(el('li', null, t('moreN', conflicts.length-8)));
     body.appendChild(list);
   }
@@ -513,6 +631,7 @@ function viewSummary(plan, A){
     el('div', {class:'kpi'}, [el('div', {class:'n num'}, totalKm.toLocaleString('en')), el('div', {class:'l'}, t('kpiKm'))]),
     el('div', {class:'kpi'}, [el('div', {class:'n num ltr'}, okChecks+' / '+A.checks.length), el('div', {class:'l'}, t('checksTitle'))])
   ]));
+  if(plan.gen && plan.gen.search && plan.gen.search.truncated) wrap.appendChild(el('div', {class:'banner info', id:'gen-truncated', role:'status'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('genTruncated')]));
   wrap.appendChild(quantitiesBlock(plan, A));
   const grid = el('div', {class:'grid-2', style:{alignItems:'start'}});
   const loadBox = el('div');
@@ -572,11 +691,14 @@ function buildActionBar(plan, A){
   else { dot = 'ok'; txt = t('statusReady', n); }
   const status = el('button', {type:'button', class:'status', title:t('vSummaryView'), onclick:()=>{ App.ui.view = 'summary'; renderResults(); }}, [el('span', {class:'dot '+dot}), el('span', null, txt)]);
   const exportBtn = el('button', {type:'button', class:'btn outline', onclick:e=>openExport(e.currentTarget)}, [el('span', {html:ICON.download, style:{display:'flex'}}), el('span', {class:'txt-long'}, t('exportBtn'))]);
+  const hs = historyState();
+  const undoBtn = el('button', {type:'button', class:'btn ghost', id:'undo-btn', 'aria-label':t('undo'), title:t('undo')+' (Ctrl+Z)', disabled:!hs.undo, onclick:()=>stepHistory(-1), html:ICON.undo});
+  const redoBtn = el('button', {type:'button', class:'btn ghost', id:'redo-btn', 'aria-label':t('redo'), title:t('redo')+' (Ctrl+Shift+Z)', disabled:!hs.redo, onclick:()=>stepHistory(1), html:ICON.redo});
   const printBtn = el('button', {type:'button', class:'btn ghost', 'aria-label':t('print'), title:t('print'), onclick:doPrint, html:ICON.printer});
   let main;
   if(plan.approved) main = el('button', {type:'button', class:'btn ghost', onclick:()=>{ unapprovePlan(); }}, t('unapprove'));
   else main = el('button', {type:'button', class:'btn primary', disabled: !n, onclick:()=>{ const r = approvePlan(); if(r.ok) toast(t('approved')); else showApprovalBlockers(r.blockers); }}, [el('span', {html:ICON.check, style:{display:'flex'}}), t('approve')]);
-  bar.appendChild(el('div', {class:'actionbar-inner'}, [status, el('span', {style:{width:'10px'}}), printBtn, exportBtn, main]));
+  bar.appendChild(el('div', {class:'actionbar-inner'}, [status, el('span', {style:{width:'10px'}}), plan.approved ? null : undoBtn, plan.approved ? null : redoBtn, printBtn, exportBtn, main]));
   return bar;
 }
 
@@ -614,8 +736,10 @@ function syncFixedLocks(plan){
 function sortVisits(plan){
   plan.visits.sort((a, b)=>a.date<b.date ? -1 : (a.date>b.date ? 1 : 0));
 }
-function commitEdit(ev){
-  const plan = ev.trial;
+const PlanHistory = {undo:[], redo:[], owner:null};
+const HISTORY_LIMIT = 50;
+
+function syncOverrides(plan){
   let synced = false;
   for(const v of plan.visits){
     if(!v.fixed || !v.overrideId) continue;
@@ -623,9 +747,52 @@ function commitEdit(ev){
     const ids = visitTeamIds(v);
     if(o.date!==v.date || o.facilityId!==v.facilityId || o.people.join()!==ids.join()){ o.date = v.date; o.facilityId = v.facilityId; o.people = ids; o.fill = false; synced = true; }
   }
+  return synced;
+}
+
+function historyState(){
+  const live = !!App.plan && !App.plan.approved && PlanHistory.owner===App.plan;
+  return {undo:live ? PlanHistory.undo.length : 0, redo:live ? PlanHistory.redo.length : 0};
+}
+
+function stepHistory(dir){
+  const live = !!App.plan && !App.plan.approved && PlanHistory.owner===App.plan;
+  if(!live){ PlanHistory.undo = []; PlanHistory.redo = []; return false; }
+  const from = dir<0 ? PlanHistory.undo : PlanHistory.redo, to = dir<0 ? PlanHistory.redo : PlanHistory.undo;
+  if(!from.length) return false;
+  const target = from.pop();
+  to.push(App.plan);
+  App.plan = target; PlanHistory.owner = target;
+  if(syncOverrides(target)) save();
+  savePlan();
+  renderResults();
+  if(sheet.current) sheet.current.render();
+  toast(t(dir<0 ? 'undone' : 'redone'));
+  return true;
+}
+
+document.addEventListener('keydown', e=>{
+  if(!(e.ctrlKey || e.metaKey) || e.altKey || App.ui.tab!=='plan') return;
+  const k = e.key.toLowerCase();
+  if(k!=='z' && k!=='y') return;
+  const a = document.activeElement;
+  if(a && (a.tagName==='INPUT' || a.tagName==='TEXTAREA' || a.tagName==='SELECT' || a.isContentEditable)) return;
+  if(document.querySelector('.dialog')) return;
+  const dir = (k==='y' || e.shiftKey) ? 1 : -1;
+  if(stepHistory(dir)) e.preventDefault();
+});
+
+function commitEdit(ev){
+  const plan = ev.trial;
+  const prev = App.plan;
+  const synced = syncOverrides(plan);
   if(ev.hardAfter===0) plan.status = 'valid';
   else if(plan.status==='valid') plan.status = 'invalid';
-  App.plan = plan;
+  if(PlanHistory.owner!==prev) PlanHistory.undo = [];
+  PlanHistory.undo.push(prev);
+  if(PlanHistory.undo.length>HISTORY_LIMIT) PlanHistory.undo.shift();
+  PlanHistory.redo = [];
+  App.plan = plan; PlanHistory.owner = plan;
   if(synced) save();
   savePlan();
   renderResults();

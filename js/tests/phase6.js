@@ -110,6 +110,7 @@ regress('v4: Goals manager works in the Rules tab, the wide sheet and from the p
   const bad = [];
   try{
     P6.reset();
+    App.ui.gmForceWide = true;
     const g = newGoal('person'); g.people = [activePeople()[0].id]; S().goals.push(g);
     const g2 = newGoal('cover'); S().goals.push(g2);
     goTab('rules');
@@ -128,6 +129,6 @@ regress('v4: Goals manager works in the Rules tab, the wide sheet and from the p
     if(!link) bad.push('person popover goal row'); else link.click();
     const sh2 = document.querySelector('.sheet.wide');
     if(!sh2 || !sh2.querySelector('.gm-detail [data-goal="'+g.id+'"]')) bad.push('deep link');
-  } finally { if(sheet.current) sheet.current.close(true); closePop(); Object.assign(App.ui, keepUi); App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
+  } finally { delete App.ui.gmForceWide; if(sheet.current) sheet.current.close(true); closePop(); Object.assign(App.ui, keepUi); App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'three entry points', bad.join(' | '));
 });

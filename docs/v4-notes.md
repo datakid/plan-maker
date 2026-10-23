@@ -52,3 +52,11 @@
 | rules tab: add-goal menu grouped | finds the Add goal button in `.gm-toolbar` | same menu, new toolbar |
 | add each goal type via menu | same selector change | same |
 | delete new goals | counts `.gm-row` | row markup of the manager |
+
+## Ship-readiness notes
+
+- Two tests ("pattern goal editor renders and edits without NaN" and "Goals manager works in the Rules tab, the wide sheet and from the person Rules popover") failed at a 390 px window. Cause: the Goals manager shows master-detail only when the window is at least 980 px wide; narrower windows open a goal in a sheet from a zero-delay timer. Both tests assert the wide layout synchronously, so they were testing the window size as much as the feature. They now pin the wide layout with `App.ui.gmForceWide = true` (removed again in their cleanup), and a new async test, `ship: P4.5`, covers the narrow sheet flow. No expectation was relaxed.
+- `el()` accepts `html:` only for static `<svg>` strings; other strings become text.
+- Generation wall-clock caps are now four times wider than the iteration caps imply (`timeScale`, default 4), so iteration counts decide the result on any device up to roughly a 4x slowdown. A run that still hits the clock sets `plan.gen.search.truncated`.
+- Touch targets: buttons, tabs, icon buttons, selects and text inputs are 40 px on coarse pointers. Still below 40 px on touch: checkboxes (22 px), toggle switches (38x22), calendar add buttons (28 px) and a few dense table controls.
+- The Rules tab now opens in Simple mode (key rules, no weights). The test "toggling every rule chip between Must and Prefer regenerates without errors" drives every chip and slider, so it now selects Advanced mode first and restores the previous mode afterwards. No expectation changed.

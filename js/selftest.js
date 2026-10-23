@@ -167,12 +167,14 @@ window.addEventListener('load', async ()=>{
     });
     step('pattern goal editor renders and edits without NaN', ()=>{
       const keep = S().goals.length; const g = newGoal('pattern'); g.people = [activePeople()[0].id]; S().goals.push(g); commit('settings');
+      App.ui.gmForceWide = true;
       openGoals(g.id);
       const card = document.querySelector('[data-goal="'+g.id+'"]'); const okC = !!card && !!card.querySelector('.pattern-editor') && !card.textContent.includes('undefined') && !card.textContent.includes('NaN');
       const chip = card && [...card.querySelectorAll('.pattern-editor .chip')].find(x=>x.textContent===t('patPresetMaxRun2')); if(chip) chip.click();
       const after = S().goals.find(x=>x.id===g.id);
       const okE = after.pattern.maxRun===2 && after.pattern.minRest===0;
       sheet.current.close(true);
+      delete App.ui.gmForceWide;
       S().goals = S().goals.filter(x=>x.id!==g.id); commit('settings');
       return okC && okE && S().goals.length===keep;
     });
@@ -194,6 +196,7 @@ window.addEventListener('load', async ()=>{
     step('persist + reload data', ()=>{ saveNow(); const raw = JSON.parse(localStorage.getItem(STORE_KEY)); return raw.settings.goals.length===s.goals.length; });
 
     try{ runRegress(null); }catch(e){ ok('regression suite ran', false, 'EXC '+e.message); }
+    try{ await runShipAsync(null); }catch(e){ ok('async regression suite ran', false, 'EXC '+e.message); }
     await sleep(200);
     ok('no uncaught errors', TEST.errors.length===0, TEST.errors.join(' | '));
     console.log('RESULT pass='+TEST.pass+' fail='+TEST.fail);

@@ -119,6 +119,9 @@ function firstIdxFrom(days, lo){ for(let i=0;i<days.length;i++) if(days[i]>=lo) 
 function generatePlan(opts){
   opts = opts || {};
   const genStart = Date.now();
+  const prog = (stage, pct)=>{ if(opts.onProgress) opts.onProgress(stage, pct); };
+  const tScale = opts.timeScale==null ? 4 : opts.timeScale;
+  prog('select', 0);
   const set = S(), V = set.volume, sp = set.spacing;
   const win = planWindow();
   if(win.error) return {error:win.error};
@@ -224,6 +227,7 @@ function generatePlan(opts){
 
   const demand = buildDemand(win, fixed, placedSpecials);
   const sel = selectUnits(win, fixed, demand, placedSpecials);
+  prog('layout', 0.15);
   diags.unshift(...demand.diags, ...sel.diags);
 
   const units = sel.units.filter(u=>!u.chain);
@@ -348,6 +352,7 @@ function generatePlan(opts){
   let last = 0;
 
   const flowInfo = {};
+  prog('teams', 0.3);
   const flowStage = ()=>{
     if(!seq.length) return null;
     const freeSeq = V.mode==='quota' ? [] : seq.filter(u=>u.tier>=2 && !u.chain);
@@ -600,6 +605,7 @@ function generatePlan(opts){
     commitTeam(v, days[v.d], ctx);
   }
   visits.sort((a,b)=>a.d-b.d || (hasPreset(b) - hasPreset(a)));
+  prog('repair', 0.45);
   repairGender(visits, days, ctx);
   repairPeopleRules(visits, ctx);
   for(const f of schedulableFacilities()) if(f.pinned && !visits.some(v=>v.facilityId===f.id)) diags.push({sev:'warn', key:'dPinnedOut', args:[f.name]});
@@ -623,6 +629,7 @@ function generatePlan(opts){
   let val = validatePlan(plan);
   const draftHard = val.hardScore;
   const tStart = Date.now();
+  prog('search', 0.55);
   if(val.hard>0 && !opts.skipSearch){
     const bud = Object.assign({}, opts.budget || {});
     const proven = pre.conflicts.length>0;
@@ -634,8 +641,8 @@ function generatePlan(opts){
       const total = proven ? 600 : (bud.maxMs || 4000);
       const left = total - (Date.now()-tStart);
       if(left>50){
-        const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:bud.iters});
-        search = Object.assign({}, search, {iters:a.info.iters, lnsMs:a.info.ms, byMove:a.info.byMove, seed:a.info.seed});
+        const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:bud.iters, onProgress:p=>prog('lns', 0.6+0.2*p)});
+        search = Object.assign({}, search, {iters:a.info.iters, lnsMs:a.info.ms, byMove:a.info.byMove, seed:a.info.seed, truncated:!!(search.truncated || a.info.truncated)});
         if(a.improved){
           const av = validatePlan(a.plan);
           if(av.hardScore<val.hardScore || (av.hardScore===val.hardScore && av.softScore<val.softScore)){ plan = a.plan; val = av; search.stage = 'lns'; }
@@ -647,11 +654,13 @@ function generatePlan(opts){
     search.found = val.hard===0 ? search.stage : null;
   }
   if(val.hard===0 && !opts.skipSearch && !opts.skipPolish && plan.visits.length>1){
-    const cap = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.8;
+    const capBase = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.8;
+    const cap = capBase*tScale;
     const left = cap-(Date.now()-genStart);
+    if(left<=40 && val.softScore>0 && !opts.iters) search = Object.assign({}, search || {}, {truncated:true});
     if(left>40 && val.softScore>0){
-      const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:opts.iters || Math.max(40, Math.min(200+60*plan.visits.length, Math.floor(cap/8)))});
-      search = Object.assign({}, search || {}, {stage:(search && search.stage) || 'lns', polish:{iters:a.info.iters, ms:a.info.ms, accepted:a.info.accepted, byMove:a.info.byMove}, seed:a.info.seed});
+      const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:opts.iters || Math.max(40, Math.min(200+60*plan.visits.length, Math.floor(capBase/8))), onProgress:p=>prog('polish', 0.6+0.3*p)});
+      search = Object.assign({}, search || {}, {stage:(search && search.stage) || 'lns', polish:{iters:a.info.iters, ms:a.info.ms, accepted:a.info.accepted, byMove:a.info.byMove, truncated:!!a.info.truncated}, seed:a.info.seed, truncated:!!((search && search.truncated) || a.info.truncated)});
       if(a.improved){
         const sa = makeState(a.plan), sb = makeState(plan);
         if(sa.hard===0 && sa.soft<sb.soft){ plan = a.plan; val = sa.eval; }
@@ -661,11 +670,13 @@ function generatePlan(opts){
   for(const w of pre.warnings || []) plan.genDiags.push(w);
   let status = 'valid';
   if(val.hard>0) status = pre.conflicts.length ? 'infeasible' : (opts.skipSearch ? 'invalid' : 'exhausted');
-  search = Object.assign({}, search || {}, {score:{hard:val.hardScore, soft:val.softScore}, lowerBound:null, optimal:false, seed:opts.seed==null ? null : opts.seed});
+  search = Object.assign({}, search || {}, {score:{hard:val.hardScore, soft:val.softScore}, lowerBound:null, optimal:false, seed:opts.seed==null ? null : opts.seed, truncated:!!(search && search.truncated)});
+  prog('explain', 0.92);
   if(!opts.skipSearch && !opts.skipExplain && plan.visits.length){
-    const capMs = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.2;
+    const capMs = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.2*tScale;
     plan.why = explainPlan(plan, {ms:Math.max(120, capMs), seed:opts.seed});
   }
+  prog('done', 1);
   plan.gen = genSnapshot({status, conflicts:pre.conflicts, search, layout:flowInfo.stage || null});
   plan.status = status;
   plan.conflicts = pre.conflicts;
