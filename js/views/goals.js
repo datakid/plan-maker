@@ -78,7 +78,10 @@ function goalFields(g, upd, paint){
   if(g.type==='person'){
     out.push(row(t('gWho'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
     out.push(row(t('gRel'), Seg(PERSON_RELS.map(r=>({value:r, label:t('rel_'+r)})), g.rel, v=>{ g.rel = v; upd(); paint(); }, {cls:'sm wrap-seg'})));
-    if(g.rel!=='never' && g.rel!=='only') out.push(row(t('gVisitsN'), Stepper(g.n, v=>{ g.n = v; upd(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
+    if(g.rel==='between'){
+      out.push(row(t('gVisitsMin'), Stepper(g.n, v=>{ g.n = v; if(g.n2<v) g.n2 = v; upd(); paint(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
+      out.push(row(t('gVisitsMax'), Stepper(Math.max(g.n, g.n2||0), v=>{ g.n2 = Math.max(v, g.n); upd(); paint(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
+    } else if(g.rel!=='never' && g.rel!=='only') out.push(row(t('gVisitsN'), Stepper(g.n, v=>{ g.n = v; upd(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
     out.push(row(g.rel==='never' ? t('gWhere') : (g.rel==='only' ? t('gOnlyWhere') : t('gCountWhere')), ScopePicker(g.scope, upd)));
   } else if(g.type==='together'){
     out.push(row(t('gPair'), el('div', {class:'row wrap', style:{gap:'6px'}}, [
@@ -100,6 +103,7 @@ function goalFields(g, upd, paint){
     out.push(row(t('gBetween'), el('div', {class:'row wrap', style:{gap:'6px'}}, [OptDate(g.from, v=>{ g.from = v; upd(); }, t('gPlanStart')), el('span', {class:'muted'}, '–'), OptDate(g.to, v=>{ g.to = v; upd(); }, t('gPlanEnd'))])));
     out.push(row(t('ovPeople'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
     out.push(row(t('ovFill'), Switch(g.fill || !g.people.length, v=>{ g.fill = v; upd(); }, null, {disabled:!g.people.length})));
+    for(const n of visitSpecFields(g, ()=>{ upd(); paint(); }, row)) out.push(n);
   } else {
     out.push(row(t('gScope'), ScopePicker(g.scope, upd)));
     if(g.type==='cover'){
@@ -114,6 +118,25 @@ function goalFields(g, upd, paint){
       out.push(row(t('gDays'), Stepper(g.days||30, v=>{ g.days = v; upd(); paint(); }, {min:7, max:730, step:1, sm:true, unit:t('daysU')})));
     }
   }
+  return out;
+}
+
+function visitSpecFields(o, upd, mk){
+  const f = facilityById(o.facilityId);
+  const kind = f ? visitKindOf(f) : 'basic';
+  const out = [];
+  for(const pl of S().pools){
+    const base = f ? seatsForF(pl, kind, f) : null;
+    const cur = o.seats && o.seats[pl.id]!=null ? o.seats[pl.id] : null;
+    out.push(mk(t('vsSeatsOf', poolName(pl)), Stepper(cur, v=>{ const m = Object.assign({}, o.seats||{}); if(v==null) delete m[pl.id]; else m[pl.id] = v; o.seats = Object.keys(m).length ? m : null; upd(); }, {min:0, max:9, nullable:true, sm:true, placeholder:base==null ? '' : String(base)})));
+  }
+  out.push(el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
+    el('button', {type:'button', class:'btn sm outline', onclick:()=>{ const m = {}; for(const pl of S().pools) m[pl.id] = (o.people||[]).filter(id=>{ const p = personById(id); return p && p.pool===pl.id; }).length; o.seats = m; upd(); }}, t('vsLock')),
+    o.seats ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ o.seats = null; upd(); }}, t('vsAuto')) : null,
+    el('span', {class:'hint', style:{fontSize:'12px'}}, t('vsSeatsHint'))
+  ]));
+  out.push(mk(t('vsOnly'), PersonPicker((o.only||[]).slice(), ids=>{ o.only = ids; upd(); })));
+  out.push(mk(t('vsNever'), PersonPicker((o.never||[]).slice(), ids=>{ o.never = ids; upd(); })));
   return out;
 }
 
@@ -262,11 +285,11 @@ function openOverride(id, isNew){
         setting(t('ovFill'), t('ovFillHint'), Switch(o.fill || !o.people.length, v=>{ o.fill = v; upd(); })),
         el('div', {class:'field'}, [el('label', null, t('ovNote')), el('input', {class:'input', value:o.note||'', placeholder:'—', onchange:e=>{ o.note = e.target.value; commit('settings'); }})]),
         setting(t('on'), null, Switch(o.on!==false, v=>{ o.on = v; upd(); }))
-      ]));
+      ].concat(visitSpecFields(o, upd, (lab, ctl)=>el('div', {class:'field'}, [el('label', null, lab), ctl])))));
       const f = facilityById(o.facilityId);
       if(f){
         const kind = visitKindOf(f);
-        const need = S().pools.map(pl=>seatsFor(pl, kind, f.category)+' '+poolName(pl)).join(' · ');
+        const need = S().pools.map(pl=>seatsForF(pl, kind, f)+' '+poolName(pl)).join(' · ');
         out.push(el('div', {class:'hint', style:{marginBottom:'8px'}}, t('ovUsualTeam', need)));
       }
       const issues = overrideIssues(o);

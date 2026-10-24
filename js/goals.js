@@ -9,9 +9,9 @@ function newGoal(type){
   if(type==='atLeast') Object.assign(g, {n:4, repeat:false});
   if(type==='atMost') Object.assign(g, {n:2, scope:{kind:'category', ids:[]}});
   if(type==='maxGap') Object.assign(g, {days:60});
-  if(type==='person') Object.assign(g, {people:[], rel:'never', n:4, scope:{kind:'type', ids:['contracted']}});
+  if(type==='person') Object.assign(g, {people:[], rel:'between', n:1, n2:2, scope:{kind:'all', ids:[]}});
   if(type==='together') Object.assign(g, {a:null, b:null, rel:'atLeast', pct:50});
-  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null});
+  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null, seats:null, only:[], never:[]});
   if(type==='pattern') Object.assign(g, {people:[], pattern:{minRest:1, maxRun:null, cycle:null}, from:null, to:null});
   g.lv = ruleSpec(GOAL_RULE[type]).def ? mkLv(ruleSpec(GOAL_RULE[type]).def.level, ruleSpec(GOAL_RULE[type]).def.w) : mkLv('prefer', 5);
   Object.defineProperty(g, 'strict', {get(){ return this.lv && this.lv.level==='must' ? 'must' : 'try'; }, set(v){ this.lv = mkLv(v==='must' ? 'must' : 'prefer', this.lv ? this.lv.w : 5); }, enumerable:false, configurable:true});
@@ -43,6 +43,7 @@ function normalizeGoal(g){
     out.people = Array.isArray(out.people) ? [...new Set(out.people.filter(Boolean))] : [];
     if(!PERSON_RELS.includes(out.rel)) out.rel = 'never';
     out.n = cleanInt(out.n, 0, 999, dflt.n);
+    out.n2 = Math.max(out.n, cleanInt(out.n2, 0, 999, out.n+1));
   }
   if(type==='together'){
     if(!TOGETHER_RELS.includes(out.rel)) out.rel = 'atLeast';
@@ -52,6 +53,7 @@ function normalizeGoal(g){
     out.people = Array.isArray(out.people) ? [...new Set(out.people.filter(Boolean))] : [];
     out.times = cleanInt(out.times, 1, 50, 1);
     out.fill = out.fill!==false;
+    out.seats = cleanSeatMap(out.seats); out.only = cleanIdList(out.only); out.never = cleanIdList(out.never);
     out.from = cleanIso(out.from, null);
     out.to = cleanIso(out.to, null);
     if(out.from && out.to && out.from>out.to){ const x = out.from; out.from = out.to; out.to = x; }
@@ -66,11 +68,12 @@ function normalizeGoal(g){
   return out;
 }
 
-function newOverride(p){ return Object.assign({id:uid('ov'), on:true, date:todayISO(), facilityId:null, people:[], fill:false, note:''}, p||{}); }
+function newOverride(p){ return Object.assign({id:uid('ov'), on:true, date:todayISO(), facilityId:null, people:[], fill:false, note:'', seats:null, only:[], never:[]}, p||{}); }
 function normalizeOverride(o){
   const x = newOverride(o);
   x.people = Array.isArray(x.people) ? [...new Set(x.people.filter(Boolean))] : [];
   x.fill = !!x.fill; x.on = x.on!==false;
+  x.seats = cleanSeatMap(x.seats); x.only = cleanIdList(x.only); x.never = cleanIdList(x.never);
   return x;
 }
 
@@ -270,7 +273,7 @@ function buildDemand(win, fixed, placed){
     if(g.type==='person'){
       report[g.id] = {type:'person'};
       if(!liveIds(g.people).length) continue;
-      if(g.rel==='exactly' || g.rel==='atLeast'){
+      if(g.rel==='exactly' || g.rel==='atLeast' || g.rel==='between'){
         for(const pid of liveIds(g.people)){
           const p = personById(pid);
           const avail = win.days.filter(o=>personAvailable(p, o)).length;
@@ -301,7 +304,7 @@ function goalTitle(g){
   if(g.type==='atLeast') return t('gtAtLeastT', g.n||0, sc);
   if(g.type==='atMost') return t('gtAtMostT', g.n||0, sc);
   if(g.type==='maxGap') return t('gtMaxGapT', sc, g.days||0);
-  if(g.type==='person') return t('gtPersonT', personNames(g.people), g.rel, g.n||0, g.scope && g.scope.kind!=='all' ? sc : '');
+  if(g.type==='person') return t('gtPersonT', personNames(g.people), g.rel, g.n||0, g.scope && g.scope.kind!=='all' ? sc : '', g.n2||0);
   if(g.type==='together') return t('gtTogetherT', personNames([g.a]), personNames([g.b]), g.rel, g.pct||0, g.scope && g.scope.kind!=='all' ? sc : '');
   if(g.type==='special'){ const f = facilityById(g.facilityId); return t('gtSpecialT', f ? f.name : '—', g.times||1); }
   if(g.type==='pattern') return t('gtPatternT', personNames(g.people), patternLabel(g.pattern));
@@ -358,7 +361,7 @@ function overrideIssues(o){
   }
   if(!o.people.length && !o.fill) out.push({sev:'info', key:'ovAutoTeam'});
   const k = kind==='excluded' ? 'basic' : kind;
-  const n = teamSizeFor(k, f.category);
+  const n = teamSizeFor(k, f);
   if(o.people.length > n) out.push({sev:'info', key:'ovBigTeam', args:[o.people.length, n]});
   return out;
 }

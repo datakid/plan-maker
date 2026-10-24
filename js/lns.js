@@ -4,7 +4,7 @@ function lnsRng(a){
 
 function lnsSeatNeed(v, pool){
   const f = facilityById(v.facilityId);
-  return f ? seatsFor(pool, v.kind, f.category) : 0;
+  return f ? visitSeatNeed(v, pool, f) : 0;
 }
 
 function refreshOpenSeats(plan){
@@ -115,6 +115,7 @@ function lnsMoves(st, rnd, focus, focusPeople){
     return {name:'N4swapDays', ops:[{op:'set', id:v.id, fields:{date:w.date, team:tv}}, {op:'set', id:w.id, fields:{date:v.date, team:tw}}]};
   }
   if(kind<0.20){
+    if(v.special) return null;
     const inPlan = new Set(plan.visits.map(x=>x.facilityId));
     const f0 = facilityById(v.facilityId);
     const list = schedulableFacilities().filter(f=>!inPlan.has(f.id) && visitKindOf(f)===v.kind && f.category===f0.category && !(f.weekdays && f.weekdays.length && !f.weekdays.includes(wdOf(ordOf(v.date)))));

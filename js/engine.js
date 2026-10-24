@@ -19,7 +19,12 @@ function normalWorkday(ord){
   return base && activityDayAllowed(ord);
 }
 function isWorkday(ord){ return normalWorkday(ord) || isOverrideDate(isoOf(ord)); }
-function dayCfg(ord){ return dayView(normalizeDay(S().days[wdOf(ord)])); }
+function dayRuleOf(ord){
+  const d = normalizeDay(S().days[wdOf(ord)]), V = S().volume;
+  if(!d.min && V.minPerDay) d.min = {n:V.minPerDay, lv:V.minPerDayLv || mkLv('must', 5)};
+  return d;
+}
+function dayCfg(ord){ return dayView(dayRuleOf(ord)); }
 
 function presetWindow(preset, startIso, endIso){
   const t0 = todayOrd();
@@ -36,7 +41,7 @@ function poolsLive(){
   const pools = S().pools;
   return pools.map(pl=>({pool:pl, members:activePeople().filter(p=>p.pool===pl.id)}));
 }
-function teamSizeFor(kind, category){ return sum(S().pools, pl=>seatsFor(pl, kind, category)); }
+function teamSizeFor(kind, f){ return sum(S().pools, pl=>seatsForF(pl, kind, f)); }
 
 function dayCap(ord){
   const v = S().volume, c = dayCfg(ord);
@@ -170,6 +175,12 @@ function volumePreview(){
   const days = listWorkdays(w.start, w.end);
   let B, C, cap;
   if(V.mode==='exact'){ B = Math.max(0, V.exact.basic|0); C = Math.max(0, V.exact.contracted|0); cap = capacityOverMax(days); }
+  else if(V.mode==='fixed'){
+    B = 0; C = 0;
+    for(const o of overridesIn(w.start, w.end)){ const f = facilityById(o.facilityId); if(f){ if(visitKindOf(f)==='contracted') C++; else B++; } }
+    for(const r of specialRequests({start:w.start, end:w.end}).list){ if(r.kind==='contracted') C++; else B++; }
+    cap = capacityOverMax(days);
+  }
   else if(V.mode==='quota'){
     B = 0; C = 0;
     for(const cat of Object.keys(V.quotas||{})){
@@ -307,6 +318,7 @@ function seatBase(p, f, ord, busy){
   if(busy && busy.has(p.id)) return 'busy';
   if(!personAvailable(p, ord)) return 'off';
   if((p.blocked || []).includes(f.id)) return 'blocked';
+  if(distMismatch(p, f)) return 'dist';
   return null;
 }
 function seatBlock(p, v, date, plan, o){
@@ -320,12 +332,15 @@ function seatBlock(p, v, date, plan, o){
   }
   const r = seatBase(p, f, ordOf(date), busy);
   if(r) return r;
+  if(!visitAllows(v, p.id)) return 'visit';
   const rules = o.rules || compilePeopleRules();
   if(rules.denied(p.id, f)==='must') return 'rule';
   return null;
 }
 function canSeat(p, v, date, plan, o){ return !seatBlock(p, v, date, plan, o); }
 
+function distMismatch(p, f){ return distStrict(p) && distBand(personTravelKm(p, f))!==p.distPref; }
+function distStrict(p){ return !!(p.distPref && p.lv && p.lv.dist && p.lv.dist.level==='must'); }
 function hardOk(p, ord, f, ctx, used){
   const u = used || ctx.dayUsed.get(ord);
   const base = seatBase(p, f, ord, u);
@@ -429,7 +444,7 @@ function assignTeam(visit, ord, ctx, opts){
   const preset = (opts && opts.preset) || [];
   const auto = !opts || !opts.preset || opts.auto;
   const needLeft = {};
-  for(const pl of set.pools){ team[pl.id] = []; needLeft[pl.id] = auto ? seatsFor(pl, kind, f.category) : 0; }
+  for(const pl of set.pools){ team[pl.id] = []; needLeft[pl.id] = auto ? visitSeatNeed(visit, pl, f) : 0; }
   const n = sum(Object.values(needLeft)) + preset.filter(id=>personById(id)).length;
   const poolKey = p=>set.pools.some(pl=>pl.id===p.pool) ? p.pool : set.pools[0].id;
   const inTeam = id=>chosen.includes(id);
@@ -442,7 +457,7 @@ function assignTeam(visit, ord, ctx, opts){
   for(const id of preset.slice()){
     const p = personById(id); if(!p) continue;
     for(const q of rigidClosure(p, ctx, inTeam).slice(1)){
-      if(inTeam(q.id) || (needLeft[poolKey(q)]||0)<=0 || hardOk(q, ord, f, ctx, used)) continue;
+      if(inTeam(q.id) || !visitAllows(visit, q.id) || (needLeft[poolKey(q)]||0)<=0 || hardOk(q, ord, f, ctx, used)) continue;
       seat(q);
     }
   }
@@ -460,10 +475,10 @@ function assignTeam(visit, ord, ctx, opts){
       }
       let best = null, bestUnit = null, bestRank = Infinity, bestKey = Infinity;
       for(const p of members){
-        if(inTeam(p.id)) continue;
+        if(inTeam(p.id) || !visitAllows(visit, p.id)) continue;
         if(hardOk(p, ord, f, ctx, used)) continue;
         const unit = rigidClosure(p, ctx, inTeam);
-        if(unit.length>remaining) continue;
+        if(unit.length>remaining || unit.some(m=>!visitAllows(visit, m.id) || (m!==p && hardOk(m, ord, f, ctx, used)))) continue;
         let okUnit = true;
         if(unit.length>1){
           const perPool = {};
@@ -516,6 +531,10 @@ function assignTeam(visit, ord, ctx, opts){
       }
     }
   }
+  if(!auto) for(const pl of set.pools){
+    const lock = visit.seats && visit.seats[pl.id];
+    if(lock!=null && lock>team[pl.id].length){ open[pl.id] = lock-team[pl.id].length; openTotal += open[pl.id]; }
+  }
   return {team, open, openTotal};
 }
 
@@ -527,6 +546,24 @@ function commitTeam(visit, ord, ctx, counted){
 }
 
 function lockedOf(v){ return v.locked || v.preset || EMPTY_LIST; }
+function visitSeatNeed(v, pool, f){
+  const lock = v.seats && v.seats[pool.id];
+  if(lock!=null) return Math.max(0, Math.min(9, lock|0));
+  f = f || facilityById(v.facilityId);
+  if(!f) return 0;
+  if(v.auto===false) return lockedOf(v).filter(id=>{ const p = personById(id); return p && p.pool===pool.id; }).length;
+  return seatsForF(pool, v.kind || visitKindOf(f), f);
+}
+function plannedSeats(seats, pool, kind, f, auto, have){
+  const lock = seats && seats[pool.id];
+  if(lock!=null) return Math.max(have||0, Math.min(9, lock|0));
+  return auto ? Math.max(have||0, seatsForF(pool, kind, f)) : (have||0);
+}
+function visitAllows(v, id){
+  if(v.never && v.never.includes(id)) return false;
+  if(v.only && v.only.length && !v.only.includes(id) && !lockedOf(v).includes(id)) return false;
+  return true;
+}
 function editableIn(v, id){ return !lockedOf(v).includes(id); }
 function snapTeam(v){ const o = {}; for(const k of Object.keys(v.team||{})) o[k] = (v.team[k]||[]).slice(); return o; }
 function replaceInTeam(v, out, inn){
@@ -538,7 +575,7 @@ function replaceInTeam(v, out, inn){
 function visitFlags(v){
   const f = facilityById(v.facilityId);
   const ids = uniqIds(visitTeamIds(v));
-  const kind = v.kind || visitKindOf(f), n = teamSizeFor(kind, f.category), rule = genderRuleFor(f, kind);
+  const kind = v.kind || visitKindOf(f), n = teamSizeFor(kind, f), rule = genderRuleFor(f, kind);
   const g = teamGender(ids);
   const gender = rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n) ? 1 : 0;
   const sen = S().seniority;
@@ -752,7 +789,7 @@ function analyzePlan(plan, opts){
   out.blocking = out.checks.filter(c=>c.hard>0).length;
   out.softFails = out.checks.filter(c=>!c.ok && c.hard===0).length;
   for(const {pool, members} of poolsLive()){
-    const seatsTotal = sum(plan.visits, v=>{ const f = facilityById(v.facilityId); return f ? seatsFor(pool, v.kind, f.category) : 0; });
+    const seatsTotal = sum(plan.visits, v=>{ const f = facilityById(v.facilityId); return f ? visitSeatNeed(v, pool, f) : 0; });
     const av = {};
     for(const p of members) av[p.id] = plan.days.filter(iso=>personAvailable(p, ordOf(iso))).length;
     const bound = p=>{ const q = p.quota||{}; return {lo:Math.min(q.min!=null ? q.min : 0, av[p.id]), hi:Math.min(q.max!=null ? q.max : Infinity, av[p.id])}; };

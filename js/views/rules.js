@@ -81,14 +81,15 @@ function renderRules(root){
     setting(t('extraDays'), null, null, {full:MultiDates(set.calendar.extra, v=>{ set.calendar.extra = v; commit('settings'); })})
   ]));
 
-  main.appendChild(ruleSection('rule-volume', t('rVolume'), null, ()=>({text:t({fill:'vFill', exact:'vExact', quota:'vQuota'}[set.volume.mode])}), paint=>{
+  main.appendChild(ruleSection('rule-volume', t('rVolume'), null, ()=>({text:t({fill:'vFill', exact:'vExact', quota:'vQuota', fixed:'vFixed'}[set.volume.mode])}), paint=>{
     const V = set.volume, sp = set.spacing;
     return [
-      setting(t('sVisits'), null, Seg([{value:'fill',label:t('vFill')},{value:'exact',label:t('vExact')},{value:'quota',label:t('vQuota')}], V.mode, v=>{ V.mode = v; commit('settings'); paint(); })),
+      setting(t('sVisits'), null, Seg([{value:'fill',label:t('vFill')},{value:'exact',label:t('vExact')},{value:'quota',label:t('vQuota')},{value:'fixed',label:t('vFixed')}], V.mode, v=>{ V.mode = v; commit('settings'); paint(); })),
       V.mode==='fill' ? setting(t('vShare'), null, gl('vol.share'), {full:Slider(Math.round(V.share*100), v=>{ V.share = v/100; commit('settings'); }, {min:0, max:100, step:5, format:v=>v+'%'})}) : null,
       V.mode==='exact' ? setting(t('vExact'), null, [el('span', {class:'muted', style:{fontSize:'12px'}}, t('kBasic')), Stepper(V.exact.basic, v=>{ V.exact.basic = v; commit('settings'); }, {min:0, max:500, sm:true}), el('span', {class:'muted', style:{fontSize:'12px'}}, t('kContracted')), Stepper(V.exact.contracted, v=>{ V.exact.contracted = v; commit('settings'); }, {min:0, max:500, sm:true}), gl('vol.exact')]) : null,
       V.mode==='quota' ? setting(t('vQuota'), null, gl('vol.quota'), {full:(()=>{ const g = el('div', {style:{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:'6px'}}); const pool = schedulableFacilities(); for(const c of App.data.categories.filter(c=>c.kind!=='excluded')){ const n = pool.filter(f=>f.category===c.name).length; if(!n) continue; g.appendChild(el('div', {class:'row', style:{padding:'4px 8px', border:'1px solid var(--line)', borderRadius:'9px'}}, [el('span', {class:'dot '+c.kind}), el('span', {style:{flex:'1', fontSize:'12.5px'}}, c.name), el('span', {class:'muted num', style:{fontSize:'11px'}}, '/'+n), Stepper(V.quotas[c.name]||0, v=>{ if(v) V.quotas[c.name] = v; else delete V.quotas[c.name]; commit('settings'); }, {min:0, max:n, sm:true})])); } return g; })()}) : null,
       setting(t('vPerDay'), null, [Stepper(V.perDay||1, v=>{ V.perDay = v; commit('settings'); }, {min:1, max:10}), AlwaysTag('rs_perDay')]),
+      setting(t('vMinPerDay'), t('vMinPerDayHint'), [Stepper(V.minPerDay, v=>{ V.minPerDay = v ? Math.min(v, V.perDay||1) : null; commit('settings'); }, {min:1, max:10, nullable:true, placeholder:t('noLimit')}), LevelChip(V.minPerDayLv, 'day.min', v=>{ V.minPerDayLv = v; commit('settings'); })]),
       setting(t('vPerWeek'), null, [Stepper(V.perWeek, v=>{ V.perWeek = v; commit('settings'); }, {min:1, max:60, nullable:true, placeholder:t('noLimit')}), gl('vol.week')]),
       setting(t('rSpacing'), null, [Seg([{value:'even',label:t('spEven')},{value:'pack',label:t('spPack')},{value:'gap',label:t('spGap')}], sp.mode, v=>{ sp.mode = v; commit('settings'); paint(); }), sp.mode==='gap' ? null : gl('space.shape')]),
       sp.mode==='gap' ? setting(t('spGapDays'), null, Stepper(sp.gap||2, v=>{ sp.gap = v; commit('settings'); }, {min:2, max:14})) : null,
@@ -149,7 +150,7 @@ function renderRules(root){
     set.genderRules.forEach((r, i)=>{
       const card = el('div', {class:'rule-card'+(r.on?'':' off')});
       const upd = ()=>{ commit('settings'); paint(); };
-      const sizes = [...new Set(schedulableFacilities().filter(f=>(!r.kinds.length || r.kinds.includes(facilityKind(f))) && (!r.categories.length || r.categories.includes(f.category))).map(f=>teamSizeFor(facilityKind(f), f.category)))].sort();
+      const sizes = [...new Set(schedulableFacilities().filter(f=>(!r.kinds.length || r.kinds.includes(facilityKind(f))) && (!r.categories.length || r.categories.includes(f.category))).map(f=>teamSizeFor(facilityKind(f), f)))].sort();
       const examples = sizes.map(n=>{ const min = genderMinCount(r, n); const combos = []; for(let m=0;m<=n;m++){ if(genderValid(r, m, n-m, n)) combos.push(m+'+'+(n-m)); } return t('gPreview', n)+': '+(combos.length ? combos.join(' / ') : '✕'); }).join('   ·   ');
       card.appendChild(el('div', {class:'rc-head'}, [Switch(r.on, v=>{ r.on = v; upd(); }), el('b', null, (r.kinds.length ? r.kinds.map(kindLabel).join(' + ') : t('gAllKinds')) + (r.categories.length ? ' · '+r.categories.join('، ') : '') + (r.facilities.length ? ' · '+r.facilities.length+' '+t('tabFacilities') : '')), el('div', {class:'spacer'}), LevelChip(r.lv, 'gender.rule', v=>{ r.lv = v; commit('settings'); }, {simple}),
         i>0 ? el('button', {type:'button', class:'icon-btn sm', title:'↑', html:svg('<path d="M12 19V5M5 12l7-7 7 7"/>',14), onclick:()=>{ const a = set.genderRules; [a[i-1], a[i]] = [a[i], a[i-1]]; upd(); }}) : null,

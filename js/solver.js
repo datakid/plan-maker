@@ -75,7 +75,7 @@ function layoutDemand(plan){
     if(!m.has(o)) m.set(o, {});
     const d = m.get(o);
     const kind = visitKindOf(f);
-    for(const pl of S().pools) d[pl.id] = (d[pl.id]||0) + (v.auto===false ? 0 : seatsFor(pl, kind, f.category));
+    for(const pl of S().pools) d[pl.id] = (d[pl.id]||0) + (v.auto===false ? 0 : visitSeatNeed(v, pl, f));
   }
   return m;
 }
@@ -141,14 +141,14 @@ function genderDeficit(plan, availFn){
     const rule = genderRuleFor(f, kind);
     if(!rule) continue;
     const o = ordOf(v.date);
-    const n = teamSizeFor(kind, f.category);
+    const n = teamSizeFor(kind, f);
     let lo = 0, hi = 0, staffed = true;
     for(const pl of S().pools){
-      const seats = seatsFor(pl, kind, f.category);
+      const seats = visitSeatNeed(Object.assign({}, v, {auto:true}), pl, f);
       if(!seats) continue;
       let m = 0, w = 0, u = 0;
       for(const p of people){
-        if(p.pool!==pl.id || !availFn(p, o) || (p.blocked||[]).includes(f.id)) continue;
+        if(p.pool!==pl.id || !availFn(p, o) || (p.blocked||[]).includes(f.id) || distMismatch(p, f)) continue;
         if(p.gender==='m') m++; else if(p.gender==='f') w++; else u++;
       }
       if(m+w+u<seats){ staffed = false; break; }
@@ -173,7 +173,7 @@ function scopedDeficit(plan, rules){
     const dates = new Set();
     for(const x of vis){
       if(!inScopeOpt(x.f, r.scope)) continue;
-      if(!personAvailable(p, x.ord) || (p.blocked||[]).includes(x.f.id)) continue;
+      if(!personAvailable(p, x.ord) || (p.blocked||[]).includes(x.f.id) || distMismatch(p, x.f) || !visitAllows(x.v, p.id)) continue;
       if(rules.denied(p.id, x.f)==='must') continue;
       dates.add(x.ord);
     }
@@ -220,7 +220,7 @@ function preflightPlan(info, plan){
     const exact = {basic:volume.exact.basic|0, contracted:volume.exact.contracted|0};
     const capBy = {basic:0, contracted:0};
     for(const o of eligibleDays){
-      const dr = normalizeDay(set.days[wdOf(o)]);
+      const dr = dayRuleOf(o);
       const k = dr.kind && dr.kind.lv.level==='must' && dr.kind.howMany==='all' ? dr.kind.kind : null;
       for(const kind of ['basic', 'contracted']) if(!k || k===kind) capBy[kind] += dayCap(o);
     }
@@ -230,7 +230,7 @@ function preflightPlan(info, plan){
     }
   }
   for(const o of eligibleDays){
-    const dr = normalizeDay(set.days[wdOf(o)]);
+    const dr = dayRuleOf(o);
     const checks = [['kind', 'day.kind', f=>visitKindOf(f)===(dr.kind && dr.kind.kind)], ['band', 'day.band', f=>distBand(facilityKm(f))===(dr.band && dr.band.band)], ['category', 'day.category', f=>dr.category && dr.category.ids.includes(f.category)]];
     for(const [field, rule, ok] of checks){
       const e = dr[field];
@@ -239,8 +239,8 @@ function preflightPlan(info, plan){
       if(exactZero || !cands.some(ok)) add('xDayRuleNone', [wdName(wdOf(o)), t(rule)], {rules:exactZero ? [rule, 'vol.exact'] : [rule], fix:{type:'dayPrefer', wd:wdOf(o), field}});
     }
   }
-  if(plan && pools.every(pl=>!Object.keys(pl.byCategory||{}).length)){
-    const exactProof = volume.mode==='exact' && !plan.visits.some(v=>v.auto===false);
+  if(plan && pools.every(pl=>!Object.keys(pl.byCategory||{}).length) && !App.data.facilities.some(f=>f.seats)){
+    const exactProof = volume.mode==='exact' && !plan.visits.some(v=>v.auto===false || v.seats) && !App.data.facilities.some(f=>f.seats);
     const layout = layoutDemand(plan);
     for(const pl of pools){
       const members = activePeople().filter(p=>p.pool===pl.id);
@@ -278,8 +278,8 @@ function preflightPlan(info, plan){
     if(!A || !B) continue;
     const ok = schedulableFacilities().some(f=>{
       const k = visitKindOf(f);
-      if(A.pool===B.pool) return seatsFor(poolById(A.pool), k, f.category) >= 2;
-      return seatsFor(poolById(A.pool), k, f.category) >= 1 && seatsFor(poolById(B.pool), k, f.category) >= 1;
+      if(A.pool===B.pool) return seatsForF(poolById(A.pool), k, f) >= 2;
+      return seatsForF(poolById(A.pool), k, f) >= 1 && seatsForF(poolById(B.pool), k, f) >= 1;
     });
     if(!ok) add('xRigidSeats', [A.name, B.name], {people:[A.id, B.id]});
     const need = ((bounds.get(A.id)||{lo:0}).lo>0) || ((bounds.get(B.id)||{lo:0}).lo>0);
@@ -353,12 +353,12 @@ function solveTeams(plan, budget, rnd, opts){
     }
     for(const pl of set.pools){
       const lockedHere = st.locked.filter(id=>{ const p = personById(id); return p && p.pool===pl.id; }).length;
-      const seats = x.v.auto===false ? 0 : Math.max(0, seatsFor(pl, kind, x.f.category) - lockedHere);
+      const seats = x.v.auto===false ? 0 : Math.max(0, visitSeatNeed(x.v, pl, x.f) - lockedHere);
       if(!seats) continue;
       const g = {st, pool:pl.id, seats, chosen:[], base:null};
       g.base = people.filter(p=>{
         if(p.pool!==pl.id) return false;
-        if(!personAvailable(p, x.ord) || (p.blocked||[]).includes(x.f.id)) return false;
+        if(!personAvailable(p, x.ord) || (p.blocked||[]).includes(x.f.id) || distMismatch(p, x.f) || !visitAllows(x.v, p.id)) return false;
         const rb = set.repeatBlock;
         if(rotateMustActive() && ((ctx.fpv[x.f.id+'|'+p.id])||0) >= rb.times) return false;
         if(ctx.rules.denied(p.id, x.f)==='must') return false;
@@ -376,7 +376,7 @@ function solveTeams(plan, budget, rnd, opts){
   const attainable = new Map();
   for(const st of state){
     if(!importanceNeed(st.x)) continue;
-    const ok = people.some(p=>qual(st.x, p) && personAvailable(p, st.x.ord) && !(p.blocked||[]).includes(st.x.f.id));
+    const ok = people.some(p=>qual(st.x, p) && personAvailable(p, st.x.ord) && !(p.blocked||[]).includes(st.x.f.id) && !distMismatch(p, st.x.f));
     attainable.set(st, ok);
   }
   const dyn = (p, x)=>{
@@ -526,7 +526,7 @@ function solveTeams(plan, budget, rnd, opts){
     };
     const px = pick.st.x;
     const rule = genderRuleFor(px.f, px.kind);
-    const nSize = teamSizeFor(px.kind, px.f.category);
+    const nSize = teamSizeFor(px.kind, px.f);
     const nowG = rule ? teamGender(teamOf(pick.st)) : null;
     const remainingTotal = rule ? sum(pick.st.groups, g=>g.seats-g.chosen.length) : 0;
     const genderPen = c=>{

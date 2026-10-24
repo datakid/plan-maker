@@ -1,5 +1,5 @@
 const EMPTY_LIST = Object.freeze([]);
-const PERSON_RELS = ['never','only','exactly','atLeast','atMost'];
+const PERSON_RELS = ['between','exactly','atLeast','atMost','only','never'];
 
 function scopeOrNull(sc){ return sc && sc.kind && sc.kind!=='all' ? sc : null; }
 function inScopeOpt(f, scope){ return !scope || inScope(f, scope); }
@@ -21,7 +21,7 @@ function compilePeopleRules(){
       for(const pid of g.people||[]){
         if(!active.has(pid)) continue;
         if(g.rel==='never' || g.rel==='only') push(deny, pid, {gid:g.id, scope:g.scope, invert:g.rel==='only', must});
-        else addCount(pid, {id:g.id, gid:g.id, src:'goal', scope:scopeOrNull(g.scope), min:g.rel==='atMost' ? null : g.n, max:g.rel==='atLeast' ? null : g.n, must});
+        else addCount(pid, {id:g.id, gid:g.id, src:'goal', scope:scopeOrNull(g.scope), min:g.rel==='atMost' ? null : g.n, max:g.rel==='atLeast' ? null : (g.rel==='between' ? Math.max(g.n, g.n2==null ? g.n : g.n2) : g.n), must});
       }
     } else if(g.type==='together'){
       if(!g.a || !g.b || g.a===g.b || !active.has(g.a) || !active.has(g.b)) continue;
@@ -62,8 +62,8 @@ function togetherSeatsPossible(r){
   const facs = schedulableFacilities().filter(f=>inScopeOpt(f, r.scope));
   return facs.some(f=>{
     const k = facilityKind(f);
-    if(A.pool===B.pool) return seatsFor(poolById(A.pool), k, f.category) >= 2;
-    return seatsFor(poolById(A.pool), k, f.category) >= 1 && seatsFor(poolById(B.pool), k, f.category) >= 1;
+    if(A.pool===B.pool) return seatsForF(poolById(A.pool), k, f) >= 2;
+    return seatsForF(poolById(A.pool), k, f) >= 1 && seatsForF(poolById(B.pool), k, f) >= 1;
   });
 }
 

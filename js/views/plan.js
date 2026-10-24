@@ -129,7 +129,7 @@ function visitsPop(refresh){
     const pv = volumePreview();
     box.appendChild(el('div', {class:'banner info'}, t('vSummary', pv.basic, pv.contracted)));
   } else {
-    box.appendChild(Seg([{value:'fill',label:t('vFill')},{value:'exact',label:t('vExact')},{value:'quota',label:t('vQuota')}], V.mode, v=>{ V.mode = v; settingsChanged(refresh); }, {cls:'block'}));
+    box.appendChild(Seg([{value:'fill',label:t('vFill')},{value:'exact',label:t('vExact')},{value:'quota',label:t('vQuota')},{value:'fixed',label:t('vFixed')}], V.mode, v=>{ V.mode = v; settingsChanged(refresh); }, {cls:'block'}));
     const live = el('div', {class:'hint'});
     const paint = ()=>{ const pv = volumePreview(); live.textContent = t('vSummary', pv.basic, pv.contracted)+' · '+t('capLine', pv.capacity); live.style.color = pv.overCapacity ? 'var(--warn)' : ''; };
     if(V.mode==='fill'){
@@ -139,6 +139,8 @@ function visitsPop(refresh){
         el('div', {class:'field'}, [el('label', null, t('kBasic')), Stepper(V.exact.basic, v=>{ V.exact.basic = v; settingsChanged(); paint(); }, {min:0, max:500})]),
         el('div', {class:'field'}, [el('label', null, t('kContracted')), Stepper(V.exact.contracted, v=>{ V.exact.contracted = v; settingsChanged(); paint(); }, {min:0, max:500})])
       ]));
+    } else if(V.mode==='fixed'){
+      box.appendChild(el('div', {class:'hint'}, t('vFixedHint')));
     } else {
       const list = el('div', {class:'stack', style:{gap:'4px', maxHeight:'260px', overflow:'auto'}});
       const pool = schedulableFacilities();
@@ -153,6 +155,7 @@ function visitsPop(refresh){
   }
   box.appendChild(el('div', {class:'grid-2', style:{paddingTop:'10px', borderTop:'1px solid var(--line)'}}, [
     el('div', {class:'field'}, [el('label', null, t('vPerDay')), Stepper(V.perDay||1, v=>{ V.perDay = v; settingsChanged(); }, {min:1, max:10})]),
+    el('div', {class:'field'}, [el('label', null, t('vMinPerDay')), Stepper(V.minPerDay, v=>{ V.minPerDay = v ? Math.min(v, V.perDay||1) : null; settingsChanged(); }, {min:1, max:10, nullable:true, placeholder:t('noLimit')})]),
     el('div', {class:'field'}, [el('label', null, t('vPerWeek')), Stepper(V.perWeek, v=>{ V.perWeek = v; settingsChanged(); }, {min:1, max:60, nullable:true, placeholder:t('noLimit')})])
   ]));
   return box;
@@ -597,7 +600,7 @@ function quantitiesBlock(plan, A){
   let staffed = 0;
   for(const v of plan.visits){
     const f = facilityById(v.facilityId); if(!f) continue;
-    const full = S().pools.every(pl=>(v.team[pl.id]||[]).length>=seatsFor(pl, v.kind, f.category));
+    const full = S().pools.every(pl=>(v.team[pl.id]||[]).length>=visitSeatNeed(v, pl, f));
     if(full && !bad.has(v.id)) staffed++;
   }
   const rows = [
@@ -859,7 +862,7 @@ function openVisit(id){
       teamSec.appendChild(el('div', {class:'section-title'}, t('vdTeam')));
       if(locked) teamSec.appendChild(el('div', {class:'banner info', style:{marginBottom:'8px'}}, [el('span', {html:ICON.lock, style:{display:'flex'}}), t('vdLocked')]));
       for(const pl of S().pools){
-        const seats = seatsFor(pl, v.kind, f.category);
+        const seats = Math.max(visitSeatNeed(Object.assign({}, v, {auto:true}), pl, f), (v.team[pl.id]||[]).length);
         if(!seats) continue;
         teamSec.appendChild(el('div', {class:'muted', style:{fontSize:'12px', margin:'8px 0 4px'}}, poolName(pl)));
         const list = v.team[pl.id] || [];

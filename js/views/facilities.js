@@ -105,7 +105,7 @@ function renderFacilities(root){
 
 function addFacility(){
   const cat = App.data.categories.find(c=>c.kind==='basic');
-  const f = {id:uid('f'), name:'', category:cat?cat.name:'', locationId:locIdFor('دمنهور'), kindOverride:null, freq:1, importance:50, pinned:false, excluded:false, lastVisit:null, visitCount:0, history:[], weekdays:null, review:null};
+  const f = {id:uid('f'), name:'', category:cat?cat.name:'', locationId:locIdFor('دمنهور'), kindOverride:null, freq:1, importance:50, pinned:false, excluded:false, lastVisit:null, visitCount:0, history:[], weekdays:null, review:null, seats:null};
   openFacility(null, f);
 }
 
@@ -134,6 +134,14 @@ function openFacility(id, draft){
         setting(t('fExcluded'), null, Switch(!!f.excluded, v=>{ f.excluded = v; saveF(); api.render(); })),
         setting(t('fDays'), f.weekdays && f.weekdays.length ? null : t('fAnyDay'), [DaySet(f.weekdays||[], v=>{ f.weekdays = v.length ? v : null; saveF(); }, {sm:true}), LevelChip(facilityLvOf(f).weekdays, 'fac.weekdays', v=>{ f.lv = Object.assign(facilityLvOf(f), {weekdays:v}); saveF(); })])
       ]);
+      const sec2b = el('section', {class:'sheet-sec'}, [
+        el('div', {class:'section-title'}, t('fSeats')),
+        el('div', {class:'hint', style:{marginBottom:'8px'}}, t('fSeatsHint'))
+      ].concat(S().pools.map(pl=>{
+        const base = seatsFor(pl, k, f.category);
+        const cur = f.seats && f.seats[pl.id]!=null ? f.seats[pl.id] : null;
+        return setting(poolName(pl), null, Stepper(cur, v=>{ const o = Object.assign({}, f.seats||{}); if(v==null) delete o[pl.id]; else o[pl.id] = v; f.seats = Object.keys(o).length ? o : null; saveF(); api.render(); }, {min:0, max:9, nullable:true, sm:true, placeholder:String(base)}));
+      })));
       const sec3 = el('section', {class:'sheet-sec'});
       sec3.appendChild(el('div', {class:'section-title'}, t('vdHistory')));
       sec3.appendChild(el('div', {class:'grid-2', style:{marginBottom:'10px'}}, [
@@ -144,7 +152,7 @@ function openFacility(id, draft){
       if(!h.length) sec3.appendChild(el('div', {class:'muted', style:{fontSize:'13px'}}, t('vdNoHistory')));
       for(const x of h) sec3.appendChild(el('div', {class:'row', style:{padding:'5px 0', fontSize:'12.5px', borderBottom:'1px dashed var(--line)'}}, [el('span', {class:'num muted', style:{minWidth:'92px'}}, x.date), el('span', null, (x.team||[]).join('، '))]));
       if(f.review) sec3.appendChild(el('button', {type:'button', class:'btn sm', style:{marginTop:'10px'}, onclick:()=>{ f.review = null; saveF(); api.render(); }}, t('fReview')+' ✓'));
-      return [sec1, sec2, sec3];
+      return [sec1, sec2, sec2b, sec3];
     },
     foot:api=>[
       isNew && !App.data.facilities.includes(f) ? null : el('button', {type:'button', class:'btn ghost', style:{color:'var(--danger)'}, onclick:()=>confirmDialog(t('fDelete'), t('fDeleteQ'), {danger:true, label:t('del'), onConfirm:()=>{ App.data.facilities = App.data.facilities.filter(x=>x!==f); commit('data'); api.close(); if(PlanView.facRepaint) PlanView.facRepaint(); }})}, t('fDelete')),

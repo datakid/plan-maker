@@ -1,4 +1,4 @@
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.1.1';
 const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
@@ -26,7 +26,7 @@ function defaultSettings(){
   return {
     period: {goal:'range', preset:'month', start:null, end:null, scope:{kind:'all', ids:[]}, times:1},
     calendar: {workdays:[0,1,2,3,4], holidays:[], extra:[]},
-    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, requireEveryEligibleDay:false},
+    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, minPerDay:null, minPerDayLv:null, requireEveryEligibleDay:false},
     goals: defaultGoals(),
     overrides: [],
     spacing: {mode:'even', gap:2, strict:'try'},
@@ -254,6 +254,8 @@ function normalizeData(d){
   d.settings.distance.farKm = Math.max(d.settings.distance.nearKm, cleanNum(d.settings.distance.farKm, 0, 2000, 45));
   d.settings.volume.perDay = cleanInt(d.settings.volume.perDay, 1, 10, 1);
   d.settings.volume.perWeek = d.settings.volume.perWeek==null || d.settings.volume.perWeek==='' ? null : cleanInt(d.settings.volume.perWeek, 1, 60, null);
+  d.settings.volume.minPerDay = d.settings.volume.minPerDay ? Math.min(d.settings.volume.perDay, cleanInt(d.settings.volume.minPerDay, 1, 10, 1)) : null;
+  d.settings.volume.minPerDayLv = normLv(d.settings.volume.minPerDayLv, mkLv('must', 5), ruleSpec('day.min'));
   d.settings.volume.requireEveryEligibleDay = !!d.settings.volume.requireEveryEligibleDay;
   d.settings.volume.quotas = d.settings.volume.quotas || {};
   d.settings.spacing.strict = d.settings.spacing.strict==='must' ? 'must' : 'try';
@@ -447,6 +449,7 @@ function sanitizeBackup(raw){
     out.pinned = !!f.pinned; out.excluded = !!f.excluded;
     out.history = Array.isArray(f.history) ? f.history.filter(h=>obj(h) && h.date).map(h=>({date:cleanIso(h.date, String(h.date)), team:Array.isArray(h.team) ? h.team.map(String) : []})) : [];
     out.weekdays = Array.isArray(f.weekdays) ? f.weekdays.map(Number).filter(n=>Number.isInteger(n) && n>=0 && n<=6) : null;
+    out.seats = cleanSeatMap(f.seats);
     return out;
   });
   const seenP = new Set();
@@ -553,6 +556,18 @@ function seatsFor(pool, kind, category){
   if(pool.byCategory && category!=null && pool.byCategory[category]!=null) return pool.byCategory[category];
   return (pool.seats && pool.seats[kind]) || 0;
 }
+function seatsForF(pool, kind, f){
+  const o = f && f.seats;
+  if(o && o[pool.id]!=null) return Math.max(0, Math.min(9, o[pool.id]|0));
+  return seatsFor(pool, kind, f ? f.category : undefined);
+}
+function cleanSeatMap(m){
+  if(!m || typeof m!=='object' || Array.isArray(m)) return null;
+  const out = {};
+  for(const k of Object.keys(m)){ const n = Number(m[k]); if(m[k]!==null && m[k]!=='' && Number.isFinite(n)) out[k] = Math.max(0, Math.min(9, Math.round(n))); }
+  return Object.keys(out).length ? out : null;
+}
+function cleanIdList(l){ return Array.isArray(l) ? [...new Set(l.filter(Boolean).map(String))] : []; }
 function distBand(km){
   const d = S().distance;
   if(km==null) return 'mid';

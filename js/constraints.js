@@ -2,7 +2,7 @@ const CLS = {HARD:'hard', SOFT:'soft', EXC:'exception'};
 const HISTORY_LOOKBACK = 30;
 
 const KEY_RULE = {
-  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit',
+  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit', dVisitPerson:'struct.fixedVisit',
   dOutOfPlan:'struct.calendar', dNotWorkday:'struct.calendar', dActivityRest:'vol.activity', dWeekday:'fac.weekdays', dDayOnly:'day.only', dActivityCycleSoft:'vol.activity',
   dGender:'gender.rule', dSenior:'senior', dSeniorNone:'senior', dPair:'pair', dLate:'goal.cover', dUnavailable:'p.avail', dFixedOff:'p.avail', dPatternDay:'p.rest', dBlocked:'p.blocked', dFixedBlocked:'p.blocked', dRepeatBlock:'rotate',
   dDayDup:'struct.onePlace', dFacDup:'struct.facilityOnce', dCapDay:'struct.perDay', dCapDayCfg:'day.cap', dCapWeek:'vol.week', dSpacing:'vol.gap', dActivityRest2:'vol.activity', dActivityRun:'vol.activity',
@@ -20,7 +20,7 @@ function violationLv(v){
   const dflt = spec ? mkLv(spec.def.level, spec.def.w) : ALWAYS_LV;
   if(!rule || rule.startsWith('struct.')) return ALWAYS_LV;
   if(DAY_RULE_FIELD[rule]){
-    const dr = normalizeDay(S().days[wdOf(ordOf(v.dates[0]))]);
+    const dr = dayRuleOf(ordOf(v.dates[0]));
     const e = dr[DAY_RULE_FIELD[rule]];
     return e ? e.lv : dflt;
   }
@@ -255,9 +255,9 @@ function isFixedLockedPerson(v, pid){
 }
 
 function uniqIds(ids){ return [...new Set(ids)]; }
-function seatTarget(f, kind){
+function seatTarget(v, f){
   const m = {};
-  for(const pl of S().pools) m[pl.id] = seatsFor(pl, kind, f.category);
+  for(const pl of S().pools) m[pl.id] = visitSeatNeed(v, pl, f);
   return m;
 }
 function isExemptLocked(v, pid){ return isFixedLockedPerson(v, pid); }
@@ -464,22 +464,23 @@ function evaluateGoals(plan, T, ctx){
         let okN = 0;
         for(const id of ids){
           const q = T.q[g.id+'|'+id]||0;
-          const okp = (g.rel==='atMost' || q>=g.n) && (g.rel==='atLeast' || q<=g.n);
+          const lo = g.rel==='atMost' ? 0 : g.n, hi = g.rel==='atLeast' ? Infinity : (g.rel==='between' ? Math.max(g.n, g.n2==null ? g.n : g.n2) : g.n);
+          const okp = q>=lo && q<=hi;
           per.push({id, q, ok:okp});
           if(okp) okN++;
           else {
-            const over = g.rel!=='atLeast' && q>g.n;
+            const over = q>hi;
             let cls = strictCls(g);
             if(over && cls===CLS.HARD){
               const ex = sum(vis.filter(x=>x.ids.includes(id) && isExemptLocked(x.v, id) && inScopeOpt(x.f, g.scope)), ()=>1);
               if(q-ex<=0) cls = CLS.EXC;
             }
-            viol({key:'dQuotaPerson', cls, people:[id], actual:q, required:g.n, args:[(personById(id)||{}).name||'?', q, g.rel==='atLeast' ? '≥'+g.n : (g.rel==='atMost' ? '≤'+g.n : '='+g.n)]});
+            viol({key:'dQuotaPerson', cls, people:[id], actual:q, required:over ? hi : lo, args:[(personById(id)||{}).name||'?', q, g.rel==='atLeast' ? '≥'+g.n : (g.rel==='atMost' ? '≤'+g.n : (g.rel==='between' ? g.n+'–'+hi : '='+g.n))]});
           }
         }
         row.per = per; row.inPlan = okN; row.target = ids.length; row.met = okN===ids.length;
         row.pct = ids.length ? Math.round(okN/ids.length*100) : 100;
-        row.label = per.map(x=>(personById(x.id)||{}).name+' '+x.q+'/'+g.n).join(' · ');
+        row.label = per.map(x=>(personById(x.id)||{}).name+' '+x.q+'/'+(g.rel==='between' ? g.n+'–'+Math.max(g.n, g.n2==null ? g.n : g.n2) : g.n)).join(' · ');
         row.state = row.met ? 'met' : 'short';
       }
     } else if(g.type==='together'){
@@ -590,7 +591,7 @@ function validatePlan(plan, opts){
     const fixed = !!v.fixed;
     const team = v.team && typeof v.team==='object' ? v.team : {};
     const seen = new Set();
-    const need = seatTarget(f, x.kind);
+    const need = seatTarget(Object.assign({}, v, {auto:true}), f);
     const got = {};
     for(const pk of Object.keys(team)){
       const list = Array.isArray(team[pk]) ? team[pk] : [];
@@ -617,6 +618,12 @@ function validatePlan(plan, opts){
     x.open = open;
     if(open>0) add({src:'visit', cls:CLS.HARD, group:'cOpen', key:'dOpenSeats', visits:[v.id], dates:[v.date], facilities:[f.id], actual:sum(Object.values(got)), required:sum(Object.values(need)), args:[f.name, v.date, open]});
     if(over>0) add({src:'visit', cls:(fixed || v.auto===false) ? CLS.EXC : CLS.HARD, group:'cTeam', key:'dTeamOversize', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, over]});
+    for(const id of x.ids){
+      if(!visitAllows(v, id)){
+        const p = personById(id);
+        add({src:'visit', cls:CLS.HARD, group:'cTeam', key:'dVisitPerson', people:[id], visits:[v.id], dates:[v.date], facilities:[f.id], args:[p ? p.name : String(id), f.name, v.date]});
+      }
+    }
     for(const id of locked){
       const p = personById(id);
       if(!p || p.retired || p.active===false) continue;
@@ -685,12 +692,18 @@ function validatePlan(plan, opts){
       }
       else seen.set(id, x.v);
     }
-    const facSeen = new Set();
-    for(const x of list){ if(facSeen.has(x.f.id)) add({src:'day', cls:CLS.HARD, group:'cDup', key:'dFacDup', facilities:[x.f.id], visits:[x.v.id], dates:[date], args:[x.f.name, date]}); facSeen.add(x.f.id); }
+    const facSeen = new Map();
+    const userMade = v=>!!(v.fixed || v.special);
+    for(const x of list){
+      if(facSeen.has(x.f.id)){
+        const first = facSeen.get(x.f.id);
+        add({src:'day', cls:userMade(first) && userMade(x.v) ? CLS.EXC : CLS.HARD, group:'cDup', key:'dFacDup', facilities:[x.f.id], visits:[first.id, x.v.id], dates:[date], args:[x.f.name, date]});
+      } else facSeen.set(x.f.id, x.v);
+    }
     const ord = ordOf(date), dcap = dayCap(ord);
     const free = list.filter(x=>!x.v.fixed).length;
     const perDay = S().volume.perDay|0;
-    const cfgCap = dayView(normalizeDay(S().days[wdOf(ord)])).cap;
+    const cfgCap = dayView(dayRuleOf(ord)).cap;
     if(perDay>0 && list.length>perDay) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:perDay, units:list.length-perDay, args:[date, list.length, perDay]});
     else if(cfgCap!=null && list.length>cfgCap) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', rule:'day.cap', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:cfgCap, units:list.length-cfgCap, args:[date, list.length, cfgCap]});
   }

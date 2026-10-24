@@ -15,7 +15,7 @@ function annealHot(v){
 function annealSeatNeed(v, pool){
   const f = facilityById(v.facilityId);
   if(!f || v.auto===false) return 0;
-  return seatsFor(pool, v.kind || visitKindOf(f), f.category);
+  return visitSeatNeed(v, pool, f);
 }
 
 function annealBusy(plan, date, exceptId){
@@ -77,7 +77,7 @@ function annealMove(plan, rnd, hot, people){
     const ord = ordOf(v.date);
     const busy = annealBusy(plan, v.date, v.id);
     const inTeam = new Set(visitTeamIds(v));
-    let cands = people.filter(p=>p.pool===pk && !inTeam.has(p.id) && !(p.blocked||[]).includes(f.id));
+    let cands = people.filter(p=>p.pool===pk && !inTeam.has(p.id) && visitAllows(v, p.id) && !(p.blocked||[]).includes(f.id));
     const free = cands.filter(p=>!busy.has(p.id) && personAvailable(p, ord));
     if(free.length && rnd()<0.85) cands = free;
     if(!cands.length) return null;

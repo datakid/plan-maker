@@ -243,7 +243,7 @@ defs({
   gHintSpecial:['زيارة لجهة معينة خلال فترة مرنة، مع أشخاص محددين إن أردت. يختار المخطط أنسب يوم.','A visit to a chosen place within a flexible window, optionally with set people. The planner picks the best day.'],
   gGroupFac:['أهداف الجهات','Facility goals'], gGroupPeople:['أهداف الأشخاص','People goals'],
   gWho:['الأشخاص','People'], gRel:['القاعدة','Rule'], gVisitsN:['عدد الزيارات','Visits'], gWhere:['في','At'], gOnlyWhere:['فقط في','Only at'], gCountWhere:['تُحتسب في','Counted at'],
-  rel_never:['لا يخرج أبدًا','Never'], rel_only:['فقط','Only'], rel_exactly:['بالضبط','Exactly'], rel_atLeast:['على الأقل','At least'], rel_atMost:['على الأكثر','At most'],
+  rel_never:['لا يخرج أبدًا','Never'], rel_only:['فقط','Only'], rel_exactly:['بالضبط','Exactly'], rel_between:['بين حدّين','Between'], rel_atLeast:['على الأقل','At least'], rel_atMost:['على الأكثر','At most'],
   trel_atLeast:['معًا على الأقل','Together at least'], trel_atMost:['معًا على الأكثر','Together at most'],
   gPair:['الثنائي','Pair'], gShare:['النسبة','Share'], gTogetherHow:['النسبة من زيارات الأقل خروجًا منهما. ١٠٠٪ = دائمًا معًا، ٠٪ على الأكثر = لا يجتمعان.','Share of the visits of whichever goes out less. 100% = always together; at most 0% = never together.'],
   gBetween:['خلال','Between'], gPlanStart:['بداية الخطة','Plan start'], gPlanEnd:['نهاية الخطة','Plan end'],
@@ -255,7 +255,8 @@ defs({
   rRule:['قاعدة','rule'], rQuota:['بلغ الحد','at limit'], cPeople:['قواعد الأشخاص','People rules']
 });
 defs2({
-  gtPersonT:[(p,r,n,s)=>`${p}: ${({never:'لا يخرج',only:'فقط',exactly:n+' بالضبط',atLeast:n+' على الأقل',atMost:n+' على الأكثر'})[r]}${s?' · '+s:''}`, (p,r,n,s)=>`${p}: ${({never:'never',only:'only',exactly:'exactly '+n,atLeast:'at least '+n,atMost:'at most '+n})[r]}${s?' · '+s:''}`],
+  gtPersonT:[(p,r,n,s,m)=>`${p}: ${({never:'لا يخرج',only:'فقط',exactly:n+' بالضبط',between:'من '+n+' إلى '+Math.max(n,m||n),atLeast:n+' على الأقل',atMost:n+' على الأكثر'})[r]}${s?' · '+s:''}`, (p,r,n,s,m)=>`${p}: ${({never:'never',only:'only',exactly:'exactly '+n,between:n+' to '+Math.max(n,m||n),atLeast:'at least '+n,atMost:'at most '+n})[r]}${s?' · '+s:''}`],
+  gVisitsMin:['الحد الأدنى','Minimum'], gVisitsMax:['الحد الأقصى','Maximum'],
   gtTogetherT:[(a,b,r,p,s)=>`${a} + ${b}: ${r==='atLeast'?'≥':'≤'}${p}٪ معًا${s?' · '+s:''}`, (a,b,r,p,s)=>`${a} + ${b}: ${r==='atLeast'?'≥':'≤'}${p}% together${s?' · '+s:''}`],
   gtSpecialT:[(f,n)=>`زيارة خاصة: ${f}${n>1?' ×'+n:''}`, (f,n)=>`Special: ${f}${n>1?' ×'+n:''}`],
   gpBreaks:[n=>`${n} مخالفة`, n=>`${n} breaks`],
@@ -286,6 +287,11 @@ defs2({
   vdDeadline:[d=>`مطلوبة قبل ${d}`, d=>`Due by ${d}`],
   ovPeopleN:[n=>`${n} أشخاص`, n=>`${n} people`],
   ovUsualTeam:[s=>`الفريق المعتاد: ${s}`, s=>`Usual team: ${s}`],
+  vsSeatsOf:[p=>`مقاعد ${p} في هذه الزيارة`, p=>`${p} seats on this visit`], vsSeatsHint:['اتركه فارغًا للعدد المعتاد. الأرقام هنا تخص هذه الزيارة فقط.','Leave blank for the usual number. These numbers apply to this visit only.'], vsLock:['اجعل المقاعد = الأشخاص المسمّين','Seats = named people'], vsAuto:['إرجاع المقاعد للمعتاد','Back to usual seats'],
+  vsOnly:['التكملة من هؤلاء فقط','Fill only from these people'], vsNever:['لا يشارك في هذه الزيارة','Not on this visit'],
+  vFixed:['المثبّتة فقط','Fixed only'], vFixedHint:['لا تضيف الخطة أي جهة عشوائية: فقط الزيارات المثبّتة والمستهدفات الخاصة.','The plan adds no random places: only fixed visits and special goals.'],
+  vMinPerDay:['حد أدنى في اليوم','Minimum per day'], vMinPerDayHint:['لجعل عدد الزيارات في اليوم ثابتًا اجعل الحد الأدنى مساويًا للحد الأقصى.','For a fixed number of visits per day, set the minimum equal to the per-day maximum.'],
+  fSeats:['عدد المقاعد في هذه الجهة','Seats at this place'], fSeatsHint:['اتركه فارغًا لاستخدام العدد المعتاد. اكتب عددًا أقل (حتى 0) لتصغير الزيارة، مثل شخص واحد فقط.','Leave blank for the usual seats. Enter a smaller number (even 0) to shrink the visit, for example one person only.'],
   ovInactive:[p=>`${p} غير مشارك حاليًا`, p=>`${p} is not active`],
   ovPersonOff:[p=>`${p} غير متاح في هذا اليوم`, p=>`${p} is unavailable that day`],
   ovPersonBlocked:[p=>`${p} محظور من هذه الجهة`, p=>`${p} is blocked from this facility`],
@@ -360,6 +366,7 @@ defs({
   dTeamInactive:[(p,f,d)=>`${f} · ${D(d)}: ${p} غير نشط`, (p,f,d)=>`${f} · ${D(d)}: ${p} is inactive`],
   dTeamPool:[(p,f,d)=>`${f} · ${D(d)}: ${p} في مقعد مجموعة أخرى`, (p,f,d)=>`${f} · ${D(d)}: ${p} sits in another pool's seat`],
   dTeamOversize:[(f,d,n)=>`${f} · ${D(d)}: ${n} زيادة عن المقاعد`, (f,d,n)=>`${f} · ${D(d)}: ${n} more than the seats`],
+  dVisitPerson:[(p,f,d)=>`${f} · ${D(d)}: ${p} غير مسموح به في هذه الزيارة`, (p,f,d)=>`${f} · ${D(d)}: ${p} is not allowed on this visit`],
   dLockedMissing:[(p,f,d)=>`${f} · ${D(d)}: ${p} مثبّت لكنه غير موجود في الفريق`, (p,f,d)=>`${f} · ${D(d)}: ${p} is locked but missing from the team`],
   dOutOfPlan:[(f,d)=>`${f} · ${D(d)}: خارج فترة الخطة`, (f,d)=>`${f} · ${D(d)}: outside the plan period`],
   dNotWorkday:[(f,d)=>`${f} · ${D(d)}: ليس يوم عمل`, (f,d)=>`${f} · ${D(d)}: not a workday`],

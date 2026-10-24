@@ -7,7 +7,7 @@ function collectPreferences(plan, ctx, add){
     const date = isoOf(o);
     const list = (byDate.get(date) || []).filter(x=>x.f);
     const ids = list.map(x=>x.v.id);
-    const dr = normalizeDay(set.days[wdOf(o)]);
+    const dr = dayRuleOf(o);
     if(dr.min && list.length<dr.min.n) add({src:'day', group:'cPrefs', key:'dMinDay', dates:[date], visits:ids, actual:list.length, required:dr.min.n, units:dr.min.n-list.length, args:[date, list.length, dr.min.n]});
     const dayRule = (field, key, match, what)=>{
       const e = dr[field];
@@ -58,7 +58,8 @@ function collectPreferences(plan, ctx, add){
       const band = bandOf(x.f);
       if(!ordsBy.has(id)) ordsBy.set(id, []);
       ordsBy.get(id).push(ordOf(x.v.date));
-      if(p.distPref && band!=='mid' && band!==p.distPref) add({src:'person', group:'cPrefs', key:'dPersonDist', people:[id], visits:[x.v.id], dates:[x.v.date], facilities:[x.f.id], args:[p.name, x.f.name]});
+      const pband = distBand(personTravelKm(p, x.f));
+      if(p.distPref && pband!==p.distPref && (pband!=='mid' || distStrict(p))) add({src:'person', group:'cPrefs', key:'dPersonDist', people:[id], visits:[x.v.id], dates:[x.v.date], facilities:[x.f.id], args:[p.name, x.f.name]});
       const trip = distBand(personTravelKm(p, x.f));
       if(dist.shortTrips && trip==='far') add({src:'person', group:'cPrefs', key:'dShortTrip', people:[id], visits:[x.v.id], dates:[x.v.date], facilities:[x.f.id], args:[p.name, x.f.name]});
       if(trip==='far') farBy.set(id, (farBy.get(id)||0)+1);
