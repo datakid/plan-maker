@@ -1,5 +1,28 @@
+function offerDuplicateChoice(){
+  if(S().duplicates!=='ask') return;
+  let groups;
+  try{ groups = duplicateGroupsOf(compileRequestsRaw(planWindow()).list); } catch(e){ return; }
+  if(!App.ui.dupOffered) App.ui.dupOffered = new Set();
+  for(const members of groups){
+    if(members.some(m=>m.r.ref.dupChoice)) continue;
+    const key = members.map(m=>m.r.refId).sort().join('|');
+    if(App.ui.dupOffered.has(key)) continue;
+    App.ui.dupOffered.add(key);
+    const pick = choice=>{
+      for(const m of members){
+        const src = m.r.source==='fixed' ? S().overrides.find(o=>o.id===m.r.refId) : S().goals.find(g=>g.id===m.r.refId);
+        if(src) src.dupChoice = choice;
+      }
+      commit('settings');
+    };
+    toast(t('dupToast')+' · '+members[0].r.f.name, [{label:t('dupMerge'), onClick:()=>pick('merge')}, {label:t('dupKeep'), onClick:()=>pick('keep')}]);
+    break;
+  }
+}
+
 function goalsChanged(refresh){
   commit('settings');
+  offerDuplicateChoice();
   if(PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update();
   if(refresh) refresh();
   if(activePop) activePop.position();
@@ -128,7 +151,13 @@ function visitSpecFields(o, upd, mk){
   for(const pl of S().pools){
     const base = f ? seatsForF(pl, kind, f) : null;
     const cur = o.seats && o.seats[pl.id]!=null ? o.seats[pl.id] : null;
-    out.push(mk(t('vsSeatsOf', poolName(pl)), Stepper(cur, v=>{ const m = Object.assign({}, o.seats||{}); if(v==null) delete m[pl.id]; else m[pl.id] = v; o.seats = Object.keys(m).length ? m : null; upd(); }, {min:0, max:9, nullable:true, sm:true, placeholder:base==null ? '' : String(base)})));
+    const setSeat = v=>{ const m = Object.assign({}, o.seats||{}); if(v==null) delete m[pl.id]; else m[pl.id] = v; o.seats = Object.keys(m).length ? m : null; upd(); };
+    const ctl = el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
+      Stepper(cur, setSeat, {min:0, max:9, nullable:true, sm:true, base:base, placeholder:base==null ? '' : String(base)}),
+      cur!=null && base!=null && cur!==base ? el('span', {class:'chip on'}, t('vsCustom')) : null,
+      cur!=null ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>setSeat(null)}, t('vsDefault')) : null
+    ]);
+    out.push(mk(t('vsSeatsOf', poolName(pl)), ctl));
   }
   out.push(el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
     el('button', {type:'button', class:'btn sm outline', onclick:()=>{ const m = {}; for(const pl of S().pools) m[pl.id] = (o.people||[]).filter(id=>{ const p = personById(id); return p && p.pool===pl.id; }).length; o.seats = m; upd(); }}, t('vsLock')),
@@ -137,7 +166,69 @@ function visitSpecFields(o, upd, mk){
   ]));
   out.push(mk(t('vsOnly'), PersonPicker((o.only||[]).slice(), ids=>{ o.only = ids; upd(); })));
   out.push(mk(t('vsNever'), PersonPicker((o.never||[]).slice(), ids=>{ o.never = ids; upd(); })));
+  out.push(mk(t('guestsLabel'), GuestPicker((o.guests||[]).slice(), ids=>{ o.guests = ids; upd(); })));
+  out.push(visitRulesBlock(o, upd));
   return out;
+}
+
+function visitRulesBlock(o, upd){
+  const r = o.rules || {gender:'inherit', senior:'inherit'};
+  const save = next=>{ o.rules = cleanVisitRules(next); upd(); };
+  const gMode = r.gender==='none' ? 'none' : (r.gender && typeof r.gender==='object' ? 'custom' : 'inherit');
+  const g = r.gender && typeof r.gender==='object' ? r.gender : {minEach:0, avoidEven:false};
+  const body = el('div', {class:'stack', style:{gap:'10px', paddingTop:'6px'}}, [
+    el('div', {class:'field'}, [el('label', null, t('vrGender')), Seg([{value:'inherit',label:t('vrInherit')},{value:'none',label:t('vrNone')},{value:'custom',label:t('vrCustom')}], gMode, v=>{
+      save({gender:v==='custom' ? {minEach:g.minEach||30, avoidEven:!!g.avoidEven} : v, senior:r.senior});
+    }, {cls:'block'})]),
+    gMode==='custom' ? el('div', {class:'grid-2'}, [
+      el('div', {class:'field'}, [el('label', null, t('vrMinEach')), Stepper(g.minEach||0, v=>save({gender:{minEach:v, avoidEven:!!g.avoidEven}, senior:r.senior}), {min:0, max:50, step:5, sm:true})]),
+      el('div', {class:'field'}, [el('label', null, t('vrAvoidEven')), Switch(!!g.avoidEven, v=>save({gender:{minEach:g.minEach||0, avoidEven:v}, senior:r.senior}))])
+    ]) : null,
+    el('div', {class:'field'}, [el('label', null, t('vrSenior')), Seg([{value:'inherit',label:t('vrInherit')},{value:'on',label:t('vrOn')},{value:'off',label:t('vrOff')}], r.senior||'inherit', v=>save({gender:r.gender||'inherit', senior:v}), {cls:'block'})])
+  ]);
+  return el('details', {class:'vr-block', open:o.rules ? true : null}, [el('summary', null, t('vrBlock')), body]);
+}
+
+function GuestPicker(ids, onChange){
+  const wrap = el('div', {class:'chips'});
+  const paint = ()=>{
+    clear(wrap);
+    for(const id of ids){
+      const g = guestById(id); if(!g) continue;
+      wrap.appendChild(el('span', {class:'chip person-chip'+(g.gender==='f' ? ' g-f' : '')}, [g.name+' '+t('guestMark'), g.pool ? el('span', {class:'muted', style:{fontSize:'11px'}}, poolName(poolById(g.pool))) : null,
+        el('button', {type:'button', class:'x', html:ICON.x, 'aria-label':t('clear'), onclick:()=>{ ids = ids.filter(x=>x!==id); paint(); onChange(ids.slice()); }})]));
+    }
+    const add = el('button', {type:'button', class:'chip', html:ICON.plus+'<span>'+t('guestAdd')+'</span>'});
+    add.addEventListener('click', ()=>{
+      const items = (S().guests||[]).filter(g=>!ids.includes(g.id)).map(g=>({label:g.name, meta:g.pool ? poolName(poolById(g.pool)) : '', onClick:()=>{ ids = ids.concat([g.id]); paint(); onChange(ids.slice()); }}));
+      if(items.length) items.push({sep:true});
+      items.push({label:t('guestNew'), onClick:()=>form()});
+      menu(add, items, {width:260});
+    });
+    wrap.appendChild(add);
+  };
+  const form = ()=>{
+    const name = el('input', {class:'input', placeholder:t('guestName'), maxlength:'80'});
+    const pool = el('select', {class:'input'}, [el('option', {value:''}, t('guestNoPool'))].concat(S().pools.map(pl=>el('option', {value:pl.id}, poolName(pl)))));
+    const gender = el('select', {class:'input'}, [el('option', {value:''}, '—'), el('option', {value:'m'}, t('guestM')), el('option', {value:'f'}, t('guestF'))]);
+    const box = el('div', {class:'stack', style:{gap:'8px', width:'100%', paddingTop:'6px'}}, [
+      el('div', {class:'field'}, [el('label', null, t('guestName')), name]),
+      el('div', {class:'grid-2'}, [el('div', {class:'field'}, [el('label', null, t('guestPool')), pool]), el('div', {class:'field'}, [el('label', null, t('guestGender')), gender])]),
+      el('div', {class:'row', style:{gap:'8px'}}, [
+        el('button', {type:'button', class:'btn sm', onclick:()=>{
+          const nm = name.value.trim(); if(!nm){ name.focus(); return; }
+          const g = {id:uid('g'), name:nm, pool:pool.value||null, gender:gender.value||null, note:''};
+          S().guests = (S().guests||[]).concat([g]);
+          ids = ids.concat([g.id]); commit('settings'); onChange(ids.slice()); paint();
+        }}, t('guestAdd')),
+        el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ box.remove(); }}, t('cancel'))
+      ])
+    ]);
+    wrap.parentNode ? wrap.parentNode.appendChild(box) : wrap.appendChild(box);
+    name.focus();
+  };
+  paint();
+  return wrap;
 }
 
 function OptDate(value, onChange, emptyLabel){

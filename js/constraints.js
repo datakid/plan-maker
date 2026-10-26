@@ -2,7 +2,7 @@ const CLS = {HARD:'hard', SOFT:'soft', EXC:'exception'};
 const HISTORY_LOOKBACK = 30;
 
 const KEY_RULE = {
-  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit', dVisitPerson:'struct.fixedVisit',
+  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dGuestDup:'struct.onePlace', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit', dVisitPerson:'struct.fixedVisit',
   dOutOfPlan:'struct.calendar', dNotWorkday:'struct.calendar', dActivityRest:'vol.activity', dWeekday:'fac.weekdays', dDayOnly:'day.only', dActivityCycleSoft:'vol.activity',
   dGender:'gender.rule', dSenior:'senior', dSeniorNone:'senior', dPair:'pair', dLate:'goal.cover', dUnavailable:'p.avail', dFixedOff:'p.avail', dPatternDay:'p.rest', dBlocked:'p.blocked', dFixedBlocked:'p.blocked', dRepeatBlock:'rotate',
   dDayDup:'struct.onePlace', dFacDup:'struct.facilityOnce', dCapDay:'struct.perDay', dCapDayCfg:'day.cap', dCapWeek:'vol.week', dSpacing:'vol.gap', dActivityRest2:'vol.activity', dActivityRun:'vol.activity',
@@ -585,8 +585,14 @@ function validatePlan(plan, opts){
   const poolIds = new Set(set.pools.map(pl=>pl.id));
   const cap = (fixedFlag)=>fixedFlag ? CLS.EXC : CLS.HARD;
 
+  const guestSeen = new Map();
   for(const x of vis){
     const {v, f, ord} = x;
+    if(f) for(const gid of (v.guests||[])){
+      const gk = gid+'|'+v.date;
+      if(guestSeen.has(gk) && guestSeen.get(gk)!==v.id){ const gg = guestById(gid); add({src:'visit', cls:CLS.HARD, group:'cDup', key:'dGuestDup', visits:[v.id, guestSeen.get(gk)], dates:[v.date], facilities:[f.id], args:[gg ? gg.name : '?', f.name, v.date]}); }
+      else guestSeen.set(gk, v.id);
+    }
     if(!f){ add({src:'visit', cls:CLS.HARD, group:'cTeam', key:'dMissingFacility', visits:[v.id], dates:[v.date]}); continue; }
     const fixed = !!v.fixed;
     const team = v.team && typeof v.team==='object' ? v.team : {};
@@ -646,13 +652,14 @@ function validatePlan(plan, opts){
 
     const ids = x.ids;
     const g = teamGender(ids);
-    const rule = genderRuleFor(f, x.kind), n = sum(Object.values(need));
-    if(rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n)) add({src:'visit', cls:CLS.SOFT, ref:rule.id, group:'cGender', key:'dGender', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, g.m, g.f]});
+    const rule = genderRuleFor(f, x.kind, v.rules), n = sum(Object.values(need));
+    if(rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n)) add({src:'visit', cls:CLS.SOFT, ref:rule.id==='visit' ? (v.overrideId || v.special || v.id) : rule.id, group:'cGender', key:'dGender', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, g.m, g.f]});
     const sen = set.seniority;
-    if(sen.on && (f.importance||0) >= sen.threshold && ids.length){
-      const qualified = id=>{ const p = personById(id); return p && skillOf(p, x.kind, f.category) >= (f.importance||0); };
+    const seniorLvl = seniorLevelFor(f, v.rules, false);
+    if(seniorLvl!=null && ids.length){
+      const qualified = id=>{ const p = personById(id); return p && skillOf(p, x.kind, f.category) >= seniorLvl; };
       if(!ids.some(qualified)){
-        const attainable = activePeople().some(p=>skillOf(p, x.kind, f.category) >= (f.importance||0) && personAvailable(p, ord) && !(p.blocked||[]).includes(f.id));
+        const attainable = activePeople().some(p=>skillOf(p, x.kind, f.category) >= seniorLvl && personAvailable(p, ord) && !(p.blocked||[]).includes(f.id));
         if(lvMust('senior')){
           const exempt = locked.length>0 && fixed;
           add({src:'visit', cls:(attainable && !exempt) ? CLS.HARD : CLS.EXC, group:'cSenior', key:attainable ? 'dSenior' : 'dSeniorNone', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date]});
@@ -804,4 +811,72 @@ function validatePlan(plan, opts){
   out.valid = out.hard===0;
   out.vis = vis;
   return out;
+}
+
+
+function buildModel(plan){
+  const st = makeState(clonePlan(plan));
+  const val = st.eval;
+  const round = x=>Math.round(x*1000)/1000;
+  const byRule = new Map();
+  const slot = id=>{
+    if(!byRule.has(id)){
+      const spec = ruleSpec(id), lv = spec ? lvOf(id) : null;
+      byRule.set(id, {id, level:lv ? lv.level : null, w:lv ? lv.w : null, hardUnits:0, softUnits:0, hard:0, soft:0, exceptions:0});
+    }
+    return byRule.get(id);
+  };
+  for(const spec of RULES) slot(spec.id);
+  for(const v of val.violations){
+    const e = slot(v.rule || KEY_RULE[v.key] || v.group || v.key);
+    if(v.cls===CLS.HARD){ e.hardUnits += v.units; e.hard += v.weight*v.units; }
+    else if(v.cls===CLS.SOFT){ e.softUnits += v.units; e.soft += v.weight*v.units; }
+    else e.exceptions++;
+  }
+  const all = [...byRule.values()].map(e=>Object.assign(e, {hardUnits:round(e.hardUnits), softUnits:round(e.softUnits), hard:round(e.hard), soft:round(e.soft)}));
+  const order = key=>(a, b)=>b[key]-a[key] || (a.id<b.id ? -1 : 1);
+  const hardTerms = all.filter(e=>e.level==='must' || e.hardUnits>0).sort(order('hard'));
+  const softTerms = all.filter(e=>e.level==='prefer' || e.softUnits>0).sort(order('soft'));
+  const wDue = lvOf('due.priority').w;
+  let dueSum = 0;
+  for(const x of plan.visits) dueSum += st.due.get(x.facilityId)||0;
+  const V = S().volume;
+  return {
+    version:1,
+    objective:'minimize H*hardScore + softScore',
+    H:1e6,
+    hardScore:st.hard, softScore:st.soft,
+    softBeforeReward:round(val.softScore),
+    hardTerms, softTerms,
+    dueReward:{w:wDue, dueSum:round(dueSum), value:st.reward},
+    structural:STRUCTURAL_RULES.map(r=>r.id),
+    facts:{mode:V.mode, dayMode:V.dayMode, perDay:V.perDay, perWeek:V.perWeek, minPerDay:V.minPerDay, useAllDays:V.useAllDays, exactMode:V.exactMode,
+      visits:plan.visits.length, fixedVisits:plan.visits.filter(v=>v.fixed).length, specialVisits:plan.visits.filter(v=>v.special).length, targets:plan.targets||null},
+    exceptions:val.exceptions,
+    generated:plan.gen && plan.gen.search ? plan.gen.search.score || null : null
+  };
+}
+
+function modelText(m){
+  const name = id=>typeof whyRuleName==='function' ? whyRuleName(id) : id;
+  const lvTag = e=>'['+(e.level==='must' ? 'Must' : (e.level==='prefer' ? 'Prefer' : '-'))+' *'+(e.w==null ? '-' : e.w)+']';
+  const pad = (s, n)=>String(s).length>=n ? String(s) : String(s)+' '.repeat(n-String(s).length);
+  const row = (e, units, val)=>'  '+pad(e.id, 16)+pad(lvTag(e), 14)+pad('units='+units, 14)+pad('= '+val, 12)+name(e.id);
+  const out = [];
+  out.push('minimize  H * hardScore + softScore        (H = 1e6, lexicographic)');
+  out.push('');
+  out.push('hardScore = sum over Must terms of  w * units  =  '+m.hardScore);
+  for(const e of m.hardTerms) out.push(row(e, e.hardUnits, e.hard));
+  out.push('');
+  out.push('softScore = sum over Prefer terms of  w * units  -  w_due * sum(dueReward)  =  '+m.softScore);
+  for(const e of m.softTerms) out.push(row(e, e.softUnits, e.soft));
+  out.push('  '+pad('due.priority', 16)+pad('[Prefer *'+m.dueReward.w+']', 14)+pad('reward='+m.dueReward.dueSum, 14)+pad('= -'+m.dueReward.value, 12));
+  out.push('  (sum of Prefer terms before the reward = '+m.softBeforeReward+')');
+  out.push('');
+  out.push('subject to (structural, always enforced):');
+  out.push('  '+m.structural.map(id=>name(id)).join(' | '));
+  const f = m.facts;
+  out.push('  mode='+f.mode+'  perDay '+(f.dayMode==='exactly' ? '=' : '<=')+' '+f.perDay+(f.perWeek!=null ? '  perWeek <= '+f.perWeek : '')+(f.minPerDay ? '  minPerDay >= '+f.minPerDay : '')+'  useAllDays='+f.useAllDays);
+  out.push('  visits='+f.visits+'  fixed='+f.fixedVisits+'  special='+f.specialVisits+'  exceptions='+m.exceptions);
+  return out.join('\n');
 }

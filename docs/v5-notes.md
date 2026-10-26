@@ -1,0 +1,82 @@
+# v5 notes
+
+## Source
+- Repo: https://github.com/datakid/plan-maker
+- main SHA at import: 797ae2d7e60910c46bef5690ec5f06d9c078ea64 (APP_VERSION 4.1.1, RULES_REV 8)
+- Work branch: v5/solver-core
+
+## Baseline (headless Chromium via playwright, served over http, 1280 px)
+- test.html: RESULT pass=293 fail=0
+- ship-test.html: RESULT pass=38 fail=0
+
+## Fixtures
+- _ref/export_a.json and _ref/export_b.json were not present in the repo or in the upload, so fixture-based regression tests could not be written.
+
+## Progress
+- P1.1 done: Stepper option `base`, per-pool Default button and Custom chip in visitSpecFields. test.html 296/0.
+- P1.2 done: findDuplicateRequests(win) in goals.js. test.html 298/0. The tests use synthetic data shaped like the fixture duplicates (two overrides on one facility and day, an override plus a special). They were written in the same step as the function, not run red first.
+
+- Version bumped to 4.1.2 in js/store.js, sw.js, index.html (33 ?v= refs) because shipped assets changed. The final 5.0.0 bump belongs to Phase 5.
+- After Phase 1: test.html pass=298 fail=0, ship-test.html pass=38 fail=0, scripts/ci-run.js app e2e OK (CSP, worker, fonts, offline, cache list).
+- Seat row checked at 390 px in AR/EN x light/dark: no horizontal scroll, chip and Default button render.
+
+## Phase 2
+- P2.1 done: js/requests.js (compileRequests, makeRequest, requestCopies, resolveRequestSeats) loaded before planner.js; registered in index.html, test/ship/bench/people html pages, sw.js precache and worker importScripts. fixedVisitsFor and specialRequests are adapters over it. generatePlan places fixed and special requests in one loop through the single canPlace and the single seat ledger; the old fixed loop and specials loop are gone. A fixed request that canPlace rejects is still placed (the user fixed it) and counted in layout.fixedForced. Requests skip the seniority check in canPlace, as before. Seats for requests are resolved once at compile time; ordinary units still use seatsForF in canPlace (same function, same result). visitSeatNeed on plan visits is unchanged because the validator reads it.
+- P2.1 acceptance: for seeds 1 to 3 on seed-data week, month and quarter, and on a month with duplicate fixed visits plus two specials, the visits and teams were identical to main at 797ae2d (9 of 9) at that commit.
+- P2.2 done with a deviation: flow placements that pass canPlace are kept, only the rest are re-queued, layout.rolledBackUnits is a count and the old boolean is gone. Pure partial acceptance regressed A1 (hard spacing gap-3) and L8 (backup week) because the greedy completion could not repair the leftovers in budget. generatePlan therefore re-runs once in the old all-or-nothing mode when the partial run is not valid and keeps the better score, recorded as layout.retriedAllOrNothing ('kept' or 'discarded'). The reviewer should decide whether to keep this wrapper.
+- P2.3 done: N5insert, N5remove (only when volume.dayMode==='upTo', a setting that arrives with P3.1, so inactive today) and N5swapInsert (remove plus insert of the same kind, always allowed). Moves go through deltaMove and are checked with App.debugIndex in the test. The moves take the tail 4% of the move draw, which changes the random sequence: per seed, soft scores on the 9 seeded runs are mixed (month 96.2/97.2/102.5 to 101.2/96.2/97.2, quarter 143.2/136.8/135.7 to 134.7/138.2/136.0), 0 hard in all.
+- P2.4 partly done: stop rule is hard==0 and no improvement for max(400, 30 x visits) iterations; it never stops on that rule while hard>0. Restarts already existed in lnsPlan (3 runs with seed + r x 0x9E3779B1) and are unchanged. continueSearch (generatePlan with continueFrom) continues from the plan with seed derived from the previous seed and a round counter, deterministic; the Keep searching button shows in #gen-truncated only when hard>0, the plan is not stale and not approved. Polish iterations are capped at capBase/4 (80, 300, 1000), not the plan's wider budget, because the default 3000/8000/15000 budget broke T8: week 517 ms, month 2020 ms, quarter 7015 ms. With the cap: week 313 ms, month 579 ms, quarter 2211 ms, all valid, with lower soft scores than main on month (90.7 vs 92.8) and quarter (130.7 vs 133.2).
+- Not done in P2.4: the lower bound (search.lowerBound stays null) and the Summary gap line.
+- Version bumped to 4.1.3 (store.js, sw.js, index.html).
+
+## Phase 3
+- P3.1 done except two items. Model in store.js: volume.dayMode ('upTo' default), volume.useAllDays ('off'|'prefer'|'must', migrated from requireEveryEligibleDay: true to must, false to off; the old boolean stays as a mirror so older code paths keep working), volume.exactMode ('exactly' default so existing exact plans behave as before; 'upTo' makes the exact basic/contracted counts a maximum), volume.total {mode, n}.
+- One mechanism each: 'exactly' feeds `dayRuleOf` a Must `day.min` equal to perDay (no second mechanism); useAllDays maps to the existing `vol.everyDay` level inside `lvOf`, and the Rules tab level chip writes back to useAllDays; exact 'upTo' is a flag on `plan.targets` read by the existing `dExactOff` rule in score.js; `lnsCountFree()` is true only for exact + upTo, which is the only case where N5insert and N5remove run.
+- UI: Visits popover shows Seg [Up to | Exactly] for the per-day mode, the per-day Stepper, then Seg [Off | Try | Must] for Use all days; the exact-count mode has its own Seg inside the Exact branch; the tile line reads 'Up to 2/day · 5 days'; the Rules tab has the same rows from the same model. Checked at 390 px in AR/EN, light and dark: no horizontal scroll.
+- Defaults keep today's behaviour: up to + off + exactly gives the same plans as before. Default-budget timings after P3.1: week 281 ms, month 504 ms, quarter 1896 ms.
+- Not done in P3.1: a UI control for volume.total (the model and the fill-mode count in volumePreview read it, nothing edits it yet), and the infeasibility pre-check was not changed because no check in solver.js treats extra capacity as infeasible today; the only every-day check (xEveryDayVolume) still applies when Use all days is Try or Must.
+- Version bumped to 4.1.4.
+
+- P3.2 done. Seats: precedence is request, facility, location (new `location.seats`, edited from a Seats button on each location row), pool by category, pool default; implemented in `seatsForF` and `plannedSeats` only. Guests: `settings.guests`, added from a GuestPicker inside the shared `visitSpecFields`, so both fixed and special visit sheets get it. A guest is stored on the visit as `guests:[id]`, never in `team`, so fairness, quotas, rotation, history and the People table cannot see it. A guest with a pool takes one of that pool's seats (`visitSeatNeed` and the compiled request seats subtract it); a guest without a pool is extra. One place per day is a hard rule `dGuestDup` (rule id struct.onePlace). Guests are marked (guest)/(ضيف) in the plan list and the team export column. Not done for guests: the matrix, print and other views do not list them; guests are not counted in the gender-rule math; unused guests stay in settings.guests.
+- P3.2 per-visit rules: `rules:{gender:'inherit'|'none'|{minEach,avoidEven}, senior:'inherit'|'on'|'off'}` on fixed visits and specials, edited in a collapsible 'Rules for this visit' block. They flow request.rules to plan visit.rules and are read through `genderRuleFor(f, kind, vr)` and `seniorLevelFor(f, vr, mustOnly)` by assignTeam, visitFlags, the solver and validatePlan, with the same rule ids; a custom gender rule is reported with ref set to the visit's source id. Senior 'on' requires a qualified person at max(importance, threshold) even when the global threshold would not.
+- Bug found by the tests: the final plan-visit builder in planner.js copied a fixed list of fields and dropped the new ones; fixed, and any future per-visit field must be added there too.
+- Special-rule note (see above) still applies: person-versus-place bans stay in hardOk.
+- Version 4.1.5. After P3.2: test.html 314/0, ship 38/0, CI OK; timings week 196 ms, month 553 ms, quarter 1929 ms. Sheet with rules block and guest form checked at 390 px in AR/EN light/dark.
+
+- P3.3 done. `settings.duplicates` ('ask' default, 'merge', 'keep', 'reject') is a Seg in the Rules tab. `compileRequests` now = `compileRequestsRaw` plus the policy: requests of the same facility with overlapping windows are grouped (`duplicateGroupsOf`), and each group is merged, rejected or left alone before the planner sees it, so the planner, the adapters, the Summary and the validator all see the same set. `dupChoice` ('merge' | 'keep') is stored on the fixed visit or special the user answered for and beats the setting, so the same group is not asked twice. Merge: people, guests, only/never are united, seats take the larger value per pool, the window is the intersection (or the base window if empty), the level is the stricter, copies is the larger, the base is the fixed visit if there is one; the merged visit records the merged ids in `why.merged` / `why.goals`, and the validator already counts specials by facility, window and people so a merged visit satisfies both. Reject: the fixed visit wins over a special, otherwise the earlier one in the list wins ('newer' means later in the list because requests carry no timestamp). Summary diags: dDupMerged and dDupRejected (info), dDupAsk (warn, shown in ask mode while a group is unanswered; ask keeps both visits exactly as before).
+- Prompt: after an edit in ask mode, `offerDuplicateChoice()` (called from goalsChanged and the goals manager) shows one toast with Merge and Keep both for each new group; `toast` now accepts a list of actions. Checked at 390 px in AR/EN light/dark: toast inside the viewport, no horizontal scroll.
+- findDuplicateRequests (P1.2, reads stored data) and duplicateGroupsOf (compiled requests) are two grouping implementations with the same overlap rule; a reviewer may prefer to make the first call the second.
+- Timing note: default-budget soft scores on the seed month and quarter vary with machine load (90.7 and 130.7 on one run, 95.7 and 135.7 on another run of the same code), because the search before the polish stage is clock-limited; with explicit iteration caps (the cmp runs) results are deterministic. Hard violations stayed 0 in all runs.
+- Version 4.1.6. After P3.3: test.html 319/0, ship 38/0, CI OK, week 237 ms, month 527 ms, quarter 2043 ms.
+
+## Phase 4
+- P4.1 done: `explainSeats(plan, win)` in solver.js always runs (the old gate that skipped the pool-seats check when any facility or category had its own seats is gone, because it reads `visitSeatNeed` per visit). It returns per day and pool: need, available, who is out and why (off, rest cycle, at their limit, held by a fixed visit), whether it is proven (fixed visits alone need more seats than are free) and, when a fixed visit or special can lower its seats, a `seatDown` fix. Window-level lines keep the old pre-check behaviour (proven in exact mode or when the pool has no capacity, otherwise a warning); day-level lines are not added to the pre-check, so generation is never blocked by them. The Summary shows them under a Seats heading, proven ones as .check.bad and the rest as .check.soft, with a one-click button. `analyzePlan` computes them (about 1 to 2 ms).
+- P4.2 done: `buildModel(plan)` and `modelText(model)` in constraints.js; every Must and Prefer term from the registry is listed with level, weight, units and contribution, including zero-unit terms; the due reward is its own term; the structural rules and the volume facts follow. Hard and soft totals come from the same `makeState` as the search, and a test checks they equal `plan.gen.search.score` and that the terms add up. The Summary has The equation card (monospace, LTR, scrolls inside its own box via `contain: inline-size`; before that fix it widened the page to 794 px at 390 px) with Copy, Export .txt and Export .json.
+- Version 4.1.7 for P4.1 and 4.1.8 for P4.2.
+
+## Phase 5
+- RULES_REV 8 to 9. A rev 8 save loads with the v5 defaults and unchanged behaviour (test added); a stored unapproved plan older than rev 9 loads as stale.
+- README: structure (requests.js, phase10, docs), solver, budgets, migration, known limitations, What changed in 5.0.
+- Version 5.0.0 in store.js, sw.js and the 33 ?v= references in index.html.
+- Final numbers: test.html pass=327 fail=0 (baseline 293), ship-test.html 38/0, people matrix 32/0, full scripts/ci-run.js OK. Default-budget timings on seed data: week 314 ms, month 569 ms, quarter 2275 ms (limits 400, 1500 and 5000 ms), all valid.
+- Layout sweep: an automated overflow check at 1440, 1280, 1100 and 390 px, Arabic and English, light and dark, on Summary, List, Calendar, Matrix and the Visits popover: 80 checks, no horizontal overflow and no page errors. Only two screenshots were looked at by eye (390 px English light, 1280 px Arabic dark Summary); the other combinations were measured, not viewed.
+- Not run: the acceptance checks that need export_a.json and export_b.json (valid generation on both, 6 January 2027 behaviour), and any run on a real device or a real browser other than headless Chromium.
+
+## Changed tests
+- none so far
+
+## Not done
+- All phases were worked in order without the per-phase Opus review the plan asks for; each phase was committed separately (git log shows P0 to P4.2) so a reviewer can go phase by phase. Earlier note: the work order says Opus reviews each phase before the next starts.
+- Nothing from the plan is unstarted. Open items are listed below.
+- Phase 2 gap: lower bound and gap line (see Phase 2).
+- Phase 3 gaps: no control for volume.total; guests absent from matrix and print.
+- Fixtures: export_a.json and export_b.json never arrived, so fixtures-v5.js does not exist.
+- js/tests/fixtures-v5.js not created: export_a.json and export_b.json were not available. Every phase must add assertions against them once they are supplied; P1.2 should be re-checked against them.
+- The visual manual sweep at 1440/1280/1100 widths was not done (only 390 px for the seat row).
+
+## Extension note: special rules such as "this person never goes to that place"
+Requested by the user during the build, to be added without changing the pipeline.
+- Where it already lives: person-versus-place bans are person rules (js/people-rules.js, `ctx.rules.denied(person, facility)`), enforced in `hardOk` in engine.js. `hardOk` is called by the single `canPlace` in planner.js and by `validatePlan`, so a ban holds in the greedy layout, the flow stage, the LNS moves and the validator alike. A Must ban is hard, a softer level is scored.
+- Per visit: `request.only` / `request.never` already hold per-visit person lists, and P3.2 adds `request.rules` (gender and senior overrides) on the same request object.
+- Rule for any new restriction: add it as a rule in rules-model.js (`defRule`) with an id and an i18n entry, enforce it only inside `hardOk` or the request compile step in requests.js (never in a new loop), and make `validatePlan` report it with the same rule id. A restriction that is only checked inside one stage is the bug class this refactor removed.
+- Candidates the user named so far: person X must not visit facility Y (exists as a person rule), person X must not be paired with person Y (exists as pairs). Anything else gets added through the steps above.

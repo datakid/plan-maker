@@ -1,4 +1,4 @@
-importScripts('core.js', 'seed.js', 'store.js', 'i18n.js', 'rules-model.js', 'people-rules.js', 'engine.js', 'goals.js', 'constraints.js', 'score.js', 'flow.js', 'assign.js', 'layout.js', 'solver.js', 'lns.js', 'explain.js', 'planner.js');
+importScripts('core.js', 'seed.js', 'store.js', 'i18n.js', 'rules-model.js', 'people-rules.js', 'engine.js', 'goals.js', 'requests.js', 'constraints.js', 'score.js', 'flow.js', 'assign.js', 'layout.js', 'solver.js', 'lns.js', 'explain.js', 'planner.js');
 
 let lastPost = 0;
 self.onmessage = e=>{

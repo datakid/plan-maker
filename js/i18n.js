@@ -45,6 +45,7 @@ defs({
   snapR_approve:['قبل الاعتماد','Before approve'], snapR_import:['قبل الاستيراد','Before import'], snapR_restore:['قبل الاستعادة','Before restore'],
   genStageSelect:['اختيار الجهات','Selecting facilities'], genStageLayout:['توزيع الأيام','Laying out days'], genStageTeams:['تكوين الفرق','Building teams'], genStageSearch:['البحث عن حل','Searching'], genStagePolish:['تحسين الخطة','Polishing'], genStageExplain:['تجهيز الشرح','Preparing explanations'],
   genCancelled:['أُلغي التوليد','Generation cancelled'],
+  genKeep:['واصل البحث','Keep searching'],
   genTruncated:['توقّف البحث مبكرًا على هذا الجهاز، وقد تختلف النتيجة على جهاز أسرع','Search stopped early on this device; a faster device may give a different result'],
   undone:['تم التراجع','Undone'], redone:['تمت الإعادة','Redone'], redo:['إعادة','Redo'],
   edited:['تم تعديل الخطة','Plan edited'],
@@ -79,6 +80,9 @@ defs({
   vFill:['ملء الأيام','Fill days'], vExact:['عدد محدد','Exact'], vQuota:['حسب التصنيف','By category'],
   vShare:['نسبة الأساسية','Basic share'], vPerDay:['جهات في اليوم','Per day'], vPerWeek:['حد أسبوعي','Weekly cap'], noLimit:['بلا حد','No limit'],
   vSummary:(b,c)=>`${b} أساسية · ${c} متعاقدة`,
+  vDayUpTo:(n,d)=>`حتى ${n} يوميًا · ${d} أيام`, vDayExactly:(n,d)=>`${n} يوميًا بالضبط · ${d} أيام`,
+  vUpTo:['حتى','Up to'], vExactlyOpt:['بالضبط','Exactly'], vUseAll:['استخدام كل الأيام','Use all days'], vUseOff:['لا','Off'], vUseTry:['محاولة','Try'], vUseMust:['إلزامي','Must'],
+  vUseAllHint:['«محاولة» تفضّل زيارة في كل يوم مؤهل، و«إلزامي» تفرضها.','Try prefers a visit on every eligible day; Must requires one.'], vPerDayMode:['عدد الزيارات في اليوم','Visits per day'], vCountMode:['العدد الإجمالي','Total count'],
   vOver:(n,c)=>`المطلوب ${n} يتجاوز السعة ${c}`,
   capLine:c=>`السعة ${c}`,
   teamActive:n=>`${n} نشط`,
@@ -288,6 +292,12 @@ defs2({
   ovPeopleN:[n=>`${n} أشخاص`, n=>`${n} people`],
   ovUsualTeam:[s=>`الفريق المعتاد: ${s}`, s=>`Usual team: ${s}`],
   vsSeatsOf:[p=>`مقاعد ${p} في هذه الزيارة`, p=>`${p} seats on this visit`], vsSeatsHint:['اتركه فارغًا للعدد المعتاد. الأرقام هنا تخص هذه الزيارة فقط.','Leave blank for the usual number. These numbers apply to this visit only.'], vsLock:['اجعل المقاعد = الأشخاص المسمّين','Seats = named people'], vsAuto:['إرجاع المقاعد للمعتاد','Back to usual seats'],
+  vrBlock:['قواعد هذه الزيارة','Rules for this visit'], vrGender:['قاعدة الجنس','Gender rule'], vrInherit:['الافتراضي','Inherit'], vrNone:['بلا','None'], vrCustom:['مخصّصة','Custom'], vrMinEach:['أدنى نسبة لكل جنس %','Min % of each gender'], vrAvoidEven:['تجنّب التساوي','Avoid an even split'], vrSenior:['مشرف أقدم','Senior required'], vrOn:['مطلوب','On'], vrOff:['غير مطلوب','Off'],
+  dupPolicy:['الطلبات المكررة لنفس الجهة','Duplicate requests for one place'], dupAsk:['اسأل','Ask'], dupMerge:['ادمج','Merge'], dupKeep:['أبقِ الاثنين','Keep both'], dupReject:['تجاهل الأحدث','Reject newer'], dupHint:['عند تداخل طلبين لنفس الجهة: «اسأل» ينبّهك ويُبقي الاثنين، «ادمج» يجمعهما في زيارة واحدة، «تجاهل الأحدث» يلغي الأحدث.','When two requests for one place overlap: Ask warns and keeps both, Merge joins them into one visit, Reject newer drops the newer one.'], dupToast:['طلبان متداخلان لنفس الجهة','Two overlapping requests for the same place'],
+  rsOff:['غائب أو في إجازة','is off'], rsQuota:['وصل إلى حدّه','is at their limit'], rsCycle:['في فترة راحة دورته','is in a rest cycle'], rsHeld:['محجوز بزيارة ثابتة','is held by a fixed visit'], fixSeatDown:[n=>`خفّض المقاعد إلى ${n}`, n=>`Lower seats to ${n}`], seatsTitle:['المقاعد حسب الفريق','Seats by team'],
+  modelTitle:['المعادلة','The equation'], modelCopy:['نسخ','Copy'], modelTxt:['تصدير txt','Export .txt'], modelJson:['تصدير json','Export .json'],
+  guestsLabel:['ضيوف من خارج الفريق','Guests (outside people)'], guestAdd:['إضافة ضيف','Add guest'], guestNew:['ضيف جديد…','New guest…'], guestName:['الاسم','Name'], guestPool:['الفريق (اختياري)','Pool (optional)'], guestNoPool:['بلا مقعد (إضافي)','No seat (extra)'], guestGender:['الجنس (اختياري)','Gender (optional)'], guestM:['ذكر','Male'], guestF:['أنثى','Female'], guestMark:['(ضيف)','(guest)'],
+  locSeats:['المقاعد','Seats'], locSeatsHint:['مقاعد كل فريق لجهات هذا الموقع، وتُستخدم ما لم تحدد الجهة مقاعدها.','Seats per pool for the facilities in this location, used unless a facility sets its own.'], vsDefault:['الافتراضي','Default'], vsCustom:['معدّل','Custom'],
   vsOnly:['التكملة من هؤلاء فقط','Fill only from these people'], vsNever:['لا يشارك في هذه الزيارة','Not on this visit'],
   vFixed:['المثبّتة فقط','Fixed only'], vFixedHint:['لا تضيف الخطة أي جهة عشوائية: فقط الزيارات المثبّتة والمستهدفات الخاصة.','The plan adds no random places: only fixed visits and special goals.'],
   vMinPerDay:['حد أدنى في اليوم','Minimum per day'], vMinPerDayHint:['لجعل عدد الزيارات في اليوم ثابتًا اجعل الحد الأدنى مساويًا للحد الأقصى.','For a fixed number of visits per day, set the minimum equal to the per-day maximum.'],
@@ -310,6 +320,8 @@ defs2({
 I18N.en.workdaysN = n=>`${n} workdays`;
 I18N.en.covUntil = (d,n)=>`Until ${d} · ${n} workdays`;
 I18N.en.vSummary = (b,c)=>`${b} basic · ${c} contracted`;
+I18N.en.vDayUpTo = (n,d)=>`Up to ${n}/day · ${d} days`;
+I18N.en.vDayExactly = (n,d)=>`Exactly ${n}/day · ${d} days`;
 I18N.en.vOver = (n,c)=>`${n} requested exceeds capacity ${c}`;
 I18N.en.capLine = c=>`Capacity ${c}`;
 I18N.en.teamActive = n=>`${n} active`;
@@ -352,6 +364,10 @@ I18N.en.impMissingCols = c=>`Missing columns: ${c}`;
 I18N.ar.workdaysN = n=>`${n} يوم عمل`;
 
 const D = d=>fmtDate(d, 'short');
+function seatWho(who){
+  const phrase = r=>t(r==='off' ? 'rsOff' : (r==='quota' ? 'rsQuota' : (r==='cycle' ? 'rsCycle' : 'rsHeld')));
+  return who.map(w=>{ const p = personById(w.id); return (p ? p.name : '?')+' '+phrase(w.reason); }).join(App.ui.lang==='ar' ? '، ' : ', ');
+}
 defs({
   dRun:[(p,a,b)=>`${p}: تجاوز حد الأيام المتتالية (${D(a)} → ${D(b)})`, (p,a,b)=>`${p}: too many consecutive days (${D(a)} → ${D(b)})`],
   dRest:[(p,a,b)=>`${p}: راحة غير كافية بين ${D(a)} و${D(b)}`, (p,a,b)=>`${p}: not enough rest between ${D(a)} and ${D(b)}`],
@@ -363,6 +379,10 @@ defs({
   dTeamUnknown:[(id,f,d)=>`${f} · ${D(d)}: عضو غير معروف (${id})`, (id,f,d)=>`${f} · ${D(d)}: unknown team member (${id})`],
   dTeamPoolUnknown:[(f,d)=>`${f} · ${D(d)}: فريق من مجموعة غير معرّفة`, (f,d)=>`${f} · ${D(d)}: team uses an unknown pool`],
   dTeamDup:[(p,f,d)=>`${f} · ${D(d)}: ${p} مكرر في الفريق`, (p,f,d)=>`${f} · ${D(d)}: ${p} listed twice in the team`],
+  dDupMerged:[(f,n)=>`${f}: تم دمج ${n} طلبات زيارة في زيارة واحدة`, (f,n)=>`${f}: ${n} visit requests merged into one visit`],
+  dDupRejected:[(g,f)=>`${f}: تم تجاهل الطلب الأحدث «${g}» لأنه مكرر`, (g,f)=>`${f}: the newer request "${g}" was ignored as a duplicate`],
+  dDupAsk:[(f,n)=>`${f}: ${n} طلبات زيارة متداخلة — ادمجها أو أبقِها من إعدادات التكرار`, (f,n)=>`${f}: ${n} overlapping visit requests — merge or keep them in the duplicate setting`],
+  dGuestDup:[(g,f,d)=>`${f} · ${D(d)}: الضيف ${g} موجود في أكثر من زيارة في اليوم نفسه`, (g,f,d)=>`${f} · ${D(d)}: guest ${g} is on more than one visit the same day`],
   dTeamInactive:[(p,f,d)=>`${f} · ${D(d)}: ${p} غير نشط`, (p,f,d)=>`${f} · ${D(d)}: ${p} is inactive`],
   dTeamPool:[(p,f,d)=>`${f} · ${D(d)}: ${p} في مقعد مجموعة أخرى`, (p,f,d)=>`${f} · ${D(d)}: ${p} sits in another pool's seat`],
   dTeamOversize:[(f,d,n)=>`${f} · ${D(d)}: ${n} زيادة عن المقاعد`, (f,d,n)=>`${f} · ${D(d)}: ${n} more than the seats`],
@@ -400,6 +420,7 @@ defs({
   xBoundsEmpty:[(p,lo,hi)=>`${p}: حدّ أدنى ${lo} أعلى من الأقصى ${hi}`, (p,lo,hi)=>`${p}: minimum ${lo} is above maximum ${hi}`],
   xQuotaDays:[(p,lo,can)=>`${p}: يلزم ${lo} زيارة لكن أقصى ما تسمح به أيام العمل والقواعد ${can}`, (p,lo,can)=>`${p}: needs ${lo} visits but days and rules allow at most ${can}`],
   xHardOverVolume:[(n,m)=>`الالتزامات الإلزامية ${n} أكثر من الحجم المحدد ${m}`, (n,m)=>`${n} mandatory visits exceed the set volume of ${m}`],
+  xPoolDayShort:[(p,n,d,nd,av,who)=>`${p}: ${n===1 ? 'ينقص مقعد' : (n===2 ? 'ينقص مقعدان' : 'ينقص '+n+' مقاعد')} يوم ${D(d)} (مطلوب ${nd}، متاح ${av}${who.length ? '؛ '+seatWho(who) : ''})`, (p,n,d,nd,av,who)=>`${p}: short ${n} seat${n===1?'':'s'} on ${D(d)} (need ${nd}, available ${av}${who.length ? '; '+seatWho(who) : ''})`],
   xPoolSeatsHigh:[(p,s,c)=>`«${p}»: المقاعد ${s} أكثر مما يستطيع الفريق تغطيته (${c})`, (p,s,c)=>`"${p}": ${s} seats exceed what the team can cover (${c})`],
   xPoolSeatsLow:[(p,s,c)=>`«${p}»: المقاعد ${s} أقل من مجموع الحدود الدنيا (${c})`, (p,s,c)=>`"${p}": ${s} seats are below the sum of minimums (${c})`],
   xAtLeastPool:[(g,n,m)=>`${g}: يلزم ${n} لكن النطاق يحوي ${m} جهة فقط`, (g,n,m)=>`${g}: needs ${n} but the scope has only ${m} facilities`],

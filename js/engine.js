@@ -22,6 +22,7 @@ function isWorkday(ord){ return normalWorkday(ord) || isOverrideDate(isoOf(ord))
 function dayRuleOf(ord){
   const d = normalizeDay(S().days[wdOf(ord)]), V = S().volume;
   if(!d.min && V.minPerDay) d.min = {n:V.minPerDay, lv:V.minPerDayLv || mkLv('must', 5)};
+  if(!d.min && V.dayMode==='exactly' && V.perDay>=1) d.min = {n:V.perDay, lv:mkLv('must', 5)};
   return d;
 }
 function dayCfg(ord){ return dayView(dayRuleOf(ord)); }
@@ -191,6 +192,7 @@ function volumePreview(){
   } else {
     cap = capacityOver(days, V.share);
     let total = Math.min(cap, basicAll.length + conAll.length);
+    if(V.total && V.total.n!=null) total = V.total.mode==='exactly' ? Math.min(V.total.n, basicAll.length + conAll.length) : Math.min(total, V.total.n);
     B = Math.min(Math.round(total*V.share), basicAll.length);
     C = Math.min(total - B, conAll.length);
     if(B + C < total) B = Math.min(basicAll.length, total - C);
@@ -199,7 +201,11 @@ function volumePreview(){
   return {goal:'range', start:w.start, end:w.end, workdays:days.length, basic:B, contracted:C, total:B+C, capacity:cap, overCapacity: B+C>cap, fixed};
 }
 
-function genderRuleFor(f, kind){
+function genderRuleFor(f, kind, vr){
+  if(vr && vr.gender){
+    if(vr.gender==='none') return null;
+    if(typeof vr.gender==='object') return {id:'visit', on:true, minEach:vr.gender.minEach||0, avoidEven:!!vr.gender.avoidEven};
+  }
   for(const r of S().genderRules){
     if(!r.on) continue;
     if(r.kinds && r.kinds.length && !r.kinds.includes(kind)) continue;
@@ -207,6 +213,14 @@ function genderRuleFor(f, kind){
     if(r.facilities && r.facilities.length && !r.facilities.includes(f.id)) continue;
     return r;
   }
+  return null;
+}
+function seniorLevelFor(f, vr, mustOnly){
+  const sen = S().seniority, imp = f.importance||0;
+  const o = vr && vr.senior;
+  if(o==='off') return null;
+  if(o==='on') return Math.max(imp, sen.threshold||0);
+  if(sen.on && imp>=sen.threshold && (!mustOnly || seniorRequired())) return imp;
   return null;
 }
 function genderMinCount(rule, n){ return rule.minEach>0 ? Math.max(1, Math.ceil(n*rule.minEach/100 - 1e-9)) : 0; }
@@ -433,10 +447,11 @@ function assignTeam(visit, ord, ctx, opts){
   const kind = visit.kind;
   const used = new Set(ctx.dayUsed.get(ord) || []);
   const set = S();
-  const rule = genderRuleFor(f, kind);
+  const rule = genderRuleFor(f, kind, visit.rules);
   const sen = set.seniority;
-  const importance = f.importance||0;
-  const needSenior = sen.on && seniorRequired() && importance >= sen.threshold;
+  const seniorLvl = seniorLevelFor(f, visit.rules, true);
+  const importance = seniorLvl==null ? (f.importance||0) : seniorLvl;
+  const needSenior = seniorLvl!=null;
   const qual = p=>skillOf(p, kind, f.category) >= importance;
   const team = {}, chosen = [];
   const pairs = ctx.pairs;
@@ -547,12 +562,13 @@ function commitTeam(visit, ord, ctx, counted){
 
 function lockedOf(v){ return v.locked || v.preset || EMPTY_LIST; }
 function visitSeatNeed(v, pool, f){
+  const g = visitGuestsIn(v, pool.id);
   const lock = v.seats && v.seats[pool.id];
-  if(lock!=null) return Math.max(0, Math.min(9, lock|0));
+  if(lock!=null) return Math.max(0, Math.min(9, lock|0) - g);
   f = f || facilityById(v.facilityId);
   if(!f) return 0;
   if(v.auto===false) return lockedOf(v).filter(id=>{ const p = personById(id); return p && p.pool===pool.id; }).length;
-  return seatsForF(pool, v.kind || visitKindOf(f), f);
+  return Math.max(0, seatsForF(pool, v.kind || visitKindOf(f), f) - g);
 }
 function plannedSeats(seats, pool, kind, f, auto, have){
   const lock = seats && seats[pool.id];
@@ -575,12 +591,12 @@ function replaceInTeam(v, out, inn){
 function visitFlags(v){
   const f = facilityById(v.facilityId);
   const ids = uniqIds(visitTeamIds(v));
-  const kind = v.kind || visitKindOf(f), n = teamSizeFor(kind, f), rule = genderRuleFor(f, kind);
+  const kind = v.kind || visitKindOf(f), n = Math.max(0, teamSizeFor(kind, f) - visitPooledGuests(v)), rule = genderRuleFor(f, kind, v.rules);
   const g = teamGender(ids);
   const gender = rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n) ? 1 : 0;
-  const sen = S().seniority;
+  const seniorLvl = seniorLevelFor(f, v.rules, true);
   let senior = 0;
-  if(sen.on && seniorRequired() && (f.importance||0) >= sen.threshold && ids.length && !ids.some(id=>{ const p = personById(id); return p && skillOf(p, kind, f.category) >= (f.importance||0); })) senior = 1;
+  if(seniorLvl!=null && ids.length && !ids.some(id=>{ const p = personById(id); return p && skillOf(p, kind, f.category) >= seniorLvl; })) senior = 1;
   return {pair:pairBreaks(ids), gender, senior};
 }
 function flagsWorse(a, b, skipGender){
@@ -725,6 +741,7 @@ function pairBreaks(ids){
 }
 
 function visitTeamIds(v){ return [].concat(...Object.values(v.team||{})); }
+function visitGuestLabels(v){ return (v.guests||[]).map(id=>guestById(id)).filter(Boolean).map(g=>g.name+' '+t('guestMark')); }
 
 const CHECK_ALWAYS = ['cOpen','cDup','cAvail','cBlocked','cGender','cSenior','cPairs','cRun','cPeople','cGoals','cPrefs'];
 const CHECK_ORDER = ['cOpen','cTeam','cDup','cAvail','cBlocked','cCalendar','cCaps','cWeek','cRest','cSpacing','cDays','cGender','cSenior','cPairs','cRun','cPeople','cGoals','cPrefs'];
@@ -782,6 +799,7 @@ function analyzePlan(plan, opts){
     if(key==='cCalendar') return activityHard();
     return false;
   };
+  out.seatLines = explainSeats(plan, {start:ordOf(plan.start || plan.days[0]), days:plan.days.map(ordOf)}).filter(l=>l.scope==='day');
   out.checks = CHECK_ORDER.filter(relevant).map(key=>{
     const g = val.byGroup[key] || {hard:0, soft:0, exceptions:0};
     return {key, ok:g.hard+g.soft===0, n:g.hard+g.soft, hard:g.hard, softN:g.soft, exc:g.exceptions, soft:g.hard===0};

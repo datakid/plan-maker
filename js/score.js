@@ -24,7 +24,7 @@ function collectPreferences(plan, ctx, add){
   if(tg){
     const nb = live.filter(x=>x.kind==='basic').length, nc = live.length-nb;
     if(tg.mode==='exact'){
-      const units = Math.abs(nb-tg.basic) + Math.abs(nc-tg.contracted);
+      const units = tg.upTo ? Math.max(0, nb-tg.basic) + Math.max(0, nc-tg.contracted) : Math.abs(nb-tg.basic) + Math.abs(nc-tg.contracted);
       if(units>0) add({src:'volume', group:'cPrefs', key:'dExactOff', units, actual:nb+nc, required:tg.basic+tg.contracted, args:[nb, tg.basic, nc, tg.contracted]});
     } else if(tg.mode==='fill'){
       const want = Math.round(live.length*(tg.share==null ? set.volume.share : tg.share));

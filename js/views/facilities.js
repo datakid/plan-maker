@@ -198,10 +198,31 @@ function renderLocationsCard(){
         el('span', {class:'tag '+band, style:{minWidth:'46px', justifyContent:'center'}}, t(band==='near'?'bandNear':(band==='far'?'bandFar':'bandMid'))),
         el('input', {class:'input sm', value:l.name, style:{flex:'1', minWidth:'0', border:'0', background:'transparent', padding:'0 4px'}, 'aria-label':t('fLocation'), onchange:e=>{ l.name = e.target.value.trim() || l.name; commit('data'); }}),
         el('span', {class:'muted num', style:{fontSize:'11px'}}, n ? String(n) : ''),
-        Stepper(l.km, v=>{ l.km = v; commit('data'); node.render(); }, {min:0, max:999, sm:true, unit:t('km')})
+        Stepper(l.km, v=>{ l.km = v; commit('data'); node.render(); }, {min:0, max:999, sm:true, unit:t('km')}),
+        el('button', {type:'button', class:'btn sm ghost'+(l.seats ? ' on' : ''), title:t('locSeatsHint'), onclick:()=>openLocationSeats(l, ()=>node.render())}, t('locSeats'))
       ]));
     }
     card.appendChild(body);
     return card;
+  });
+}
+
+
+function openLocationSeats(l, done){
+  sheet({
+    title:()=>t('locSeats')+' · '+l.name,
+    body:api=>{
+      const out = [el('div', {class:'hint'}, t('locSeatsHint'))];
+      for(const pl of S().pools){
+        const base = seatsFor(pl, 'basic');
+        const cur = l.seats && l.seats[pl.id]!=null ? l.seats[pl.id] : null;
+        const set = v=>{ const m = Object.assign({}, l.seats||{}); if(v==null) delete m[pl.id]; else m[pl.id] = v; l.seats = Object.keys(m).length ? m : null; commit('data'); api.render(); done(); };
+        out.push(el('div', {class:'field'}, [el('label', null, poolName(pl)), el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
+          Stepper(cur, set, {min:0, max:9, nullable:true, sm:true, base:base, placeholder:String(base)}),
+          cur!=null ? el('button', {type:'button', class:'btn sm ghost', onclick:()=>set(null)}, t('vsDefault')) : null
+        ])]));
+      }
+      return [el('section', {class:'sheet-sec stack', style:{gap:'12px'}}, out)];
+    }
   });
 }

@@ -57,6 +57,7 @@ function GoalsManager(opts){
   };
 
   function changed(){
+    if(typeof offerDuplicateChoice==='function') setTimeout(offerDuplicateChoice, 0);
     commit('settings');
     if(PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update();
     if(opts.onChange) opts.onChange();

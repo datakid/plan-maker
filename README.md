@@ -13,10 +13,11 @@ js/core.js            dates (ordinal-day math), parsing, DOM helper, icons
 js/seed.js            seed facilities, locations, categories, people, pools
 js/store.js           data model, migrations, persistence, domain helpers
 js/i18n.js            Arabic / English strings, including the rule registry texts
-js/rules-model.js     rule registry (levels, weights, units), level helpers, RULES_REV 8 migration, weekday rule helpers
+js/rules-model.js     rule registry (levels, weights, units), level helpers, RULES_REV 9 migration, weekday rule helpers
 js/people-rules.js    compiles person goals, pair goals and per-plan quotas into one rule index (deny / count / together)
 js/engine.js          capacity, scoring, team assignment (with preset people), gender repair, analysis, approve/undo
 js/goals.js           goal & fixed-visit models, demand builder, fixed-visit conflict checks
+js/requests.js       compiles fixed visits and specials into one request list (seats resolved once), applies the duplicate policy (ask / merge / keep / reject)
 js/constraints.js     validatePlan: the one validator, a thin layer that tags every violation with rule, level, weight and units; goal evaluation, work/rest rules, history lookback, generation snapshots
 js/score.js           preference scoring (weekday rules, volume targets, distance, gender preferences, rotation, spread, fairness), plan state, due-ness reward, move apply / delta / revert
 js/flow.js            min-cost flow (successive shortest paths, Johnson potentials, binary-heap Dijkstra, big-M lower bounds)
@@ -38,8 +39,8 @@ js/views/rules.js     all rules with a sticky section nav (scroll-spy), level ch
 js/views/data.js      import, unresolved names, backup/restore, appearance, reset
 test.html             dev test runner: isolated storage, app self-test, regression suite (not needed in production)
 js/selftest.js        full-app UI and flow checks (generation, views, sheets, rules, export, approve, English mode)
-js/tests/             panel.js, env.js, kit.js, fixtures.js, reference.js (exhaustive solver with the production objective), regress.js, phase1.js to phase7.js (v4)
-docs/                 v4-baseline.md (numbers before the rewrite), v4-notes.md (decisions and changed tests)
+js/tests/             panel.js, env.js, kit.js, fixtures.js, reference.js (exhaustive solver with the production objective), regress.js, phase1.js to phase10.js (phase10 is v5)
+docs/                 v4-baseline.md (numbers before the v4 rewrite), v4-notes.md, v5-notes.md (v5 decisions, deviations, changed tests, what is not done)
 ```
 
 ## Goals (v3.1)
@@ -153,14 +154,26 @@ Stored shape: `settings.lv[ruleId]`, `settings.days[wd].<field>.lv`, `person.lv`
 ### Solver
 1. **Compile and prove.** The window, fixed visits and goal demand are built as before. The pre-check proves conflicts against the Must rules (including day-kind rules against exact counts, exact counts above the facilities that exist, and "at least one" day rules with no possible visit) and returns `infeasible` with the rules named.
 2. **Layout by min-cost flow.** Mandatory units plus candidate facilities per kind flow through kind -> facility copy -> day -> week. Day caps, minimums, "all / at least one" lean rules, weekday and category limits, deadlines, spacing shape, due reward and goal rewards are edge costs, capacities or lower bounds. Selection and placement are solved together. If any flow placement breaks a non-linear hard day rule (gap spacing, activity patterns) the flow result is discarded and the greedy placement runs.
-3. **Teams** are built day by day; a seat-level search repairs hard violations.
-4. **LNS** (`js/lns.js`): seeded Late Acceptance Hill Climbing over the unified score with moves for day, swapped days, facility, person, swapped people, ejection chains, whole-visit re-staffing and Hungarian re-staffing, kicks and restarts when hard violations remain, then a steepest-descent polish.
+3. **One placement path.** `compileRequests` turns fixed visits and specials into requests with seats resolved once; `generatePlan` places them through the same `canPlace` and seat ledger as every other unit. Flow placements that pass `canPlace` are kept and only the rest are re-queued (`layout.rolledBackUnits`); if that run is not valid it is repeated once in the old all-or-nothing mode and the better score wins (`layout.retriedAllOrNothing`).
+   Teams are built day by day; a seat-level search repairs hard violations.
+4. **LNS** (`js/lns.js`): seeded Late Acceptance Hill Climbing over the unified score with moves for day, swapped days, facility, person, swapped people, ejection chains, whole-visit re-staffing and Hungarian re-staffing, kicks and restarts when hard violations remain, then a steepest-descent polish. The count-changing moves `N5insert` and `N5remove` only run for exact counts set to Up to; `N5swapInsert` (remove one visit, add one of the same kind) always runs. `continueFrom` resumes a stored plan with a derived seed (Keep searching).
 5. **Explanations** (`js/explain.js`): for each unmet Prefer item and each Must violation, the best single move that fixes it and the rules it would break are stored in `plan.why` and shown in the Summary and the visit sheet.
 
 `plan.gen.search` records stage, iterations, per-move statistics, score, seed and the layout stage. Status is `valid`, `infeasible` (proof only) or `exhausted`.
 
+The Summary also shows seat shortages per day and pool (`explainSeats`: need, who is free, who is off, in a rest cycle, at their limit or held by a fixed visit, with a one-click fix when a fixed visit or special can lower its seats) and The equation card (`buildModel`, `modelText`): the exact objective, every Must and Prefer term with level, weight, units and contribution, the due reward and the structural rules; it can be copied or exported as .txt and .json, and its totals equal the search score.
+
 ### Budgets
-Iteration caps are primary and wall-clock caps are a safety cutoff. The polish uses at most `cap / 8` iterations (40, 150 and 500 on week, month and quarter windows; caps 400 ms, 1.5 s and 5 s, polish uses 80% of the cap minus construction time). Repair of hard violations uses 3,000 / 8,000 / 15,000 iterations. The same input and seed give the same plan as long as the iteration cap is reached before the wall-clock cap, which is the case for the seed data.
+Iteration caps are primary and wall-clock caps are a safety cutoff. The polish uses at most `cap / 4` iterations (80, 300 and 1000 on week, month and quarter windows; it stops earlier once there are no hard violations and no improvement for max(400, 30 x visits) iterations; caps 400 ms, 1.5 s and 5 s, polish uses 80% of the cap minus construction time). Repair of hard violations uses 3,000 / 8,000 / 15,000 iterations. The same input and seed give the same plan as long as the iteration cap is reached before the wall-clock cap, which is the case for the seed data.
+
+## What changed in 5.0
+- **One pipeline.** Fixed visits, specials and ordinary units are placed through the same `canPlace` and seat ledger (`js/requests.js`); duplicate requests for one place follow a policy (Ask, Merge, Keep both, Reject newer) stored per request once answered.
+- **Visits per day.** Up to or Exactly per day, Use all days as Off / Try / Must, and exact counts as Up to or Exactly. Defaults reproduce 4.x behaviour.
+- **Seats.** One seat stepper that starts from the shown default, a Default button per pool, location-level default seats, and guests (outside people who take a seat and are never in the team).
+- **Rules for one visit.** Gender and senior overrides on a fixed visit or special.
+- **Search.** Partial acceptance of flow placements, insert / remove / swap-insert moves, a stop rule, deterministic continuation and a Keep searching button.
+- **Explanations.** Seat shortages per day with reasons and fixes, and The equation card with copy and export.
+- Decisions, deviations and what is not done are in `docs/v5-notes.md`.
 
 ## Rules and first run
 The Rules tab opens in **Simple** mode: the key rules (goals, calendar, volume, gender, pairs) with Must or Prefer only, no weights. **Advanced** shows every rule and weight; the choice is remembered. The search box finds rules in either mode. A plan-less Plan tab shows a three step checklist (work days, team, generate), and facilities and team show an empty state. When a plan is infeasible or exhausted, solvable conflicts get a button that applies the fix and regenerates.
@@ -243,12 +256,15 @@ Swap, fill, move, replace and remove all go through `mutatePlan`, which evaluate
 ## Migration
 Saved data without `rulesRev` (or older than 7) is migrated on load without removing people, facilities, goals or history. It adds `settings.patterns`, `volume.requireEveryEligibleDay` (false), `spacing.strict`, and per-person `pattern` (`inherit`); malformed numbers and dates are sanitised. `alkhitta.v4` and v4 backups still import.
 
+Rev 9 (v5): saves from rev 8 load with `volume.dayMode` Up to, `volume.useAllDays` taken from the old every-day switch (true becomes Must, false Off), `volume.exactMode` Exactly, an empty guest list, `duplicates` Ask and no per-visit rules or location seats; behaviour is unchanged until you use them. A stored plan older than rev 9 loads as stale and needs regenerating.
+
 ## Tests
 - `scripts/ci-run.js` (Playwright, run by `.github/workflows/test.yml`) serves the repo and runs: the app end to end (no CSP violations, worker used, self-hosted fonts, no external requests, service worker cache covers every asset, offline reload and offline generation), `docs/people-matrix.html`, and `test.html` at 1280 px. `ONLY=app|matrix|suite` runs one part; `CHROME_PATH` points at a local Chromium.
 - `ship-test.html` runs only the `ship:` tests in `js/tests/phase8.js` (data safety, worker, solver internals, undo, diff, focus, diagnostics, versions). It is much faster than the full suite.
 - Open `test.html`. It replaces `localStorage` with an in-memory shim first and refuses to run if it cannot, so the real data is never cleared. It runs the app self-test and then the regression suite. A results panel covers the page: green "ALL TESTS PASSED" with `RESULT pass=… fail=0`, or red with each failing test listed (tick the box to list passing ones too, or use "Show app" to see the page). The same lines are printed to the console.
 - `js/tests/reference.js` has two exhaustive solvers for small fixtures: `Ref.solve` (facilities, then days, then teams) and `Ref.days` (day by day with pruning on availability, rest, quotas and weekly caps, then the validator as the oracle).
 - `js/tests/phase1.js` to `phase7.js` hold the v4 tests: registry and migration, every rule flipped between Must and Prefer, delta against full evaluation, flow and Hungarian cross-checks, T1 to T9, LevelChip reachability, People table, Goals manager and explanations.
+- `js/tests/phase10.js` holds the v5 tests: seat stepper, duplicate detection and policy, requests and the single placement path, flow partial acceptance, insert and remove moves, continuation, volume and use-all-days settings, guests, per-visit rules, seat shortages, the equation, and the rev 9 migration.
 - `js/tests/regress.js` holds the regression cases (L1 to L15 cover the backup week of a real failing plan, gender, pair, quota, every-day and deadline fixtures, LNS repair and preflight proofs; K2 compares the generator with the reference across five fixture families and needs at least 99% valid; K3 checks determinism): audit findings A–E (plan spacing, max-gap deadlines and chains, caps and At most, exact and range person counts, special visits, hard/soft separation, snapshots), work/rest patterns, require-every-day, infeasible vs exhausted, deterministic output, edit and approval integrity, migration, and a seeded fuzz that compares the generator with an exhaustive reference. Each case returns `true` or a `verdict(...)`; a bare string counts as a failure.
 - The old seed-data self-test alone is not evidence of readiness.
 - `people-test.html` runs the four existing People cases plus five UI regressions and the uncaught-error check using isolated in-memory storage. Focused result: `RESULT pass=10 fail=0`.
@@ -283,11 +299,15 @@ Budgets: week under 400 ms, month under 1.5 s, quarter under 5 s (test T8).
 - The search is bounded; `exhausted` is not a proof of infeasibility.
 - Score re-evaluation after a move recomputes the whole plan (exact, checked against a fresh evaluation, but not key-partitioned). Moves now copy fields structurally, look up visits and busy people through indexes, and date/id lookups are cached, which made a quarter about twice as fast (about 1.9 s to 0.9 s at normal speed); a key-partitioned incremental score is still open.
 - Window re-layout through the flow and a Hungarian pass over a whole day are not separate LNS neighbourhoods; layout comes from the initial flow and from day, swap and facility moves.
-- LNS never adds or removes visits or seats: with equal weights it could trade a visit for an open seat. Insert and remove moves are not implemented.
+- The LNS adds or removes whole visits only when exact counts are set to Up to; it never adds or removes seats, and in all other modes the visit count is fixed by the volume setting.
 - Touch targets are 40 px for buttons, tabs, inputs and selects; checkboxes (22 px), toggle switches (38x22) and calendar add buttons (28 px) are smaller.
 - One-click conflict fixes cover exact counts, day rules, goals and the every-day requirement; other conflicts (for example a hard volume over capacity) still need a manual change. Plain-language wording of the explanations has not been reviewed by a native Arabic speaker.
 - Two tabs writing at once is handled by making the older window read-only, not by merging.
-- No flow relaxation bound is computed: `lowerBound` is `null` and `optimal` is `false`.
+- No flow relaxation bound is computed: `lowerBound` is `null` and `optimal` is `false`, so the Summary shows no gap.
+- Guests are shown in the plan list and the team column of the export but not in the matrix or print views, and they do not count in gender-rule math.
+- "Newer" in Reject newer means later in the list; requests carry no timestamp.
+- Default-budget soft scores on a month or quarter vary slightly with machine load; with explicit iteration caps results are deterministic.
+- The fixture exports used for acceptance (export_a.json, export_b.json) were not available when v5 was built.
 - Layout flow covers at most one "at least one visit" rule per weekday; the others are left to LNS.
 - Non-linear hard day rules (gap spacing, activity patterns) are not in the flow; when the flow breaks them the greedy placement is used.
 - `js/solver.js` is kept for the feasibility pre-check and the seat-level repair search.

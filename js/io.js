@@ -258,7 +258,7 @@ function exportPlanRows(plan, mode){
     const f = facilityById(v.facilityId) || {name:'—', category:''};
     if(!ph.has(v.facilityId)) ph.set(v.facilityId, (App.ui.lang==='ar'?'جهة ':'Facility ')+(ph.size+1));
     const r = [mode==='noFac' ? ph.get(v.facilityId) : f.name, f.category, String(plan.cycle), v.kind==='basic' ? 'أساسي' : 'متعاقد', v.date];
-    if(mode!=='noTeam') r.push(visitTeamIds(v).map(id=>(personById(id)||{}).name).join('-'));
+    if(mode!=='noTeam') r.push(visitTeamIds(v).map(id=>(personById(id)||{}).name).concat(visitGuestLabels(v)).join('-'));
     return r;
   });
   return [head, ...rows];

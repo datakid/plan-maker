@@ -23,7 +23,8 @@ function tileSummaries(){
   const tuned = Object.values(S().days).filter(c=>c && Object.values(c).some(x=>x!=null && x!=='' && !(Array.isArray(x) && !x.length))).length;
   if(tuned) extra.push(tuned+' '+t('rDays'));
   out.workdays = {v: order.map(d=>wdName(d,'short')).join(' · ') || '—', s: extra.join(' · ') || order.length+' / 7'};
-  out.visits = {v:(pv.total||0)+' '+(App.ui.lang==='ar'?'زيارة':'visits'), s: pv.overCapacity ? t('vOver', pv.total, pv.capacity) : t('vSummary', pv.basic||0, pv.contracted||0), warn:!!pv.overCapacity};
+  const VD = S().volume;
+  out.visits = {v:(pv.total||0)+' '+(App.ui.lang==='ar'?'زيارة':'visits'), s: pv.overCapacity ? t('vOver', pv.total, pv.capacity) : (pv.goal==='range' && pv.workdays ? t(VD.dayMode==='exactly' ? 'vDayExactly' : 'vDayUpTo', VD.perDay||1, pv.workdays) : t('vSummary', pv.basic||0, pv.contracted||0)), warn:!!pv.overCapacity};
   const act = activePeople();
   out.team = {v:t('teamActive', act.length), s:S().pools.map(pl=>act.filter(p=>p.pool===pl.id).length+' '+poolName(pl)).join(' · ')};
   const gOn = S().goals.filter(g=>g.on);
@@ -135,6 +136,7 @@ function visitsPop(refresh){
     if(V.mode==='fill'){
       box.appendChild(el('div', {class:'field'}, [el('label', null, t('vShare')), Slider(Math.round(V.share*100), v=>{ V.share = v/100; settingsChanged(); paint(); }, {min:0, max:100, step:5, format:v=>v+'%'})]));
     } else if(V.mode==='exact'){
+      box.appendChild(el('div', {class:'field'}, [el('label', null, t('vCountMode')), Seg([{value:'upTo',label:t('vUpTo')},{value:'exactly',label:t('vExactlyOpt')}], V.exactMode, v=>{ V.exactMode = v; settingsChanged(); }, {cls:'block'})]));
       box.appendChild(el('div', {class:'grid-2'}, [
         el('div', {class:'field'}, [el('label', null, t('kBasic')), Stepper(V.exact.basic, v=>{ V.exact.basic = v; settingsChanged(); paint(); }, {min:0, max:500})]),
         el('div', {class:'field'}, [el('label', null, t('kContracted')), Stepper(V.exact.contracted, v=>{ V.exact.contracted = v; settingsChanged(); paint(); }, {min:0, max:500})])
@@ -153,11 +155,13 @@ function visitsPop(refresh){
     }
     box.appendChild(live); paint();
   }
-  box.appendChild(el('div', {class:'grid-2', style:{paddingTop:'10px', borderTop:'1px solid var(--line)'}}, [
+  box.appendChild(el('div', {class:'field', style:{paddingTop:'10px', borderTop:'1px solid var(--line)'}}, [el('label', null, t('vPerDayMode')), Seg([{value:'upTo',label:t('vUpTo')},{value:'exactly',label:t('vExactlyOpt')}], V.dayMode, v=>{ V.dayMode = v; settingsChanged(refresh); }, {cls:'block'})]));
+  box.appendChild(el('div', {class:'grid-2'}, [
     el('div', {class:'field'}, [el('label', null, t('vPerDay')), Stepper(V.perDay||1, v=>{ V.perDay = v; settingsChanged(); }, {min:1, max:10})]),
     el('div', {class:'field'}, [el('label', null, t('vMinPerDay')), Stepper(V.minPerDay, v=>{ V.minPerDay = v ? Math.min(v, V.perDay||1) : null; settingsChanged(); }, {min:1, max:10, nullable:true, placeholder:t('noLimit')})]),
     el('div', {class:'field'}, [el('label', null, t('vPerWeek')), Stepper(V.perWeek, v=>{ V.perWeek = v; settingsChanged(); }, {min:1, max:60, nullable:true, placeholder:t('noLimit')})])
   ]));
+  box.appendChild(el('div', {class:'field'}, [el('label', null, t('vUseAll')), Seg([{value:'off',label:t('vUseOff')},{value:'prefer',label:t('vUseTry')},{value:'must',label:t('vUseMust')}], V.useAllDays, v=>{ V.useAllDays = v; V.requireEveryEligibleDay = v!=='off'; settingsChanged(); }, {cls:'block'}), el('div', {class:'hint'}, t('vUseAllHint'))]));
   return box;
 }
 
@@ -241,7 +245,7 @@ function diffChipNode(d){
   ]);
 }
 
-function doGenerate(btn){
+function doGenerate(btn, genOpts){
   closePop();
   if(GenRun.active) return GenRun.active.promise;
   const buttons = [...document.querySelectorAll('.gen-btn')];
@@ -250,7 +254,7 @@ function doGenerate(btn){
   for(const l of labels) if(l) l.textContent = t('generating');
   genStatusNode();
   setGenProgress('select', 0);
-  const h = startGeneration({}, setGenProgress);
+  const h = startGeneration(genOpts || {}, setGenProgress);
   return h.promise.then(res=>{
     const st = document.getElementById('gen-status'); if(st) st.remove();
     for(const b of document.querySelectorAll('.gen-btn')){ b.disabled = false; b.classList.remove('busy'); }
@@ -373,8 +377,16 @@ function applyConflictFix(c){
     if(!g) return false;
     g.lv = Object.assign({}, g.lv, {level:'prefer'});
   }
-  else if(f.type==='noEveryDay') set.volume.requireEveryEligibleDay = false;
+  else if(f.type==='noEveryDay') { set.volume.requireEveryEligibleDay = false; set.volume.useAllDays = 'off'; }
   else return false;
+  commit('settings');
+  return true;
+}
+function applySeatFix(f){
+  const src = f.overrideId ? S().overrides.find(o=>o.id===f.overrideId) : S().goals.find(g=>g.id===f.special);
+  if(!src) return false;
+  const total = f.to + visitGuestsIn(src, f.pool);
+  src.seats = cleanSeatMap(Object.assign({}, src.seats||{}, {[f.pool]:total}));
   commit('settings');
   return true;
 }
@@ -496,7 +508,7 @@ function viewCalendar(plan, A){
       const f = facilityById(v.facilityId) || {name:'—'};
       const dimmed = App.ui.focusPerson && !visitTeamIds(v).includes(App.ui.focusPerson);
       const ev = el('button', {type:'button', class:'cal-ev '+v.kind+(issues.has(v.id)?' has-issue':'')+(dimmed?' dim':'')+(v.fixed?' fixed':''), draggable: editable && !v.fixed ? 'true' : null, title:f.name, onclick:()=>openVisit(v.id)}, [
-        el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag}) : null, f.name]), el('span', null, visitTeamIds(v).map(id=>(personById(id)||{}).name).join('، '))
+        el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag}) : null, f.name]), el('span', null, visitTeamIds(v).map(id=>(personById(id)||{}).name).concat(visitGuestLabels(v)).join('، '))
       ]);
       if(editable && !v.fixed) ev.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; });
       cell.appendChild(ev);
@@ -634,7 +646,12 @@ function viewSummary(plan, A){
     el('div', {class:'kpi'}, [el('div', {class:'n num'}, totalKm.toLocaleString('en')), el('div', {class:'l'}, t('kpiKm'))]),
     el('div', {class:'kpi'}, [el('div', {class:'n num ltr'}, okChecks+' / '+A.checks.length), el('div', {class:'l'}, t('checksTitle'))])
   ]));
-  if(plan.gen && plan.gen.search && plan.gen.search.truncated) wrap.appendChild(el('div', {class:'banner info', id:'gen-truncated', role:'status'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('genTruncated')]));
+  if(plan.gen && plan.gen.search && plan.gen.search.truncated) {
+    const sc = plan.gen.search.score;
+    const more = sc && sc.hard>0 && !plan.stale && !plan.approved;
+    wrap.appendChild(el('div', {class:'banner info', id:'gen-truncated', role:'status'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('genTruncated'),
+      more ? el('button', {type:'button', class:'btn sm', id:'gen-keep', onclick:()=>doGenerate(document.getElementById('generate-btn'), {continueFrom:App.plan})}, t('genKeep')) : null]));
+  }
   wrap.appendChild(quantitiesBlock(plan, A));
   const grid = el('div', {class:'grid-2', style:{alignItems:'start'}});
   const loadBox = el('div');
@@ -664,7 +681,17 @@ function viewSummary(plan, A){
     checks.appendChild(el('div', {class:'check '+(c.ok ? 'ok' : (c.soft ? 'soft' : 'bad'))}, [el('span', {html:c.ok?ICON.ok:ICON.alert, style:{display:'flex'}}), t(c.key), c.ok ? null : el('span', {class:'n'}, String(c.n))]));
   }
   right.appendChild(checks);
+  if(A.seatLines && A.seatLines.length){
+    const seats = el('div', {id:'seat-lines'});
+    seats.appendChild(el('div', {class:'section-title'}, t('seatsTitle')+' · '+A.seatLines.length));
+    for(const ln of A.seatLines.slice(0, 12)){
+      seats.appendChild(el('div', {class:'check '+(ln.proven ? 'bad' : 'soft')}, [el('span', {html:ICON.alert, style:{display:'flex'}}), el('span', {class:'check-main'}, t.apply(null, [ln.key].concat(ln.args))),
+        ln.fix ? el('button', {type:'button', class:'btn sm', onclick:()=>{ if(applySeatFix(ln.fix)) renderTab(); }}, t('fixSeatDown', ln.fix.to)) : null]));
+    }
+    right.appendChild(seats);
+  }
   right.appendChild(ruleContribBlock(plan));
+  right.appendChild(modelCard(plan));
   if(A.diags.length){
     const notes = el('div');
     notes.appendChild(el('div', {class:'section-title'}, t('notesTitle')+' · '+A.diags.length));
@@ -930,6 +957,21 @@ function contribRows(list){
     el('span', {class:'rc-name'}, whyRuleName(e.rule)),
     el('span', {class:'num rc-num'}, (Math.round(e.units*100)/100)+' × '+e.weight+' = '+(Math.round(e.score*100)/100))
   ]));
+}
+
+function modelCard(plan){
+  const box = el('div', {class:'model-card', id:'model-card'});
+  box.appendChild(el('div', {class:'section-title'}, t('modelTitle')));
+  const model = buildModel(plan);
+  const text = modelText(model);
+  box.appendChild(el('pre', {class:'model-pre', dir:'ltr', tabindex:'0'}, text));
+  const stamp = ()=>isoOf(todayOrd()).replace(/-/g, '');
+  box.appendChild(el('div', {class:'row', style:{gap:'8px', flexWrap:'wrap'}}, [
+    el('button', {type:'button', class:'btn sm', onclick:()=>copyText(text)}, t('modelCopy')),
+    el('button', {type:'button', class:'btn sm ghost', onclick:()=>downloadBlob(new TextEncoder().encode(text), 'model-'+stamp()+'.txt', 'text/plain;charset=utf-8')}, t('modelTxt')),
+    el('button', {type:'button', class:'btn sm ghost', onclick:()=>downloadBlob(new TextEncoder().encode(JSON.stringify(model, null, 2)), 'model-'+stamp()+'.json', 'application/json')}, t('modelJson'))
+  ]));
+  return box;
 }
 
 function ruleContribBlock(plan){

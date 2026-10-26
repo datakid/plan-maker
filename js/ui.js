@@ -198,13 +198,14 @@ function confirmDialog(title, message, opts){
 }
 
 function toast(msg, action){
+  const actions = Array.isArray(action) ? action : (action ? [action] : []);
   let region = document.querySelector('.toasts');
   if(!region){ region = el('div', {class:'toasts', role:'status', 'aria-live':'polite'}); document.body.appendChild(region); }
   const dismiss = ()=>{ if(node.classList.contains('out')) return; node.classList.add('out'); setTimeout(()=>node.remove(), 180); };
-  const node = el('div', {class:'toast'}, [el('span', null, msg), action ? el('button', {type:'button', onclick:()=>{ dismiss(); action.onClick(); }}, action.label) : null]);
+  const node = el('div', {class:'toast'}, [el('span', null, msg)].concat(actions.map(a=>el('button', {type:'button', onclick:()=>{ dismiss(); a.onClick(); }}, a.label))));
   while(region.children.length>=3) region.firstChild.remove();
   region.appendChild(node);
-  setTimeout(dismiss, action ? 7000 : 2600);
+  setTimeout(dismiss, actions.length ? 9000 : 2600);
 }
 
 function Seg(options, value, onChange, opts){
@@ -228,6 +229,7 @@ function Switch(value, onChange, label, opts){
 function Stepper(value, onChange, opts){
   opts = opts||{};
   const min = opts.min==null ? 0 : opts.min, max = opts.max==null ? 999 : opts.max, step = opts.step||1;
+  const base = opts.nullable && opts.base!=null ? opts.base : null;
   let cur = value;
   const input = el('input', {type:'text', inputmode:'numeric', value: cur==null ? '' : String(cur), placeholder: opts.placeholder||'', 'aria-label':opts.label||''});
   const dec = el('button', {type:'button', 'aria-label':'−', html:ICON.minus});
@@ -239,9 +241,15 @@ function Stepper(value, onChange, opts){
     cur = v; input.value = String(v); paint();
     if(fire) onChange(v);
   }
-  function paint(){ dec.disabled = opts.nullable ? cur==null : (cur!=null && cur<=min); inc.disabled = cur!=null && cur>=max; }
-  dec.addEventListener('click', ()=>{ if(cur==null) set(max<999?max:min, true); else if(opts.nullable && cur<=min) set(null, true); else set(cur-step, true); });
-  inc.addEventListener('click', ()=>set(cur==null ? min : cur+step, true));
+  function paint(){
+    if(base!=null){ dec.disabled = (cur==null ? base : cur)<=min; inc.disabled = (cur==null ? base : cur)>=max; return; }
+    dec.disabled = opts.nullable ? cur==null : (cur!=null && cur<=min); inc.disabled = cur!=null && cur>=max;
+  }
+  dec.addEventListener('click', ()=>{
+    if(base!=null){ set((cur==null ? base : cur)-step, true); return; }
+    if(cur==null) set(max<999?max:min, true); else if(opts.nullable && cur<=min) set(null, true); else set(cur-step, true);
+  });
+  inc.addEventListener('click', ()=>{ if(base!=null) set((cur==null ? base : cur)+step, true); else set(cur==null ? min : cur+step, true); });
   input.addEventListener('change', ()=>{ const raw = toAsciiDigits(input.value).replace(/[^\d.-]/g,''); if(raw==='') set(null, true); else { const n = Number(raw); if(isFinite(n)) set(n, true); else input.value = cur==null ? '' : String(cur); } });
   input.addEventListener('keydown', e=>{ if(e.key==='ArrowUp'){ e.preventDefault(); inc.click(); } if(e.key==='ArrowDown'){ e.preventDefault(); dec.click(); } });
   paint();

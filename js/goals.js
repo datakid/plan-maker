@@ -11,7 +11,7 @@ function newGoal(type){
   if(type==='maxGap') Object.assign(g, {days:60});
   if(type==='person') Object.assign(g, {people:[], rel:'between', n:1, n2:2, scope:{kind:'all', ids:[]}});
   if(type==='together') Object.assign(g, {a:null, b:null, rel:'atLeast', pct:50});
-  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null, seats:null, only:[], never:[]});
+  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null, seats:null, only:[], never:[], rules:null, guests:[]});
   if(type==='pattern') Object.assign(g, {people:[], pattern:{minRest:1, maxRun:null, cycle:null}, from:null, to:null});
   g.lv = ruleSpec(GOAL_RULE[type]).def ? mkLv(ruleSpec(GOAL_RULE[type]).def.level, ruleSpec(GOAL_RULE[type]).def.w) : mkLv('prefer', 5);
   Object.defineProperty(g, 'strict', {get(){ return this.lv && this.lv.level==='must' ? 'must' : 'try'; }, set(v){ this.lv = mkLv(v==='must' ? 'must' : 'prefer', this.lv ? this.lv.w : 5); }, enumerable:false, configurable:true});
@@ -54,6 +54,7 @@ function normalizeGoal(g){
     out.times = cleanInt(out.times, 1, 50, 1);
     out.fill = out.fill!==false;
     out.seats = cleanSeatMap(out.seats); out.only = cleanIdList(out.only); out.never = cleanIdList(out.never);
+    out.rules = cleanVisitRules(out.rules); out.guests = cleanIdList(out.guests); out.dupChoice = out.dupChoice==='merge' || out.dupChoice==='keep' ? out.dupChoice : null;
     out.from = cleanIso(out.from, null);
     out.to = cleanIso(out.to, null);
     if(out.from && out.to && out.from>out.to){ const x = out.from; out.from = out.to; out.to = x; }
@@ -68,12 +69,22 @@ function normalizeGoal(g){
   return out;
 }
 
-function newOverride(p){ return Object.assign({id:uid('ov'), on:true, date:todayISO(), facilityId:null, people:[], fill:false, note:'', seats:null, only:[], never:[]}, p||{}); }
+function newOverride(p){ return Object.assign({id:uid('ov'), on:true, date:todayISO(), facilityId:null, people:[], fill:false, note:'', seats:null, only:[], never:[], rules:null, guests:[]}, p||{}); }
+function cleanVisitRules(r){
+  if(!r || typeof r!=='object') return null;
+  let gender = 'inherit';
+  if(r.gender==='none') gender = 'none';
+  else if(r.gender && typeof r.gender==='object') gender = {minEach:cleanInt(r.gender.minEach, 0, 50, 0), avoidEven:!!r.gender.avoidEven};
+  const senior = r.senior==='on' || r.senior==='off' ? r.senior : 'inherit';
+  return gender==='inherit' && senior==='inherit' ? null : {gender, senior};
+}
+
 function normalizeOverride(o){
   const x = newOverride(o);
   x.people = Array.isArray(x.people) ? [...new Set(x.people.filter(Boolean))] : [];
   x.fill = !!x.fill; x.on = x.on!==false;
   x.seats = cleanSeatMap(x.seats); x.only = cleanIdList(x.only); x.never = cleanIdList(x.never);
+  x.rules = cleanVisitRules(x.rules); x.guests = cleanIdList(x.guests); x.dupChoice = x.dupChoice==='merge' || x.dupChoice==='keep' ? x.dupChoice : null;
   return x;
 }
 
@@ -122,18 +133,39 @@ function specialWindow(g, win){
 
 
 function specialRequests(win){
-  const list = [], diags = [];
-  for(const g of S().goals.filter(g=>g.on && g.type==='special')){
-    const f = facilityById(g.facilityId);
-    const tier = goalMust(g) ? 0 : 1;
-    if(!f){ diags.push({sev:'info', key:'dSpecialNoFacility', args:[goalTitle(g)]}); continue; }
-    const w = specialWindow(g, win);
-    if(!w) continue;
-    const people = liveIds(g.people);
-    if(people.length < (g.people||[]).length) diags.push({sev:'warn', key:'dSpecialPeopleGone', args:[goalTitle(g)]});
-    for(let k=0;k<g.times;k++) list.push({g, f, kind:visitKindOf(f), people, auto:g.fill || !people.length, lo:w.lo, hi:w.hi, tier, copy:k});
+  const c = compileRequests(win);
+  const list = [];
+  for(const {r, copy} of requestCopies(c.list.filter(r=>r.source==='special')))
+    list.push({g:r.ref, f:r.f, kind:r.kind, people:r.people, auto:r.auto, lo:r.window.lo, hi:r.window.hi, tier:r.tier, copy, request:r});
+  return {list, diags:c.diags.filter(d=>d.key==='dSpecialNoFacility' || d.key==='dSpecialPeopleGone')};
+}
+
+function findDuplicateRequests(win){
+  const lo0 = win ? win.start : -Infinity, hi0 = win ? win.end : Infinity;
+  const items = [];
+  for(const o of activeOverrides()){
+    const d = ordOf(o.date);
+    if(d<lo0 || d>hi0) continue;
+    items.push({source:'fixed', refId:o.id, facilityId:o.facilityId, lo:d, hi:d});
   }
-  return {list, diags};
+  for(const g of S().goals.filter(g=>g.on && g.type==='special' && g.facilityId && facilityById(g.facilityId))){
+    const lo = Math.max(lo0, g.from ? ordOf(g.from) : -Infinity), hi = Math.min(hi0, g.to ? ordOf(g.to) : Infinity);
+    if(hi<lo) continue;
+    items.push({source:'special', refId:g.id, facilityId:g.facilityId, lo, hi});
+  }
+  const byFac = new Map();
+  for(const it of items){ if(!byFac.has(it.facilityId)) byFac.set(it.facilityId, []); byFac.get(it.facilityId).push(it); }
+  const groups = [];
+  for(const [facilityId, list] of byFac){
+    if(list.length<2) continue;
+    const parent = list.map((_, i)=>i);
+    const find = i=>{ while(parent[i]!==i){ parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    for(let a=0;a<list.length;a++) for(let b=a+1;b<list.length;b++) if(list[a].lo<=list[b].hi && list[b].lo<=list[a].hi) parent[find(a)] = find(b);
+    const comps = new Map();
+    list.forEach((it, i)=>{ const r = find(i); if(!comps.has(r)) comps.set(r, []); comps.get(r).push(it); });
+    for(const refs of comps.values()) if(refs.length>1) groups.push({facilityId, refs:refs.map(r=>({source:r.source, refId:r.refId, lo:r.lo, hi:r.hi}))});
+  }
+  return groups;
 }
 
 function buildDemand(win, fixed, placed){

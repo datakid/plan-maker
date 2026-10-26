@@ -1,9 +1,9 @@
-const APP_VERSION = '4.1.1';
+const APP_VERSION = '5.0.0';
 const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
 const SETTINGS_REV = 6;
-const RULES_REV = 8;
+const RULES_REV = 9;
 
 const App = {
   data: null,
@@ -26,7 +26,7 @@ function defaultSettings(){
   return {
     period: {goal:'range', preset:'month', start:null, end:null, scope:{kind:'all', ids:[]}, times:1},
     calendar: {workdays:[0,1,2,3,4], holidays:[], extra:[]},
-    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, minPerDay:null, minPerDayLv:null, requireEveryEligibleDay:false},
+    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, minPerDay:null, minPerDayLv:null, requireEveryEligibleDay:false, dayMode:'upTo', exactMode:'exactly', total:{mode:'upTo', n:null}},
     goals: defaultGoals(),
     overrides: [],
     spacing: {mode:'even', gap:2, strict:'try'},
@@ -154,7 +154,7 @@ function normalizeQuota(q, legacyFixed){
 function migrateV4(raw){
   const d = seedData();
   const s = raw.settings || {};
-  if(Array.isArray(raw.locations) && raw.locations.length) d.locations = raw.locations.map(l=>({id:l.id, name:l.name, km:+l.km||0}));
+  if(Array.isArray(raw.locations) && raw.locations.length) d.locations = raw.locations.map(l=>({id:l.id, name:l.name, km:+l.km||0, seats:cleanSeatMap(l.seats)}));
   const catKinds = new Map(d.categories.map(c=>[c.name, c.kind]));
   if(Array.isArray(raw.facilities) && raw.facilities.length){
     d.facilities = raw.facilities.map(f=>{
@@ -256,7 +256,15 @@ function normalizeData(d){
   d.settings.volume.perWeek = d.settings.volume.perWeek==null || d.settings.volume.perWeek==='' ? null : cleanInt(d.settings.volume.perWeek, 1, 60, null);
   d.settings.volume.minPerDay = d.settings.volume.minPerDay ? Math.min(d.settings.volume.perDay, cleanInt(d.settings.volume.minPerDay, 1, 10, 1)) : null;
   d.settings.volume.minPerDayLv = normLv(d.settings.volume.minPerDayLv, mkLv('must', 5), ruleSpec('day.min'));
-  d.settings.volume.requireEveryEligibleDay = !!d.settings.volume.requireEveryEligibleDay;
+  d.settings.guests = cleanGuests(d.settings.guests);
+  d.settings.duplicates = ['ask','merge','keep','reject'].includes(d.settings.duplicates) ? d.settings.duplicates : 'ask';
+  const VV = d.settings.volume;
+  VV.dayMode = VV.dayMode==='exactly' ? 'exactly' : 'upTo';
+  VV.exactMode = VV.exactMode==='upTo' ? 'upTo' : 'exactly';
+  if(VV.useAllDays!=='off' && VV.useAllDays!=='prefer' && VV.useAllDays!=='must') VV.useAllDays = VV.requireEveryEligibleDay ? 'must' : 'off';
+  VV.requireEveryEligibleDay = VV.useAllDays!=='off';
+  const tot = VV.total && typeof VV.total==='object' ? VV.total : {};
+  VV.total = {mode:tot.mode==='exactly' ? 'exactly' : 'upTo', n:tot.n==null || tot.n==='' ? null : cleanInt(tot.n, 1, 5000, null)};
   d.settings.volume.quotas = d.settings.volume.quotas || {};
   d.settings.spacing.strict = d.settings.spacing.strict==='must' ? 'must' : 'try';
   d.settings.spacing.gap = cleanInt(d.settings.spacing.gap, 2, 30, 2);
@@ -301,6 +309,7 @@ function migrateRules(d){
   const sp = d.settings.spacing;
   sp.strict = 'try';
   d.settings.volume.requireEveryEligibleDay = false;
+  d.settings.volume.useAllDays = 'off';
   d.settings.patterns = normalizePatterns(d.settings.patterns);
   for(const p of d.people) p.pattern = normalizePersonPattern(p.pattern);
 }
@@ -559,6 +568,8 @@ function seatsFor(pool, kind, category){
 function seatsForF(pool, kind, f){
   const o = f && f.seats;
   if(o && o[pool.id]!=null) return Math.max(0, Math.min(9, o[pool.id]|0));
+  const loc = f && f.locationId ? App.data.locations.find(l=>l.id===f.locationId) : null;
+  if(loc && loc.seats && loc.seats[pool.id]!=null) return Math.max(0, Math.min(9, loc.seats[pool.id]|0));
   return seatsFor(pool, kind, f ? f.category : undefined);
 }
 function cleanSeatMap(m){
@@ -567,6 +578,19 @@ function cleanSeatMap(m){
   for(const k of Object.keys(m)){ const n = Number(m[k]); if(m[k]!==null && m[k]!=='' && Number.isFinite(n)) out[k] = Math.max(0, Math.min(9, Math.round(n))); }
   return Object.keys(out).length ? out : null;
 }
+function cleanGuests(l){
+  if(!Array.isArray(l)) return [];
+  const seen = new Set(), out = [];
+  for(const g of l){
+    if(!g || !g.id || seen.has(g.id)) continue;
+    seen.add(g.id);
+    out.push({id:String(g.id), name:String(g.name||'').trim().slice(0,80), pool:g.pool ? String(g.pool) : null, gender:g.gender==='m' || g.gender==='f' ? g.gender : null, note:String(g.note||'').slice(0,200)});
+  }
+  return out;
+}
+function guestById(id){ return (S().guests||[]).find(g=>g.id===id) || null; }
+function visitGuestsIn(v, poolId){ return (v.guests||[]).filter(id=>{ const g = guestById(id); return g && g.pool===poolId; }).length; }
+function visitPooledGuests(v){ return (v.guests||[]).filter(id=>{ const g = guestById(id); return g && g.pool; }).length; }
 function cleanIdList(l){ return Array.isArray(l) ? [...new Set(l.filter(Boolean).map(String))] : []; }
 function distBand(km){
   const d = S().distance;

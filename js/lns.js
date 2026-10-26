@@ -88,6 +88,47 @@ function lnsRestaff(plan, v, date, rnd, keepFixed){
   return team;
 }
 
+function lnsCountFree(){ const V = S().volume; return V.mode==='exact' && V.exactMode==='upTo'; }
+
+function lnsNewVisit(plan, f, date, rnd){
+  const v = {id:uid('v'), date, facilityId:f.id, kind:visitKindOf(f), team:{}, open:{}, why:Object.assign({tier:3, goals:[], inserted:true}, facilityScore(f, ordOf(plan.start))),
+    moved:false, fixed:false, overrideId:null, special:null, seats:null, only:[], never:[], late:false, locked:null, window:null, auto:true};
+  v.team = lnsRestaff(plan, v, date, rnd, false);
+  return v;
+}
+
+function lnsInsertSlot(plan, rnd, kind){
+  const inPlan = new Set(plan.visits.map(x=>x.facilityId));
+  const days = plan.days.filter(d=>normalWorkday(ordOf(d)) && plan.visits.filter(x=>x.date===d).length<dayCap(ordOf(d)));
+  const list = schedulableFacilities().filter(f=>!inPlan.has(f.id) && (!kind || visitKindOf(f)===kind));
+  if(!days.length || !list.length) return null;
+  const d = days[Math.floor(rnd()*days.length)];
+  const fit = list.filter(f=>!(f.weekdays && f.weekdays.length && !f.weekdays.includes(wdOf(ordOf(d)))));
+  if(!fit.length) return null;
+  return {date:d, f:fit[Math.floor(rnd()*fit.length)]};
+}
+
+function lnsCountMove(plan, rnd, live){
+  const free = lnsCountFree();
+  const mode = rnd();
+  const removable = live.filter(v=>!v.special && !v.fixed);
+  if(free && mode<0.34){
+    const slot = lnsInsertSlot(plan, rnd, null);
+    if(!slot) return null;
+    return {name:'N5insert', ops:[{op:'add', visit:lnsNewVisit(plan, slot.f, slot.date, rnd)}]};
+  }
+  if(free && mode<0.58){
+    if(!removable.length) return null;
+    const v = removable[Math.floor(rnd()*removable.length)];
+    return {name:'N5remove', ops:[{op:'remove', id:v.id}]};
+  }
+  if(!removable.length) return null;
+  const v = removable[Math.floor(rnd()*removable.length)];
+  const slot = lnsInsertSlot(plan, rnd, v.kind);
+  if(!slot) return null;
+  return {name:'N5swapInsert', ops:[{op:'remove', id:v.id}, {op:'add', visit:lnsNewVisit(plan, slot.f, slot.date, rnd)}]};
+}
+
 function lnsMoves(st, rnd, focus, focusPeople){
   const plan = st.plan;
   const live = plan.visits.filter(v=>!v.fixed && facilityById(v.facilityId));
@@ -168,6 +209,7 @@ function lnsMoves(st, rnd, focus, focusPeople){
     cur[i] = cand[Math.floor(rnd()*cand.length)].id;
     return {name:'N3person', ops:[{op:'set', id:v.id, fields:{team:Object.assign({}, v.team, {[pl.id]:cur})}}]};
   }
+  if(kind>=0.96) return lnsCountMove(plan, rnd, live);
   if(kind<0.88){
     const w = live[Math.floor(rnd()*live.length)];
     const vs = w && w.id!==v.id ? [v, w] : [v];
@@ -256,7 +298,8 @@ function lnsRun(plan, seed, maxIters, maxMs, onProgress){
   lnsReindex(st);
   lnsState = st;
   const startCost = lnsCost(st);
-  let best = clonePlan(work), bestCost = startCost;
+  let best = clonePlan(work), bestCost = startCost, bestHard = st.hard;
+  const quiet = Math.max(400, 30*work.visits.length);
   const hist = new Array(50).fill(bestCost);
   const stats = {iters:0, accepted:0, improved:0, byMove:{}, ms:0, stage:'lns', optimal:false, seed:opts.seed || 20260101};
   let sinceBest = 0;
@@ -264,7 +307,7 @@ function lnsRun(plan, seed, maxIters, maxMs, onProgress){
     if((it&15)===0 && Date.now()-t0>maxMs*0.75){ stats.truncated = true; break; }
     if(onProgress && (it&63)===0) onProgress(it/maxIters);
     if(st.hard===0 && st.soft<=0 && it>0 && opts.stopAtZero) break;
-    if(sinceBest>1500) break;
+    if(bestHard===0 && sinceBest>quiet) break;
     stats.iters++;
     if(sinceBest>0 && sinceBest%400===0){
       work.visits = clonePlan(best).visits;
@@ -299,7 +342,7 @@ function lnsRun(plan, seed, maxIters, maxMs, onProgress){
     stat.tried++;
     if(c<=before || c<=hist[slot]){
       stats.accepted++; stat.accepted++;
-      if(c<bestCost){ best = clonePlan(work); bestCost = c; stats.improved++; stat.improved++; sinceBest = 0; } else sinceBest++;
+      if(c<bestCost){ best = clonePlan(work); bestCost = c; bestHard = st.hard; stats.improved++; stat.improved++; sinceBest = 0; } else sinceBest++;
     } else { r.revert(); sinceBest++; }
     hist[slot] = lnsCost(st);
   }

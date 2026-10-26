@@ -138,10 +138,10 @@ function genderDeficit(plan, availFn){
     const f = facilityById(v.facilityId);
     if(!f) continue;
     const kind = visitKindOf(f);
-    const rule = genderRuleFor(f, kind);
+    const rule = genderRuleFor(f, kind, v.rules);
     if(!rule) continue;
     const o = ordOf(v.date);
-    const n = teamSizeFor(kind, f);
+    const n = Math.max(0, teamSizeFor(kind, f) - visitPooledGuests(v));
     let lo = 0, hi = 0, staffed = true;
     for(const pl of S().pools){
       const seats = visitSeatNeed(Object.assign({}, v, {auto:true}), pl, f);
@@ -180,6 +180,58 @@ function scopedDeficit(plan, rules){
     total += Math.max(0, r.min - dates.size);
   }
   return total;
+}
+
+function explainSeats(plan, win){
+  const lines = [];
+  if(!plan || !plan.visits || !plan.visits.length) return lines;
+  const rules = compilePeopleRules();
+  const bounds = personBounds(rules);
+  const hist = historyIndex(win.start).map;
+  const workDays = win.days.filter(o=>normalWorkday(o) || isOverrideDate(isoOf(o)));
+  const exactMode = S().volume.mode==='exact';
+  const byDate = new Map();
+  for(const v of plan.visits){ if(!byDate.has(v.date)) byDate.set(v.date, []); byDate.get(v.date).push(v); }
+  for(const {pool, members} of poolsLive()){
+    const cap = new Map();
+    for(const p of members){
+      const lockedFixed = plan.visits.filter(v=>v.fixed && lockedOf(v).includes(p.id)).length;
+      cap.set(p.id, Math.min((bounds.get(p.id)||{hi:Infinity}).hi, maxWorkable(p, workDays, hist) + lockedFixed));
+    }
+    let seatsTotal = 0;
+    const dates = [...byDate.keys()].sort();
+    for(const iso of dates){
+      const vs = byDate.get(iso), ord = ordOf(iso);
+      const seatOf = v=>{ const f = facilityById(v.facilityId); return f ? visitSeatNeed(v, pool, f) : 0; };
+      const need = sum(vs, seatOf);
+      if(!need) continue;
+      seatsTotal += need;
+      const held = new Set();
+      for(const v of vs) if(v.fixed) for(const id of lockedOf(v)) if(members.some(p=>p.id===id)) held.add(id);
+      const avail = [], who = [];
+      for(const p of members){
+        if(!personBaseAvailable(p, ord)) who.push({id:p.id, reason:'off'});
+        else if(!patternCyclesAllow(p, ord)) who.push({id:p.id, reason:'cycle'});
+        else if(cap.get(p.id)<=0) who.push({id:p.id, reason:'quota'});
+        else { avail.push(p); if(held.has(p.id)) who.push({id:p.id, reason:'held'}); }
+      }
+      const heldN = avail.filter(p=>held.has(p.id)).length;
+      const needShown = need - heldN, availShown = avail.length - heldN;
+      const short = needShown - availShown;
+      if(short<=0) continue;
+      const fixedSeats = sum(vs.filter(v=>v.fixed), seatOf);
+      const proven = fixedSeats>avail.length;
+      let fix = null;
+      const editable = vs.filter(v=>(v.fixed || v.special) && seatOf(v)>0).sort((a,b)=>seatOf(b)-seatOf(a))[0];
+      if(editable) fix = {type:'seatDown', pool:pool.id, overrideId:editable.fixed ? editable.overrideId : null, special:editable.fixed ? null : editable.special, to:Math.max(0, seatOf(editable)-short)};
+      lines.push({key:'xPoolDayShort', scope:'day', pool:pool.id, date:iso, short, need:needShown, avail:availShown, who, proven, fix, args:[poolName(pool), short, iso, needShown, availShown, who]});
+    }
+    const hi = sum(members, p=>cap.get(p.id));
+    if(seatsTotal>hi){
+      lines.push({key:'xPoolSeatsHigh', scope:'window', pool:pool.id, short:seatsTotal-hi, need:seatsTotal, avail:hi, who:[], proven:exactMode || hi===0, fix:null, args:[poolName(pool), seatsTotal, hi]});
+    }
+  }
+  return lines;
 }
 
 function preflightPlan(info, plan){
@@ -239,19 +291,19 @@ function preflightPlan(info, plan){
       if(exactZero || !cands.some(ok)) add('xDayRuleNone', [wdName(wdOf(o)), t(rule)], {rules:exactZero ? [rule, 'vol.exact'] : [rule], fix:{type:'dayPrefer', wd:wdOf(o), field}});
     }
   }
-  if(plan && pools.every(pl=>!Object.keys(pl.byCategory||{}).length) && !App.data.facilities.some(f=>f.seats)){
-    const exactProof = volume.mode==='exact' && !plan.visits.some(v=>v.auto===false || v.seats) && !App.data.facilities.some(f=>f.seats);
-    const layout = layoutDemand(plan);
-    for(const pl of pools){
-      const members = activePeople().filter(p=>p.pool===pl.id);
-      const layoutSeats = sum([...layout.values()], d=>d[pl.id]||0);
-      const exactSeats = (volume.exact.basic|0)*seatsFor(pl, 'basic') + (volume.exact.contracted|0)*seatsFor(pl, 'contracted');
-      const hi = sum(members, p=>Math.min((bounds.get(p.id)||{hi:Infinity}).hi, cap.get(p.id)==null ? Infinity : cap.get(p.id)));
-      const lo = sum(members, p=>(bounds.get(p.id)||{lo:0}).lo);
-      if(exactProof ? exactSeats>hi : (hi===0 && layoutSeats>0)) add('xPoolSeatsHigh', [poolName(pl), exactProof ? exactSeats : layoutSeats, hi]);
-      else if(layoutSeats>hi) warn('xPoolSeatsHigh', [poolName(pl), layoutSeats, hi]);
-      if(exactProof && exactSeats<lo) add('xPoolSeatsLow', [poolName(pl), exactSeats, lo]);
-      else if(layoutSeats<lo) warn('xPoolSeatsLow', [poolName(pl), layoutSeats, lo]);
+  if(plan){
+    for(const ln of explainSeats(plan, win)) if(ln.scope==='window') (ln.proven ? add : warn)(ln.key, ln.args, {people:[]});
+    if(pools.every(pl=>!Object.keys(pl.byCategory||{}).length) && !App.data.facilities.some(f=>f.seats)){
+      const exactProof = volume.mode==='exact' && !plan.visits.some(v=>v.auto===false || v.seats) && !App.data.facilities.some(f=>f.seats);
+      const layout = layoutDemand(plan);
+      for(const pl of pools){
+        const members = activePeople().filter(p=>p.pool===pl.id);
+        const layoutSeats = sum([...layout.values()], d=>d[pl.id]||0);
+        const exactSeats = (volume.exact.basic|0)*seatsFor(pl, 'basic') + (volume.exact.contracted|0)*seatsFor(pl, 'contracted');
+        const lo = sum(members, p=>(bounds.get(p.id)||{lo:0}).lo);
+        if(exactProof && exactSeats<lo) add('xPoolSeatsLow', [poolName(pl), exactSeats, lo]);
+        else if(layoutSeats<lo) warn('xPoolSeatsLow', [poolName(pl), layoutSeats, lo]);
+      }
     }
   }
 
@@ -525,8 +577,8 @@ function solveTeams(plan, budget, rnd, opts){
       return u;
     };
     const px = pick.st.x;
-    const rule = genderRuleFor(px.f, px.kind);
-    const nSize = teamSizeFor(px.kind, px.f);
+    const rule = genderRuleFor(px.f, px.kind, px.v.rules);
+    const nSize = Math.max(0, teamSizeFor(px.kind, px.f) - visitPooledGuests(px.v));
     const nowG = rule ? teamGender(teamOf(pick.st)) : null;
     const remainingTotal = rule ? sum(pick.st.groups, g=>g.seats-g.chosen.length) : 0;
     const genderPen = c=>{

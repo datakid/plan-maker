@@ -85,7 +85,13 @@ function lvOf(id){
   const spec = ruleSpec(id);
   const set = S();
   const own = set.lv && set.lv[id];
-  return normLv(own, spec ? spec.def : null, spec);
+  const base = normLv(own, spec ? spec.def : null, spec);
+  if(id==='vol.everyDay'){
+    const u = set.volume && set.volume.useAllDays;
+    if(u==='prefer') return mkLv('prefer', base.level==='prefer' ? base.w : 5);
+    if(u==='must') return mkLv('must', base.w);
+  }
+  return base;
 }
 
 function goalRuleId(g){ return GOAL_RULE[g.type] || 'goal.cover'; }

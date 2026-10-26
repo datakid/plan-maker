@@ -10,12 +10,10 @@ function planWindow(){
 
 function visitKindOf(f){ const k = facilityKind(f); return k==='contracted' ? 'contracted' : 'basic'; }
 
+function fixedFromRequest(r){ return {o:r.ref, f:r.f, kind:r.kind, ord:r.window.lo, people:r.people, auto:r.auto, request:r}; }
+
 function fixedVisitsFor(win){
-  return overridesIn(win.start, win.end).map(o=>{
-    const f = facilityById(o.facilityId);
-    const people = o.people.filter(id=>{ const p = personById(id); return p && !p.retired; });
-    return {o, f, kind:visitKindOf(f), ord:ordOf(o.date), people, auto: o.fill || !people.length};
-  });
+  return compileRequests(win).list.filter(r=>r.source==='fixed').map(fixedFromRequest);
 }
 
 function capHit(caps, f){ return caps.find(c=>c.must && c.left<=0 && inScope(f, c.scope)); }
@@ -116,7 +114,7 @@ function selectUnits(win, fixed, demand, placed){
 function lastIdxBy(days, dl){ let k = -1; for(let i=0;i<days.length;i++) if(days[i]<=dl) k = i; return k; }
 function firstIdxFrom(days, lo){ for(let i=0;i<days.length;i++) if(days[i]>=lo) return i; return days.length; }
 
-function generatePlan(opts){
+function generatePlanOnce(opts){
   opts = opts || {};
   const genStart = Date.now();
   const prog = (stage, pct)=>{ if(opts.onProgress) opts.onProgress(stage, pct); };
@@ -129,7 +127,9 @@ function generatePlan(opts){
   if(!days.length) return {error:'noWorkdays'};
   const N = days.length;
   const dayIdx = new Map(days.map((o,i)=>[o,i]));
-  const fixed = fixedVisitsFor(win).filter(x=>dayIdx.has(x.ord));
+  const reqSet = compileRequests(win);
+  const requests = reqSet.list.filter(r=>r.source!=='fixed' || dayIdx.has(r.window.lo));
+  const fixed = requests.filter(r=>r.source==='fixed').map(fixedFromRequest);
   const diags = [];
   const ctx = makeCtx(win.start);
   const load = new Array(N).fill(0);
@@ -155,18 +155,6 @@ function generatePlan(opts){
     const list = facilityDays.get(f.id); const i = list.indexOf(d); if(i>=0) list.splice(i, 1);
   };
   const visits = [];
-  for(const fx of fixed){
-    const d = dayIdx.get(fx.ord);
-    const byPool = {};
-    for(const id of fx.people){ const p = personById(id); if(p) byPool[p.pool] = (byPool[p.pool]||0)+1; }
-    for(const pl of set.pools) byPool[pl.id] = plannedSeats(fx.o.seats, pl, fx.kind, fx.f, fx.auto, byPool[pl.id]);
-    occupy(d, fx.f, fx.kind, byPool);
-    for(const id of fx.people){
-      if((ctx.dayUsed.get(fx.ord)||new Set()).has(id)) diags.push({sev:'warn', key:'dFixedTwice', args:[(personById(id)||{}).name||'?', fx.o.date]});
-      ctxTally(ctx, id, fx.ord, fx.f, 1);
-    }
-    visits.push({id:uid('v'), d, date:fx.o.date, facilityId:fx.f.id, kind:fx.kind, team:{}, open:{}, fixed:true, overrideId:fx.o.id, preset:fx.people, auto:fx.auto, seats:fx.o.seats||null, only:fx.o.only||[], never:fx.o.never||[], window:{from:fx.o.date, to:fx.o.date}, why:Object.assign({fixed:true}, facilityScore(fx.f, win.start))});
-  }
 
   const dayRulesOk = (d)=>{
     for(const r of hardRules) if(ruleBreaksOn({minRest:r.minRest, maxRun:r.maxRun, from:null, to:null}, occ, days[d])) return false;
@@ -178,51 +166,74 @@ function generatePlan(opts){
     return m*activitySoftDayPenalty(days[d]);
   };
 
-  const specialsReq = specialRequests(win);
-  diags.push(...specialsReq.diags);
-  const specialOk = (s, d)=>{
-    const ord = days[d];
-    if(ord<s.lo || ord>s.hi || !normalWorkday(ord)) return false;
+  const sen = set.seniority;
+  const seniorDays = new Map();
+  const seniorNeeded = f=>sen.on && seniorRequired() && (f.importance||0) >= sen.threshold;
+  const seniorOkOn = (f, kind, d)=>{
+    if(!seniorNeeded(f)) return true;
+    let key = f.id+'|'+kind;
+    if(!seniorDays.has(key)){
+      const q = activePeople().filter(p=>skillOf(p, kind, f.category) >= (f.importance||0) && !(p.blocked||[]).includes(f.id));
+      const ds = new Set();
+      for(let i=0;i<N;i++) if(q.some(p=>personAvailable(p, days[i]))) ds.add(i);
+      seniorDays.set(key, ds);
+    }
+    const ds = seniorDays.get(key);
+    return ds.size===0 || ds.has(d);
+  };
+
+  function canPlace(u, d, ignoreDeadline){
+    const ord = days[d], c = dayCfg(ord);
+    if(!normalWorkday(ord)) return false;
+    if(u.ordLo!=null && (ord<u.ordLo || ord>u.ordHi)) return false;
+    if(!ignoreDeadline && u.limit!=null && d>u.limit) return false;
+    if(u.lo!=null && !ignoreDeadline && d<u.lo) return false;
+    if(u.f.weekdays && u.f.weekdays.length && !u.f.weekdays.includes(wdOf(ord))) return false;
+    if(c.only && c.only.length && !c.only.includes(u.f.category)) return false;
     if(load[d] >= dayCap(ord)) return false;
     if(perWeek && (weekLoad.get(weekKey(ord))||0) >= perWeek) return false;
-    if(s.f.weekdays && s.f.weekdays.length && !s.f.weekdays.includes(wdOf(ord))) return false;
-    const dc = dayCfg(ord);
-    if(dc.only && dc.only.length && !dc.only.includes(s.f.category)) return false;
-    if((facilityDays.get(s.f.id)||[]).includes(d)) return false;
+    for(const pl of set.pools){ const need = u.seatMap ? (u.seatMap[pl.id]||0) : seatsForF(pl, u.kind, u.f); if((seatUse[d][pl.id]||0) + need > (avail[d][pl.id]||0)) return false; }
+    const fd = facilityDays.get(u.f.id);
+    if(fd && fd.includes(d)) return false;
     if(!dayRulesOk(d)) return false;
-    const byPool = {};
-    for(const id of s.people){
-      const p = personById(id);
-      if(hardOk(p, ord, s.f, ctx)) return false;
-      byPool[p.pool] = (byPool[p.pool]||0)+1;
+    if(u.people) for(const id of u.people){ const p = personById(id); if(p && hardOk(p, ord, u.f, ctx)) return false; }
+    if(!u.request && !seniorOkOn(u.f, u.kind, d)) return false;
+    return true;
+  }
+  const requestUnit = r=>({f:r.f, kind:r.kind, seatMap:r.seats, people:r.people, ordLo:r.window.lo, ordHi:r.window.hi, request:true});
+  const placeRequest = (r, d, copy)=>{
+    const iso = isoOf(days[d]);
+    occupy(d, r.f, r.kind, r.seats);
+    for(const id of r.people){
+      if(r.source==='fixed' && (ctx.dayUsed.get(days[d])||new Set()).has(id)) diags.push({sev:'warn', key:'dFixedTwice', args:[(personById(id)||{}).name||'?', iso]});
+      ctxTally(ctx, id, days[d], r.f, 1);
     }
-    for(const pl of set.pools){
-      const need = plannedSeats(s.g.seats, pl, s.kind, s.f, s.auto, byPool[pl.id]);
-      if((seatUse[d][pl.id]||0) + need > (avail[d][pl.id]||0)) return false;
-    }
-    return byPool;
+    const base = {id:uid('v'), d, date:iso, facilityId:r.f.id, kind:r.kind, team:{}, open:{}, preset:r.people, auto:r.auto, seats:r.ref.seats||null, only:r.ref.only||[], never:r.ref.never||[], rules:r.ref.rules||null, guests:(r.ref.guests||[]).slice()};
+    if(r.source==='fixed') visits.push(Object.assign(base, {fixed:true, overrideId:r.ref.id, window:{from:r.ref.date, to:r.ref.date}, why:Object.assign({fixed:true}, r.mergedFrom && r.mergedFrom.length>1 ? {merged:r.mergedFrom} : {}, facilityScore(r.f, win.start))}));
+    else visits.push(Object.assign(base, {special:r.ref.id, window:{from:r.ref.from||null, to:r.ref.to||null}, why:Object.assign({special:r.ref.id, tier:r.tier, goals:r.mergedFrom && r.mergedFrom.length>1 ? r.mergedFrom.slice() : [r.ref.id]}, facilityScore(r.f, win.start))}));
   };
+  let fixedForced = 0;
+  for(const r of requests.filter(r=>r.source==='fixed')){
+    const d = dayIdx.get(r.window.lo);
+    if(!canPlace(requestUnit(r), d, false)) fixedForced++;
+    placeRequest(r, d, 0);
+  }
+  diags.push(...reqSet.diags);
   const placedSpecials = [];
-  const specials = specialsReq.list.slice().sort((a,b)=>a.tier-b.tier || (a.hi-a.lo)-(b.hi-b.lo) || b.people.length-a.people.length);
-  const copiesBy = new Map();
-  for(const s of specials) copiesBy.set(s.g.id, (copiesBy.get(s.g.id)||0)+1);
-  for(const s of specials){
-    const idx = []; for(let d=0; d<N; d++) if(days[d]>=s.lo && days[d]<=s.hi) idx.push(d);
-    const total = copiesBy.get(s.g.id)||1;
-    const target = idx.length ? idx[Math.min(idx.length-1, Math.floor((s.copy+0.5)*idx.length/total))] : 0;
-    let best = -1, bestPools = null, bestScore = -Infinity;
+  const specials = requestCopies(requests.filter(r=>r.source==='special')).sort((a,b)=>a.r.tier-b.r.tier || (a.r.window.hi-a.r.window.lo)-(b.r.window.hi-b.r.window.lo) || b.r.people.length-a.r.people.length);
+  for(const {r, copy} of specials){
+    const idx = []; for(let d=0; d<N; d++) if(days[d]>=r.window.lo && days[d]<=r.window.hi) idx.push(d);
+    const target = idx.length ? idx[Math.min(idx.length-1, Math.floor((copy+0.5)*idx.length/r.copies))] : 0;
+    const u = requestUnit(r);
+    let best = -1, bestScore = -Infinity;
     for(const d of idx){
-      const pools = specialOk(s, d); if(!pools) continue;
+      if(!canPlace(u, d, false)) continue;
       const sc = -Math.abs(d-target) - load[d]*0.5;
-      if(sc>bestScore){ bestScore = sc; best = d; bestPools = pools; }
+      if(sc>bestScore){ bestScore = sc; best = d; }
     }
-    if(best<0){ diags.push({sev:s.tier===0?'warn':'info', key:'dSpecialNoDay', args:[goalTitle(s.g)]}); continue; }
-    for(const pl of set.pools) bestPools[pl.id] = plannedSeats(s.g.seats, pl, s.kind, s.f, s.auto, bestPools[pl.id]);
-    occupy(best, s.f, s.kind, bestPools);
-    const iso = isoOf(days[best]);
-    for(const id of s.people) ctxTally(ctx, id, days[best], s.f, 1);
-    placedSpecials.push({f:s.f, ord:days[best], gid:s.g.id, kind:s.kind});
-    visits.push({id:uid('v'), d:best, date:iso, facilityId:s.f.id, kind:s.kind, team:{}, open:{}, special:s.g.id, preset:s.people, auto:s.auto, seats:s.g.seats||null, only:s.g.only||[], never:s.g.never||[], window:{from:s.g.from||null, to:s.g.to||null}, why:Object.assign({special:s.g.id, tier:s.tier, goals:[s.g.id]}, facilityScore(s.f, win.start))});
+    if(best<0){ diags.push({sev:r.tier===0?'warn':'info', key:'dSpecialNoDay', args:[goalTitle(r.ref)]}); continue; }
+    placeRequest(r, best, copy);
+    placedSpecials.push({f:r.f, ord:days[best], gid:r.ref.id, kind:r.kind});
   }
 
   const demand = buildDemand(win, fixed, placedSpecials);
@@ -248,38 +259,6 @@ function generatePlan(opts){
   const copiesOf = new Map();
   for(const u of sel.units) copiesOf.set(u.f.id, (copiesOf.get(u.f.id)||0)+1);
 
-  const sen = set.seniority;
-  const seniorDays = new Map();
-  const seniorNeeded = f=>sen.on && seniorRequired() && (f.importance||0) >= sen.threshold;
-  const seniorOkOn = (f, kind, d)=>{
-    if(!seniorNeeded(f)) return true;
-    let key = f.id+'|'+kind;
-    if(!seniorDays.has(key)){
-      const q = activePeople().filter(p=>skillOf(p, kind, f.category) >= (f.importance||0) && !(p.blocked||[]).includes(f.id));
-      const ds = new Set();
-      for(let i=0;i<N;i++) if(q.some(p=>personAvailable(p, days[i]))) ds.add(i);
-      seniorDays.set(key, ds);
-    }
-    const ds = seniorDays.get(key);
-    return ds.size===0 || ds.has(d);
-  };
-
-  function canPlace(u, d, ignoreDeadline){
-    const ord = days[d], c = dayCfg(ord);
-    if(!normalWorkday(ord)) return false;
-    if(!ignoreDeadline && u.limit!=null && d>u.limit) return false;
-    if(u.lo!=null && !ignoreDeadline && d<u.lo) return false;
-    if(u.f.weekdays && u.f.weekdays.length && !u.f.weekdays.includes(wdOf(ord))) return false;
-    if(c.only && c.only.length && !c.only.includes(u.f.category)) return false;
-    if(load[d] >= dayCap(ord)) return false;
-    if(perWeek && (weekLoad.get(weekKey(ord))||0) >= perWeek) return false;
-    for(const pl of set.pools){ const need = seatsForF(pl, u.kind, u.f); if((seatUse[d][pl.id]||0) + need > (avail[d][pl.id]||0)) return false; }
-    const fd = facilityDays.get(u.f.id);
-    if(fd && fd.includes(d)) return false;
-    if(!dayRulesOk(d)) return false;
-    if(!seniorOkOn(u.f, u.kind, d)) return false;
-    return true;
-  }
   function dayPref(u, d){
     const ord = days[d], c = dayCfg(ord);
     let m = 1;
@@ -459,29 +438,33 @@ function generatePlan(opts){
     return res;
   };
   const flowRes = flowStage();
-  flowInfo.stage = flowRes ? {assigned:flowRes.assign.size, flow:flowRes.flow, lowerMet:flowRes.lowerMet} : null;
+  flowInfo.stage = flowRes ? {assigned:flowRes.assign.size, flow:flowRes.flow, lowerMet:flowRes.lowerMet, fixedForced} : null;
   if(flowRes){
     const fu = flowRes.units;
     const order = [...flowRes.assign.entries()].sort((a, b)=>a[1]-b[1] || (fu[a[0]].tier-fu[b[0]].tier));
-    const mark = visits.length;
     const done = [];
-    let clean = true;
+    let rolledBackUnits = 0;
+    const partial = opts.flowPartial!==false;
+    const mark = visits.length;
     for(const [i, d] of order){
       const u = fu[i];
-      if(!canPlace(u, d, false)){ clean = false; break; }
+      if(!canPlace(u, d, false)){
+        rolledBackUnits++;
+        if(partial) continue;
+        rolledBackUnits = order.length;
+        for(let k=visits.length-1; k>=mark; k--){ const v = visits[k]; unoccupy(v.d, facilityById(v.facilityId), v.kind); }
+        visits.length = mark;
+        done.length = 0;
+        break;
+      }
       place(u, d, false);
       done.push(u);
     }
-    if(clean){
-      for(const u of flowRes.freeSeq){ const qi = queue.indexOf(u); if(qi>=0) queue.splice(qi, 1); }
-      for(const u of done){ const qi = queue.indexOf(u); if(qi>=0) queue.splice(qi, 1); if(u.cand && !sel.picked.has(u.f.id)) sel.picked.set(u.f.id, 1); }
-      for(const u of flowRes.freeSeq) if(!done.includes(u)) queue.push(u);
-      if(done.length) last = visits[visits.length-1].d;
-    } else {
-      for(let k=visits.length-1; k>=mark; k--){ const v = visits[k]; unoccupy(v.d, facilityById(v.facilityId), v.kind); }
-      visits.length = mark;
-      flowInfo.stage.rolledBack = true;
-    }
+    for(const u of flowRes.freeSeq){ const qi = queue.indexOf(u); if(qi>=0) queue.splice(qi, 1); }
+    for(const u of done){ const qi = queue.indexOf(u); if(qi>=0) queue.splice(qi, 1); if(u.cand && !sel.picked.has(u.f.id)) sel.picked.set(u.f.id, 1); }
+    for(const u of flowRes.freeSeq) if(!done.includes(u)) queue.push(u);
+    if(done.length) last = visits[visits.length-1].d;
+    flowInfo.stage.rolledBackUnits = rolledBackUnits;
   }
 
   if(everyDay){
@@ -615,13 +598,13 @@ function generatePlan(opts){
     id: uid('plan'), cycle: (App.data.history.lastCycle||0)+1, createdAt: Date.now(),
     approved:false, stale:false, start:isoOf(win.start), end:isoOf(win.end), days: days.map(isoOf),
     goal:set.period.goal, requested,
-    visits: visits.map(v=>({id:v.id, date:v.date, facilityId:v.facilityId, kind:v.kind, team:v.team, open:v.open, why:v.why, moved:!!v.moved, fixed:!!v.fixed, overrideId:v.overrideId||null, special:v.special||null, seats:v.seats||null, only:v.only||[], never:v.never||[], late:!!v.late,
+    visits: visits.map(v=>({id:v.id, date:v.date, facilityId:v.facilityId, kind:v.kind, team:v.team, open:v.open, why:v.why, moved:!!v.moved, fixed:!!v.fixed, overrideId:v.overrideId||null, special:v.special||null, seats:v.seats||null, only:v.only||[], never:v.never||[], rules:v.rules||null, guests:v.guests||[], late:!!v.late,
       locked:v.preset ? v.preset.slice() : null, window:v.window||null, auto:v.preset ? !!v.auto : true})),
     carryover: sel.carry,
     goalReport: demand.report,
     genDiags: diags
   };
-  plan.targets = {mode:set.volume.mode==='fixed' ? 'exact' : set.volume.mode, basic:win.prev.basic, contracted:win.prev.contracted, share:win.prev.total ? win.prev.basic/win.prev.total : set.volume.share, quota:set.volume.mode==='quota' ? Object.assign({}, set.volume.quotas || {}) : null, pinned:schedulableFacilities().filter(f=>f.pinned).map(f=>f.id)};
+  plan.targets = {mode:set.volume.mode==='fixed' ? 'exact' : set.volume.mode, upTo:set.volume.mode==='exact' && set.volume.exactMode==='upTo', basic:win.prev.basic, contracted:win.prev.contracted, share:win.prev.total ? win.prev.basic/win.prev.total : set.volume.share, quota:set.volume.mode==='quota' ? Object.assign({}, set.volume.quotas || {}) : null, pinned:schedulableFacilities().filter(f=>f.pinned).map(f=>f.id)};
   const info = {win, fixed, placed:placedSpecials, demand, sel};
   const draftPlan = plan;
   const pre = preflightPlan(info, plan);
@@ -659,7 +642,7 @@ function generatePlan(opts){
     const left = cap-(Date.now()-genStart);
     if(left<=40 && val.softScore>0 && !opts.iters) search = Object.assign({}, search || {}, {truncated:true});
     if(left>40 && val.softScore>0){
-      const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:opts.iters || Math.max(40, Math.min(200+60*plan.visits.length, Math.floor(capBase/8))), onProgress:p=>prog('polish', 0.6+0.3*p)});
+      const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:opts.iters || Math.max(40, Math.min(200+60*plan.visits.length, Math.floor(capBase/4))), onProgress:p=>prog('polish', 0.6+0.3*p)});
       search = Object.assign({}, search || {}, {stage:(search && search.stage) || 'lns', polish:{iters:a.info.iters, ms:a.info.ms, accepted:a.info.accepted, byMove:a.info.byMove, truncated:!!a.info.truncated}, seed:a.info.seed, truncated:!!((search && search.truncated) || a.info.truncated)});
       if(a.improved){
         const sa = makeState(a.plan), sb = makeState(plan);
@@ -681,6 +664,47 @@ function generatePlan(opts){
   plan.status = status;
   plan.conflicts = pre.conflicts;
   return {plan, status, conflicts:pre.conflicts, search};
+}
+
+function continueSearch(opts){
+  const base = opts.continueFrom;
+  const tScale = opts.timeScale==null ? 4 : opts.timeScale;
+  if(!base || !base.visits) return {error:'fail'};
+  const prev = (base.gen && base.gen.search) || {};
+  const round = (prev.rounds || 0)+1;
+  const seed = (((prev.seed!=null ? prev.seed : (opts.seed!=null ? opts.seed : 20260101))>>>0)+Math.imul(round, 0x9E3779B1))>>>0;
+  const span = base.days.length;
+  const bud = span<=7 ? {iters:6000, ms:2000} : (span<=31 ? {iters:16000, ms:6000} : {iters:30000, ms:15000});
+  const t0 = Date.now();
+  const a = lnsPlan(base, null, {seed, ms:opts.ms || bud.ms*tScale/4, iters:opts.iters || bud.iters});
+  const bv = validatePlan(base), av = validatePlan(a.plan);
+  const better = av.hardScore<bv.hardScore || (av.hardScore===bv.hardScore && av.softScore<bv.softScore);
+  const plan = better ? a.plan : clonePlan(base);
+  const val = better ? av : bv;
+  const conflicts = base.conflicts || [];
+  const status = val.hard>0 ? (conflicts.length ? 'infeasible' : 'exhausted') : 'valid';
+  const search = Object.assign({}, prev, {rounds:round, seed:a.info.seed, truncated:!!a.info.truncated, iters:(prev.iters||0)+a.info.iters, ms:(prev.ms||0)+(Date.now()-t0),
+    score:{hard:val.hardScore, soft:val.softScore}, found:val.hard===0 ? (prev.found || 'lns') : null, optimal:false, lowerBound:null});
+  if(better && !opts.skipExplain && plan.visits.length) plan.why = explainPlan(plan, {ms:Math.max(120, (span<=7 ? 400 : (span<=31 ? 1500 : 5000))*0.2*tScale), seed:opts.seed});
+  plan.gen = Object.assign({}, base.gen, {search, status, conflicts});
+  plan.status = status;
+  return {plan, status, conflicts, search};
+}
+
+function generatePlan(opts){
+  opts = opts || {};
+  if(opts.continueFrom) return continueSearch(opts);
+  const first = generatePlanOnce(Object.assign({}, opts, {flowPartial:true}));
+  const lay = first.plan && first.plan.gen && first.plan.gen.layout;
+  if(first.error || first.status==='valid' || !lay || !lay.rolledBackUnits) return first;
+  const second = generatePlanOnce(Object.assign({}, opts, {flowPartial:false}));
+  if(second.error || !second.plan) return first;
+  const a = first.search.score, b = second.search.score;
+  const better = b.hard<a.hard || (b.hard===a.hard && b.soft<a.soft);
+  const pick = better ? second : first;
+  const pl = pick.plan.gen && pick.plan.gen.layout;
+  if(pl) pl.retriedAllOrNothing = better ? 'kept' : 'discarded';
+  return pick;
 }
 
 function goalsPreview(){
