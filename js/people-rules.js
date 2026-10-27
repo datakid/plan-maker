@@ -5,7 +5,7 @@ function scopeOrNull(sc){ return sc && sc.kind && sc.kind!=='all' ? sc : null; }
 function inScopeOpt(f, scope){ return !scope || inScope(f, scope); }
 
 function compilePeopleRules(){
-  const deny = new Map(), counts = new Map(), tgBy = new Map(), list = [], together = [];
+  const deny = new Map(), counts = new Map(), tgBy = new Map(), list = [], together = [], seps = [];
   const active = new Set(activePeople().map(p=>p.id));
   const push = (m, k, v)=>{ if(!m.has(k)) m.set(k, []); m.get(k).push(v); };
   const addCount = (pid, c)=>{ const r = Object.assign({pid, key:c.id+'|'+pid}, c); push(counts, pid, r); list.push(r); return r; };
@@ -23,6 +23,9 @@ function compilePeopleRules(){
         if(g.rel==='never' || g.rel==='only') push(deny, pid, {gid:g.id, scope:g.scope, invert:g.rel==='only', must});
         else addCount(pid, {id:g.id, gid:g.id, src:'goal', scope:scopeOrNull(g.scope), min:g.rel==='atMost' ? null : g.n, max:g.rel==='atLeast' ? null : (g.rel==='between' ? Math.max(g.n, g.n2==null ? g.n : g.n2) : g.n), must});
       }
+    } else if(g.type==='separate'){
+      if(!separateReady(g)) continue;
+      seps.push({id:g.id, gid:g.id, a:g.scope, b:g.scope2, must});
     } else if(g.type==='together'){
       if(!g.a || !g.b || g.a===g.b || !active.has(g.a) || !active.has(g.b)) continue;
       const r = {id:g.id, gid:g.id, a:g.a, b:g.b, scope:scopeOrNull(g.scope), rel:g.rel, pct:g.pct, must};
@@ -32,7 +35,7 @@ function compilePeopleRules(){
     }
   }
   return {
-    list, together,
+    list, together, seps,
     countsOf: pid=>counts.get(pid) || EMPTY_LIST,
     togetherOf: pid=>tgBy.get(pid) || EMPTY_LIST,
     denied(pid, f){

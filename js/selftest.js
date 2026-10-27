@@ -93,7 +93,7 @@ window.addEventListener('load', async ()=>{
       step('tab '+tab, ()=>{ goTab(tab); return $('#page').children.length>0 && !$('#page').textContent.includes('undefined') && noOverflow(); });
     }
     step('rules tab: goals section has people group', ()=>{ goTab('rules'); return $('#rule-goals') && $('#rule-goals').textContent.includes(t('gGroupPeople')) && $$('#rule-goals .gm-row.people').length===6; });
-    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===8 ? '8 types' : false; });
+    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===9 ? '9 types' : false; });
     step('add each goal type via menu', ()=>{ const n0 = s.goals.length; for(let i=0;i<7;i++){ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); $$('.pop .menu-item')[i].click(); } return s.goals.length===n0+7; });
     step('unconfigured new goals are inert', ()=>withFresh(()=>{
       const before = generatePlan().plan.visits.length;

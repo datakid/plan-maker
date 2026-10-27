@@ -54,7 +54,7 @@ function ScopePicker(scope, onChange, opts){
   return box;
 }
 
-const GOAL_KEY = {cover:'Cover', atLeast:'AtLeast', atMost:'AtMost', maxGap:'MaxGap', person:'Person', together:'Together', special:'Special', pattern:'Pattern'};
+const GOAL_KEY = {cover:'Cover', atLeast:'AtLeast', atMost:'AtMost', maxGap:'MaxGap', person:'Person', together:'Together', separate:'Separate', special:'Special', pattern:'Pattern'};
 function goalTypeLabel(type){ return t('gType'+GOAL_KEY[type]); }
 function goalTypeHint(type){ return t('gHint'+GOAL_KEY[type]); }
 
@@ -90,9 +90,20 @@ function goalStatusText(g){
   if(g.type==='maxGap') return t('gStGap', st.late, st.total);
   if(g.type==='person') return st.people ? t('ovPeopleN', st.people) : t('gNeedPeople');
   if(g.type==='together') return st.ok ? '' : t('gNeedPair');
+  if(g.type==='separate') return st.ok ? '' : t('gNeedSeparate');
   if(g.type==='special') return st.ok ? '' : t('ovPickFacility');
   if(g.type==='pattern') return st.people ? t('ovPeopleN', st.people) : t('gNeedPeople');
   return t('gStPool', st.total);
+}
+
+function WithinEditor(g, upd, paint){
+  const w = g.within;
+  const set = next=>{ g.within = cleanWithin(next); upd(); paint(); };
+  const unit = w ? w.unit : 'any';
+  return el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
+    Seg([{value:'any',label:t('gWithinAny')},{value:'days',label:t('gUnit_days')},{value:'weeks',label:t('gUnit_weeks')},{value:'months',label:t('gUnit_months')}], unit, v=>set(v==='any' ? null : {n:w ? w.n : 1, unit:v}), {cls:'sm wrap-seg'}),
+    w ? Stepper(w.n, v=>set({n:v, unit:w.unit}), {min:1, max:w.unit==='days' ? 366 : (w.unit==='weeks' ? 52 : 12), sm:true}) : null
+  ]);
 }
 
 function goalFields(g, upd, paint){
@@ -116,6 +127,9 @@ function goalFields(g, upd, paint){
     out.push(row(t('gShare'), Slider(g.pct, v=>{ g.pct = v; upd(); }, {min:0, max:100, step:5, format:v=>v+'%'})));
     out.push(row(t('gCountWhere'), ScopePicker(g.scope, upd)));
     out.push(el('div', {class:'hint', style:{fontSize:'12px'}}, t('gTogetherHow')));
+  } else if(g.type==='separate'){
+    out.push(row(t('gSideA'), ScopePicker(g.scope, upd)));
+    out.push(row(t('gSideB'), ScopePicker(g.scope2, upd)));
   } else if(g.type==='pattern'){
     out.push(row(t('gWho'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
     out.push(PatternEditor(g.pattern, ()=>upd()));
@@ -124,6 +138,7 @@ function goalFields(g, upd, paint){
     out.push(row(t('ovFacility'), FacilitySelect(g.facilityId, v=>{ g.facilityId = v; upd(); paint(); })));
     out.push(row(t('gTimes'), Stepper(g.times, v=>{ g.times = v; upd(); }, {min:1, max:20, sm:true, unit:t('gPerPlan')})));
     out.push(row(t('gBetween'), el('div', {class:'row wrap', style:{gap:'6px'}}, [OptDate(g.from, v=>{ g.from = v; upd(); }, t('gPlanStart')), el('span', {class:'muted'}, '–'), OptDate(g.to, v=>{ g.to = v; upd(); }, t('gPlanEnd'))])));
+    out.push(row(t('gWithin'), WithinEditor(g, upd, paint)));
     out.push(row(t('ovPeople'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
     out.push(row(t('ovFill'), Switch(g.fill || !g.people.length, v=>{ g.fill = v; upd(); }, null, {disabled:!g.people.length})));
     for(const n of visitSpecFields(g, ()=>{ upd(); paint(); }, row)) out.push(n);
@@ -133,6 +148,7 @@ function goalFields(g, upd, paint){
       out.push(row(t('gTimes'), Stepper(g.times||1, v=>{ g.times = v; upd(); }, {min:1, max:6, sm:true})));
       out.push(row(t('gSince'), DateInput(g.since, v=>{ g.since = v; upd(); paint(); })));
       out.push(row(t('gBy'), OptDate(g.by, v=>{ g.by = v; upd(); }, t('gNoDeadline'))));
+      out.push(row(t('gWithin'), WithinEditor(g, upd, paint)));
       out.push(row(t('gRepeat'), Switch(!!g.repeat, v=>{ g.repeat = v; upd(); })));
     } else if(g.type==='atLeast' || g.type==='atMost'){
       out.push(row(t('gN'), Stepper(g.n||0, v=>{ g.n = v; upd(); }, {min:0, max:300, sm:true, unit:t('gPerPlan')})));

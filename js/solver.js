@@ -157,7 +157,9 @@ function genderDeficit(plan, availFn){
     }
     if(!staffed) continue;
     let can = false;
-    for(let m=lo;m<=hi && !can;m++) can = genderValid(rule, m, n-m, n);
+    const gg = teamGender([], v), nTot = n+visitPooledGuests(v);
+    if(gg.u>0) continue;
+    for(let m=lo;m<=hi && !can;m++) can = genderValid(rule, m+gg.m, n-m+gg.f, nTot);
     if(!can) total++;
   }
   return total;
@@ -578,8 +580,8 @@ function solveTeams(plan, budget, rnd, opts){
     };
     const px = pick.st.x;
     const rule = genderRuleFor(px.f, px.kind, px.v.rules);
-    const nSize = Math.max(0, teamSizeFor(px.kind, px.f) - visitPooledGuests(px.v));
-    const nowG = rule ? teamGender(teamOf(pick.st)) : null;
+    const nSize = teamSizeFor(px.kind, px.f);
+    const nowG = rule ? teamGender(teamOf(pick.st), px.v) : null;
     const remainingTotal = rule ? sum(pick.st.groups, g=>g.seats-g.chosen.length) : 0;
     const genderPen = c=>{
       if(!rule) return 0;

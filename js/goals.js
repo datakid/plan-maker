@@ -1,17 +1,18 @@
 const FACILITY_GOALS = ['cover','atLeast','atMost','maxGap'];
-const PEOPLE_GOALS = ['person','together','special','pattern'];
+const PEOPLE_GOALS = ['person','together','separate','special','pattern'];
 const GOAL_TYPES = FACILITY_GOALS.concat(PEOPLE_GOALS);
 const TOGETHER_RELS = ['atLeast','atMost'];
 
 function newGoal(type){
   const g = {id:uid('goal'), on:true, type, scope:{kind:'all', ids:[]}};
-  if(type==='cover') Object.assign(g, {times:1, since:todayISO(), by:null, repeat:true});
+  if(type==='cover') Object.assign(g, {times:1, since:todayISO(), by:null, repeat:true, within:null});
   if(type==='atLeast') Object.assign(g, {n:4, repeat:false});
   if(type==='atMost') Object.assign(g, {n:2, scope:{kind:'category', ids:[]}});
   if(type==='maxGap') Object.assign(g, {days:60});
   if(type==='person') Object.assign(g, {people:[], rel:'between', n:1, n2:2, scope:{kind:'all', ids:[]}});
   if(type==='together') Object.assign(g, {a:null, b:null, rel:'atLeast', pct:50});
-  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null, seats:null, only:[], never:[], rules:null, guests:[]});
+  if(type==='separate') Object.assign(g, {scope:{kind:'facility', ids:[]}, scope2:{kind:'facility', ids:[]}});
+  if(type==='special') Object.assign(g, {facilityId:null, people:[], fill:true, times:1, from:null, to:null, seats:null, only:[], never:[], rules:null, guests:[], within:null});
   if(type==='pattern') Object.assign(g, {people:[], pattern:{minRest:1, maxRun:null, cycle:null}, from:null, to:null});
   g.lv = ruleSpec(GOAL_RULE[type]).def ? mkLv(ruleSpec(GOAL_RULE[type]).def.level, ruleSpec(GOAL_RULE[type]).def.w) : mkLv('prefer', 5);
   Object.defineProperty(g, 'strict', {get(){ return this.lv && this.lv.level==='must' ? 'must' : 'try'; }, set(v){ this.lv = mkLv(v==='must' ? 'must' : 'prefer', this.lv ? this.lv.w : 5); }, enumerable:false, configurable:true});
@@ -27,6 +28,8 @@ function normalizeGoal(g){
   const base = newGoal(type);
   const out = Object.assign(base, g||{}, {type});
   out.scope = out.scope && out.scope.kind ? {kind:out.scope.kind, ids:Array.isArray(out.scope.ids) ? out.scope.ids.slice() : []} : {kind:'all', ids:[]};
+  out.scope2 = out.scope2 && out.scope2.kind ? {kind:out.scope2.kind, ids:Array.isArray(out.scope2.ids) ? out.scope2.ids.slice() : []} : (type==='separate' ? {kind:'facility', ids:[]} : undefined);
+  if(out.scope2===undefined) delete out.scope2;
   out.lv = normLv(out.lv, ruleSpec(goalRuleId(out)).def, ruleSpec(goalRuleId(out)));
   out.on = out.on!==false;
   const dflt = newGoal(type);
@@ -34,6 +37,7 @@ function normalizeGoal(g){
     out.times = cleanInt(out.times, 1, 50, 1);
     out.since = cleanIso(out.since, null);
     out.by = cleanIso(out.by, null);
+    out.within = cleanWithin(out.within);
     out.repeat = out.repeat!==false;
   }
   if(type==='atLeast'){ out.n = cleanInt(out.n, 0, 999, dflt.n); out.repeat = !!out.repeat; }
@@ -55,6 +59,7 @@ function normalizeGoal(g){
     out.fill = out.fill!==false;
     out.seats = cleanSeatMap(out.seats); out.only = cleanIdList(out.only); out.never = cleanIdList(out.never);
     out.rules = cleanVisitRules(out.rules); out.guests = cleanIdList(out.guests); out.dupChoice = out.dupChoice==='merge' || out.dupChoice==='keep' ? out.dupChoice : null;
+    out.within = cleanWithin(out.within);
     out.from = cleanIso(out.from, null);
     out.to = cleanIso(out.to, null);
     if(out.from && out.to && out.from>out.to){ const x = out.from; out.from = out.to; out.to = x; }
@@ -70,6 +75,29 @@ function normalizeGoal(g){
 }
 
 function newOverride(p){ return Object.assign({id:uid('ov'), on:true, date:todayISO(), facilityId:null, people:[], fill:false, note:'', seats:null, only:[], never:[], rules:null, guests:[]}, p||{}); }
+function cleanWithin(w){
+  if(!w || typeof w!=='object') return null;
+  const raw = Number(w.n);
+  if(!Number.isFinite(raw) || raw<1) return null;
+  const n = Math.min(366, Math.floor(raw));
+  return {n, unit:['days','weeks','months'].includes(w.unit) ? w.unit : 'weeks'};
+}
+
+function withinEndOrd(startOrd, w){
+  if(!w) return Infinity;
+  if(w.unit==='days') return startOrd + w.n - 1;
+  if(w.unit==='weeks') return startOrd + 7*w.n - 1;
+  const d = new Date(isoOf(startOrd)+'T00:00:00Z');
+  d.setUTCMonth(d.getUTCMonth() + w.n);
+  return ordOf(d.toISOString().slice(0, 10)) - 1;
+}
+
+function coverByOrd(g, startOrd){
+  const a = g.by ? ordOf(g.by) : Infinity, b = withinEndOrd(startOrd, g.within);
+  const m = Math.min(a, b);
+  return m===Infinity ? null : m;
+}
+
 function cleanVisitRules(r){
   if(!r || typeof r!=='object') return null;
   let gender = 'inherit';
@@ -111,6 +139,11 @@ function coverState(g, since){
 }
 function countWorkdays(a, b){ let n = 0; for(let o=a;o<=b;o++) if(isWorkday(o)) n++; return n; }
 
+function separateReady(g){
+  const has = sc=>sc && sc.kind && sc.kind!=='all' && (sc.ids||[]).length>0;
+  return has(g.scope) && has(g.scope2);
+}
+
 function goalStatusLine(g){
   if(g.type==='cover'){ const st = coverState(g); return {done:st.done, total:st.total}; }
   if(g.type==='maxGap'){
@@ -120,6 +153,7 @@ function goalStatusLine(g){
   }
   if(g.type==='person') return {people:liveIds(g.people).length, total:goalFacilities(g).length};
   if(g.type==='together') return {ok:!!(g.a && g.b && g.a!==g.b)};
+  if(g.type==='separate') return {ok:separateReady(g)};
   if(g.type==='special') return {ok:!!facilityById(g.facilityId)};
   if(g.type==='pattern') return {people:liveIds(g.people).length};
   return {total:goalFacilities(g).length};
@@ -127,7 +161,7 @@ function goalStatusLine(g){
 
 function specialWindow(g, win){
   const lo = Math.max(win.start, g.from ? ordOf(g.from) : win.start);
-  const hi = Math.min(win.end, g.to ? ordOf(g.to) : win.end);
+  const hi = Math.min(win.end, g.to ? ordOf(g.to) : win.end, withinEndOrd(win.start, g.within));
   return hi<lo ? null : {lo, hi};
 }
 
@@ -149,7 +183,7 @@ function findDuplicateRequests(win){
     items.push({source:'fixed', refId:o.id, facilityId:o.facilityId, lo:d, hi:d});
   }
   for(const g of S().goals.filter(g=>g.on && g.type==='special' && g.facilityId && facilityById(g.facilityId))){
-    const lo = Math.max(lo0, g.from ? ordOf(g.from) : -Infinity), hi = Math.min(hi0, g.to ? ordOf(g.to) : Infinity);
+    const lo = Math.max(lo0, g.from ? ordOf(g.from) : -Infinity), hi = Math.min(hi0, g.to ? ordOf(g.to) : Infinity, win ? withinEndOrd(win.start, g.within) : Infinity);
     if(hi<lo) continue;
     items.push({source:'special', refId:g.id, facilityId:g.facilityId, lo, hi});
   }
@@ -202,8 +236,9 @@ function buildDemand(win, fixed, placed){
       const sinceOrd = since ? ordOf(since) : null;
       const pending = facs.map(f=>({f, need:times-Math.min(times, base(f))})).filter(r=>r.need>0).sort((a,b)=>byScore(a.f, b.f));
       report[g.id] = {type:'cover', rolled, since};
-      if(g.by){
-        const by = ordOf(g.by);
+      const byOrd = coverByOrd(g, win.start);
+      if(byOrd!=null){
+        const by = byOrd;
         if(by>=win.start && by<=win.end){
           for(const r of pending) ob(g.id, r.f, goalStrict(g), r.need-preAt(r.f, sinceOrd, by), {kind:'cover', latest:by});
         } else if(by>win.end){
@@ -316,6 +351,8 @@ function buildDemand(win, fixed, placed){
     } else if(g.type==='together'){
       report[g.id] = {type:'together'};
       if(g.a && g.b && g.a!==g.b && g.rel==='atLeast' && g.pct>0 && !togetherSeatsPossible(g)) diags.push({sev:'warn', key:'dTogetherNoSeats', args:[goalTitle(g)]});
+    } else if(g.type==='separate'){
+      report[g.id] = {type:'separate'};
     } else if(g.type==='special'){
       report[g.id] = {type:'special', target:g.times||1};
     } else if(g.type==='pattern'){
@@ -331,6 +368,10 @@ function personNames(ids){
   return names.length>2 ? names.slice(0,2).join('، ')+' +'+(names.length-2) : names.join('، ');
 }
 function goalTitle(g){
+  const base = goalTitleBase(g);
+  return g.within && (g.type==='cover' || g.type==='special') ? base+' · '+t('gWithinTag', g.within.n, g.within.unit) : base;
+}
+function goalTitleBase(g){
   const sc = scopeLabel(g.scope);
   if(g.type==='cover') return t('gtCoverT', sc, g.times||1);
   if(g.type==='atLeast') return t('gtAtLeastT', g.n||0, sc);
@@ -338,6 +379,7 @@ function goalTitle(g){
   if(g.type==='maxGap') return t('gtMaxGapT', sc, g.days||0);
   if(g.type==='person') return t('gtPersonT', personNames(g.people), g.rel, g.n||0, g.scope && g.scope.kind!=='all' ? sc : '', g.n2||0);
   if(g.type==='together') return t('gtTogetherT', personNames([g.a]), personNames([g.b]), g.rel, g.pct||0, g.scope && g.scope.kind!=='all' ? sc : '');
+  if(g.type==='separate') return t('gtSeparateT', scopeLabel(g.scope), scopeLabel(g.scope2));
   if(g.type==='special'){ const f = facilityById(g.facilityId); return t('gtSpecialT', f ? f.name : '—', g.times||1); }
   if(g.type==='pattern') return t('gtPatternT', personNames(g.people), patternLabel(g.pattern));
   return sc;

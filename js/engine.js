@@ -237,9 +237,10 @@ function genderFeasible(rule, m, f, u, remaining, n){
   for(let add=0; add<=remaining; add++) if(genderValid(rule, m+add, f+remaining-add, n)) return true;
   return false;
 }
-function teamGender(ids){
+function teamGender(ids, v){
   let m=0, f=0, u=0;
   for(const id of ids){ const p = personById(id); if(!p || !p.gender) u++; else if(p.gender==='m') m++; else f++; }
+  if(v) for(const gid of (v.guests||[])){ const g = guestById(gid); if(!g || !g.pool) continue; if(g.gender==='m') m++; else if(g.gender==='f') f++; else u++; }
   return {m, f, u};
 }
 
@@ -275,12 +276,18 @@ function makeCtx(startOrd){
 
 function tallyCtx(rules){ return {assigned:{}, week:{}, q:{}, both:{}, dates:{}, far:{}, dayUsed:new Map(), rules, log:null, depth:0, prc:new Map(), fpv:{}, pairs:new Map(), carry:{}}; }
 
+function sepSide(r, f){
+  const a = inScope(f, r.a), b = inScope(f, r.b);
+  return a && !b ? 'a' : (b && !a ? 'b' : null);
+}
+
 function ctxTally(ctx, id, ord, f, d){
   ctx.assigned[id] = (ctx.assigned[id]||0)+d;
   const ds = ctx.dates[id] || (ctx.dates[id] = new Map());
   const n = (ds.get(ord)||0)+d; if(n>0) ds.set(ord, n); else ds.delete(ord);
   const wk = id+'|'+weekKey(ord); ctx.week[wk] = (ctx.week[wk]||0)+d;
   if(f) for(const r of ctx.rules.countsOf(id)) if(inScopeOpt(f, r.scope)) ctx.q[r.key] = (ctx.q[r.key]||0)+d;
+  if(f) for(const r of ctx.rules.seps){ const side = sepSide(r, f); if(side) ctx.q[r.id+'|'+side+'|'+id] = (ctx.q[r.id+'|'+side+'|'+id]||0)+d; }
   let du = ctx.dayUsed.get(ord);
   if(d>0){ if(!du){ du = new Set(); ctx.dayUsed.set(ord, du); } du.add(id); }
   else if(du){ if(!ds.has(ord)) du.delete(id); if(!du.size) ctx.dayUsed.delete(ord); }
@@ -365,6 +372,7 @@ function hardOk(p, ord, f, ctx, used){
   const ds = ctx.dates[p.id];
   if(ds) for(const r of ctxRulesOf(ctx, p).hard){ const b = ruleBreaksOn(r, ds, ord); if(b) return b; }
   if(ctx.rules.denied(p.id, f)==='must') return 'rule';
+  for(const r of ctx.rules.seps){ if(!r.must) continue; const side = sepSide(r, f); if(side && (ctx.q[r.id+'|'+(side==='a' ? 'b' : 'a')+'|'+p.id]||0)>0) return 'separate'; }
   for(const r of ctx.rules.countsOf(p.id)) if(r.must && r.max!=null && inScopeOpt(f, r.scope) && (ctx.q[r.key]||0) >= r.max) return 'quota';
   return null;
 }
@@ -481,7 +489,7 @@ function assignTeam(visit, ord, ctx, opts){
   for(const {pool, members} of poolsLive()){
     while(needLeft[pool.id]>0){
       const remaining = sum(Object.values(needLeft));
-      const g = teamGender(chosen);
+      const g = teamGender(chosen, visit);
       const hasSenior = chosen.some(id=>{ const p = personById(id); return p && qual(p); });
       let seniorOnly = false, bestEffort = false;
       if(needSenior && !hasSenior && remaining===1){
@@ -531,7 +539,7 @@ function assignTeam(visit, ord, ctx, opts){
         if(rule && unit.every(m=>m.gender)){
           let m2 = g.m, f2 = g.f;
           for(const m of unit){ if(m.gender==='m') m2++; else f2++; }
-          gOk = genderFeasible(rule, m2, f2, g.u, remaining-unit.length, n);
+          gOk = genderFeasible(rule, m2, f2, g.u, remaining-unit.length, n+visitPooledGuests(visit));
         }
         const key = ((ctx.assigned[p.id]||0) + (ctx.carry[p.id]||0) + 0.5) / (share * clamp(pref, 0.1, 10));
         const rank = terms.soft*2 + (gOk?0:1) + (bestEffort ? (100-skill)/1000 : 0);
@@ -591,9 +599,9 @@ function replaceInTeam(v, out, inn){
 function visitFlags(v){
   const f = facilityById(v.facilityId);
   const ids = uniqIds(visitTeamIds(v));
-  const kind = v.kind || visitKindOf(f), n = Math.max(0, teamSizeFor(kind, f) - visitPooledGuests(v)), rule = genderRuleFor(f, kind, v.rules);
-  const g = teamGender(ids);
-  const gender = rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n) ? 1 : 0;
+  const kind = v.kind || visitKindOf(f), n = teamSizeFor(kind, f), rule = genderRuleFor(f, kind, v.rules);
+  const g = teamGender(ids, v);
+  const gender = rule && g.u===0 && ids.length+visitPooledGuests(v)===n && !genderValid(rule, g.m, g.f, n) ? 1 : 0;
   const seniorLvl = seniorLevelFor(f, v.rules, true);
   let senior = 0;
   if(seniorLvl!=null && ids.length && !ids.some(id=>{ const p = personById(id); return p && skillOf(p, kind, f.category) >= seniorLvl; })) senior = 1;
@@ -675,7 +683,7 @@ function repairGender(visits, days, ctx){
 }
 
 function repairPeopleRules(visits, ctx){
-  if(!ctx.rules.list.some(r=>r.min!=null || r.max!=null) && !ctx.rules.together.length) return;
+  if(!ctx.rules.list.some(r=>r.min!=null || r.max!=null) && !ctx.rules.together.length && !ctx.rules.seps.length) return;
   const pools = S().pools;
   let score = violationScore(ctx);
   for(let pass=0; pass<6 && (score.hard>0 || score.soft>0); pass++){

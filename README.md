@@ -175,6 +175,13 @@ Iteration caps are primary and wall-clock caps are a safety cutoff. The polish u
 - **Explanations.** Seat shortages per day with reasons and fixes, and The equation card with copy and export.
 - Decisions, deviations and what is not done are in `docs/v5-notes.md`.
 
+## What changed in 5.1
+- **Keep places apart.** A new goal type: whoever visits one set of places in a plan does not visit another set in the same plan. Must or Prefer like every goal; enforced when teams are built (`hardOk`) and reported by the validator (`dSeparate`, rule `goal.separate`). A person fixed by you on both sides is an exception, not an error.
+- **First part of the plan.** Specials and cover goals take "within the first N days / weeks / months of the plan"; it resolves against each plan window, so the same setting works every period.
+- **Total visits.** In Fill mode you can cap or fix the overall number of visits (Up to or Exactly).
+- **Guests** show in the calendar and matrix and count in gender rules.
+- Decisions and deviations are in `docs/v5-notes.md`.
+
 ## Rules and first run
 The Rules tab opens in **Simple** mode: the key rules (goals, calendar, volume, gender, pairs) with Must or Prefer only, no weights. **Advanced** shows every rule and weight; the choice is remembered. The search box finds rules in either mode. A plan-less Plan tab shows a three step checklist (work days, team, generate), and facilities and team show an empty state. When a plan is infeasible or exhausted, solvable conflicts get a button that applies the fix and regenerates.
 
@@ -304,7 +311,7 @@ Budgets: week under 400 ms, month under 1.5 s, quarter under 5 s (test T8).
 - One-click conflict fixes cover exact counts, day rules, goals and the every-day requirement; other conflicts (for example a hard volume over capacity) still need a manual change. Plain-language wording of the explanations has not been reviewed by a native Arabic speaker.
 - Two tabs writing at once is handled by making the older window read-only, not by merging.
 - No flow relaxation bound is computed: `lowerBound` is `null` and `optimal` is `false`, so the Summary shows no gap.
-- Guests are shown in the plan list and the team column of the export but not in the matrix or print views, and they do not count in gender-rule math.
+- Guests are shown in the plan list, the calendar, the matrix tooltip and the team column of the export; a guest who takes a seat counts in the gender rule by their stated gender (an unknown gender pauses the rule for that visit).
 - "Newer" in Reject newer means later in the list; requests carry no timestamp.
 - Default-budget soft scores on a month or quarter vary slightly with machine load; with explicit iteration caps results are deterministic.
 - The fixture exports used for acceptance (export_a.json, export_b.json) were not available when v5 was built.

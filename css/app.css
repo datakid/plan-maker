@@ -790,3 +790,4 @@ button, .chip, .tab, .menu-item, .gm-row, .setup-tile{touch-action:manipulation;
 
 .model-card{display:flex; flex-direction:column; gap:8px; min-width:0; max-width:100%}
 .model-pre{contain:inline-size; min-width:0; max-width:100%; width:100%; box-sizing:border-box; margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-family:var(--font-num); font-size:12px; line-height:1.55; white-space:pre; overflow:auto; max-height:320px; color:var(--ink-2); text-align:left; unicode-bidi:plaintext}
+.person.guest{border-style:dashed}

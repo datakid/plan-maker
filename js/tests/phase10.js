@@ -433,3 +433,123 @@ regress('v5 migration: a rev 8 save gains the v5 settings with the same behaviou
   const v = d.settings.volume;
   return verdict(d.rulesRev===RULES_REV && RULES_REV===9 && v.dayMode==='upTo' && v.useAllDays==='must' && v.requireEveryEligibleDay===true && v.exactMode==='exactly' && v.total.n===null && Array.isArray(d.settings.guests) && d.settings.duplicates==='ask' && d.locations.every(l=>l.seats==null || Object.keys(l.seats).length===0), 'rev 9, up-to, Must from true, exactly, ask, empty guests', JSON.stringify({rev:d.rulesRev, v:[v.dayMode, v.useAllDays, v.exactMode], dup:d.settings.duplicates}));
 });
+
+regress('v5.1 within: a special visit marked for the first week lands in the first 7 days of the plan', ()=>{
+  Fx.use({days:14, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(6), people:Fx.ppl(['p1','p2','p3','p4']), settings:{volume:{mode:'exact', exact:{basic:8, contracted:0}, perDay:2, perWeek:null}},
+    goals:[Object.assign(newGoal('special'), {id:'s1', facilityId:'f4', times:1, people:[], fill:true, within:{n:1, unit:'weeks'}})]});
+  const r = generatePlan({seed:2, skipSearch:true, skipExplain:true});
+  const win = planWindow();
+  const v = r.plan.visits.find(x=>x.special==='s1');
+  const val = validatePlan(r.plan);
+  const row = val.goals.find(g=>g.g && g.g.id==='s1');
+  const inFirstWeek = v && ordOf(v.date) <= win.start + 6;
+  return verdict(!!v && inFirstWeek && row && row.met, 'placed on or before day 7 and met', JSON.stringify({date:v && v.date, start:isoOf(win.start), met:row && row.met}));
+});
+
+regress('v5.1 within: a cover goal over several places with a first-N-weeks limit visits all of them by then', ()=>{
+  Fx.use({days:21, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(8), people:Fx.ppl(['p1','p2','p3','p4']), settings:{volume:{mode:'exact', exact:{basic:10, contracted:0}, perDay:2, perWeek:null}},
+    goals:[Object.assign(newGoal('cover'), {id:'c1', scope:{kind:'facility', ids:['f6','f7','f8']}, times:1, since:null, by:null, repeat:false, within:{n:2, unit:'weeks'}})]});
+  const r = generatePlan({seed:3, skipSearch:true, skipExplain:true});
+  const win = planWindow();
+  const early = ['f6','f7','f8'].map(id=>r.plan.visits.some(v=>v.facilityId===id && ordOf(v.date) <= win.start + 13));
+  const row = validatePlan(r.plan).goals.find(g=>g.g && g.g.id==='c1');
+  return verdict(early.every(Boolean) && row && row.met, 'all three visited in the first 14 days', JSON.stringify({early, met:row && row.met}));
+});
+
+regress('v5.1 within: the window works for days, weeks and calendar months and clean values stay in range', ()=>{
+  const s = ordOf('2026-10-04');
+  const d = withinEndOrd(s, {n:3, unit:'days'}) - s, w = withinEndOrd(s, {n:2, unit:'weeks'}) - s, m = isoOf(withinEndOrd(s, {n:1, unit:'months'}));
+  return verdict(d===2 && w===13 && m==='2026-11-03' && cleanWithin({n:0, unit:'x'})===null && cleanWithin({n:5, unit:'x'}).unit==='weeks' && cleanWithin({n:999, unit:'days'}).n===366 && withinEndOrd(s, null)===Infinity, 'days, weeks, months and cleaning', JSON.stringify([d, w, m]));
+});
+
+const sepFx = (lvl)=>{
+  Fx.use({days:14, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(4), people:Fx.ppl(['p1','p2','p3','p4']), settings:{volume:{mode:'exact', exact:{basic:8, contracted:0}, perDay:2, perWeek:null}},
+    goals:[Object.assign(newGoal('separate'), {id:'sp', scope:{kind:'facility', ids:['f1','f2']}, scope2:{kind:'facility', ids:['f3','f4']}, strict:lvl||'must'})]});
+};
+const sepOffenders = plan=>{
+  const A = new Set(), B = new Set();
+  for(const v of plan.visits){ for(const id of visitTeamIds(v)){ if(['f1','f2'].includes(v.facilityId)) A.add(id); if(['f3','f4'].includes(v.facilityId)) B.add(id); } }
+  return [...A].filter(id=>B.has(id));
+};
+
+regress('v5.1 separate: whoever visits one side never visits the other in a generated plan', ()=>{
+  sepFx('must');
+  const r = generatePlan({seed:4, iters:80, skipExplain:true});
+  const bad = sepOffenders(r.plan);
+  const viol = validatePlan(r.plan).violations.filter(v=>v.key==='dSeparate').length;
+  const row = validatePlan(r.plan).goals.find(g=>g.g && g.g.id==='sp');
+  const usedBoth = ['f1','f2'].some(id=>r.plan.visits.some(v=>v.facilityId===id)) && ['f3','f4'].some(id=>r.plan.visits.some(v=>v.facilityId===id));
+  return verdict(bad.length===0 && viol===0 && row && row.met && usedBoth, 'no person on both sides and both sides visited', JSON.stringify({bad, viol, usedBoth, status:r.status}));
+});
+
+regress('v5.1 separate: the validator reports a person on both sides, hard for Must, soft for Prefer, exception when both visits are fixed on them', ()=>{
+  sepFx('must');
+  const plan = Fx.manualPlan([{date:Fx.iso(1), facilityId:'f1', team:{a:['p1']}}, {date:Fx.iso(3), facilityId:'f3', team:{a:['p1']}}, {date:Fx.iso(4), facilityId:'f4', team:{a:['p2']}}]);
+  const hard = validatePlan(plan).violations.filter(v=>v.key==='dSeparate');
+  S().goals.find(g=>g.id==='sp').strict = 'try';
+  const soft = validatePlan(plan).violations.filter(v=>v.key==='dSeparate');
+  S().goals.find(g=>g.id==='sp').strict = 'must';
+  plan.visits[0].fixed = true; plan.visits[0].preset = ['p1']; plan.visits[1].fixed = true; plan.visits[1].preset = ['p1'];
+  const exc = validatePlan(plan).violations.filter(v=>v.key==='dSeparate');
+  const msg = t('dSeparate', 'p1', 'A', 'B');
+  return verdict(hard.length===1 && hard[0].cls==='hard' && soft.length===1 && soft[0].cls==='soft' && exc.length===1 && exc[0].cls==='exception' && msg.includes('p1'), 'hard, soft, exception', JSON.stringify([hard.map(v=>v.cls), soft.map(v=>v.cls), exc.map(v=>v.cls)]));
+});
+
+regress('v5.1 separate: the assignment check blocks the other side for a person and lets go when the visit is undone', ()=>{
+  sepFx('must');
+  const rules = compilePeopleRules();
+  const ctx = tallyCtx(rules);
+  const p = personById('p1'), f1 = facilityById('f1'), f3 = facilityById('f3'), f2 = facilityById('f2');
+  const o = Fx.ord(2);
+  ctxTally(ctx, 'p1', o, f1, 1);
+  const blocked = hardOk(p, Fx.ord(5), f3, ctx);
+  const sameSide = hardOk(p, Fx.ord(6), f2, ctx);
+  ctxTally(ctx, 'p1', o, f1, -1);
+  const freed = hardOk(p, Fx.ord(5), f3, ctx);
+  return verdict(blocked==='separate' && sameSide!=='separate' && freed!=='separate', 'blocked, same side fine, freed after undo', JSON.stringify([blocked, sameSide, freed]));
+});
+
+regress('v5.1 separate: the goal appears in the goals list, needs both sides and reads well in both languages', ()=>{
+  sepFx('must');
+  const g = S().goals.find(x=>x.id==='sp');
+  const ready = separateReady(g);
+  const bare = normalizeGoal({type:'separate'});
+  const keep = App.ui.lang;
+  App.ui.lang = 'en'; const en = goalTitle(g); App.ui.lang = 'ar'; const ar = goalTitle(g); App.ui.lang = keep;
+  const host = el('div', null, goalFields(g, ()=>{}, ()=>{}));
+  return verdict(PEOPLE_GOALS.includes('separate') && ready && !separateReady(bare) && !!bare.scope2 && en.includes('does not visit') && ar.length>10 && host.querySelectorAll('.rc-row').length===2, 'listed, readiness, titles, two scope rows', JSON.stringify({ready, en, rows:host.querySelectorAll('.rc-row').length}));
+});
+
+regress('v5.1 guests: a pooled guest with a known gender counts in the gender rule, an unknown one pauses it', ()=>{
+  Fx.use({days:4, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(2), people:[{id:'p1', gender:'m', skill:10}, {id:'p2', gender:'m', skill:10}, {id:'p3', gender:'f', skill:10}],
+    settings:{genderRules:[{id:'gr1', on:true, kinds:[], categories:[], facilities:[], minEach:34, avoidEven:false}]}});
+  S().guests = [{id:'g1', name:'Guest', pool:'a', gender:'f', note:''}, {id:'g2', name:'Guest2', pool:'a', gender:null, note:''}];
+  const plan = Fx.manualPlan([{date:Fx.iso(1), facilityId:'f1', team:{a:['p1','p2']}}]);
+  const gendered = ()=>validatePlan(plan).violations.filter(x=>x.key==='dGender').length;
+  plan.visits[0].seats = {a:2};
+  const noGuest = gendered();
+  plan.visits[0].team = {a:['p1']};
+  plan.visits[0].guests = ['g1'];
+  const withFemale = gendered();
+  plan.visits[0].guests = ['g2'];
+  const unknown = gendered();
+  const tg = teamGender(['p1'], {guests:['g1']});
+  return verdict(noGuest===1 && withFemale===0 && unknown===0 && tg.m===1 && tg.f===1, 'two men flagged, a female guest fixes it, unknown gender pauses the rule', JSON.stringify({noGuest, withFemale, unknown, tg}));
+});
+
+regress('v5.1 guests: calendar pills and the matrix tooltip show guests, and the total visits control limits a fill plan', ()=>{
+  Fx.use({days:8, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(6), people:Fx.ppl(['p1','p2','p3','p4'])});
+  S().guests = [{id:'g1', name:'Guest One', pool:'a', gender:null, note:''}];
+  const v = {team:{a:['p1']}, guests:['g1'], open:{}};
+  const pills = teamPills(v).map(n=>n.textContent).join('|');
+  S().volume.mode = 'fill'; S().volume.share = 1;
+  S().volume.total = {mode:'upTo', n:null};
+  const free = volumePreview().total;
+  S().volume.total = {mode:'upTo', n:3};
+  const capped = volumePreview().total;
+  S().volume.total = {mode:'exactly', n:3};
+  const exact = volumePreview().total;
+  const popBox = visitsPop(()=>{});
+  const labels = [...popBox.querySelectorAll('label')].map(l=>l.textContent);
+  return verdict(pills.includes(t('guestMark')) && free>3 && capped===3 && exact===3 && labels.includes(t('vTotal')), 'guest pill, total capped at 3, control present', JSON.stringify({pills, free, capped, exact}));
+});

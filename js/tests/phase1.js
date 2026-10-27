@@ -32,7 +32,7 @@ const P1 = {
 };
 
 regress('v4: registry has every rule of the brief table', ()=>{
-  const want = ['day.cap', 'day.min', 'day.kind', 'day.band', 'day.category', 'day.only', 'fac.weekdays', 'vol.week', 'vol.everyDay', 'vol.exact', 'vol.share', 'vol.quota', 'vol.gap', 'vol.activity', 'fac.pinned', 'dist.pick', 'p.blocked', 'p.avail', 'p.maxRun', 'p.maxWeek', 'p.rest', 'p.quota', 'p.dist', 'fair.load', 'gender.rule', 'gender.pref.m', 'gender.pref.f', 'senior', 'pair', 'rotate', 'dist.short', 'dist.balanceFar', 'goal.cover', 'goal.atLeast', 'goal.atMost', 'goal.maxGap', 'goal.person', 'goal.together', 'goal.special', 'goal.pattern', 'due.priority', 'skill.match', 'space.shape', 'p.spread'];
+  const want = ['day.cap', 'day.min', 'day.kind', 'day.band', 'day.category', 'day.only', 'fac.weekdays', 'vol.week', 'vol.everyDay', 'vol.exact', 'vol.share', 'vol.quota', 'vol.gap', 'vol.activity', 'fac.pinned', 'dist.pick', 'p.blocked', 'p.avail', 'p.maxRun', 'p.maxWeek', 'p.rest', 'p.quota', 'p.dist', 'fair.load', 'gender.rule', 'gender.pref.m', 'gender.pref.f', 'senior', 'pair', 'rotate', 'dist.short', 'dist.balanceFar', 'goal.cover', 'goal.atLeast', 'goal.atMost', 'goal.maxGap', 'goal.person', 'goal.together', 'goal.separate', 'goal.special', 'goal.pattern', 'due.priority', 'skill.match', 'space.shape', 'p.spread'];
   const missing = want.filter(id=>!ruleSpec(id));
   const extra = RULES.map(r=>r.id).filter(id=>!want.includes(id));
   const noText = [];

@@ -62,17 +62,24 @@
 - Layout sweep: an automated overflow check at 1440, 1280, 1100 and 390 px, Arabic and English, light and dark, on Summary, List, Calendar, Matrix and the Visits popover: 80 checks, no horizontal overflow and no page errors. Only two screenshots were looked at by eye (390 px English light, 1280 px Arabic dark Summary); the other combinations were measured, not viewed.
 - Not run: the acceptance checks that need export_a.json and export_b.json (valid generation on both, 6 January 2027 behaviour), and any run on a real device or a real browser other than headless Chromium.
 
+## 5.1 follow-up (requested after the 5.0 hand-off)
+- Clarification from the user: the special rule is not person-versus-place. It is place-versus-place through people: whoever goes to place A in a plan must not go to place B in that plan. Built as a new goal type `separate` (scope = side A, scope2 = side B), so it has Must/Prefer, on/off and the goals list for free. Enforcement: `compilePeopleRules` builds `seps`, `ctxTally` counts each person's visits per side (plan-scoped, history is not seeded), `hardOk` returns 'separate' for a Must rule, the validator reports `dSeparate` per person with the first A and B visit (hard for Must, soft for Prefer, exception when both visits are fixed by the user on that person). Prefer rules are not used while building teams, only scored, so the search repairs them. A facility that is in both scopes is ignored by the rule. Cost: changed two existing tests that encode lists (rule registry now has goal.separate; the add-goal menu has 9 types).
+- Places in the first week or month of a plan: `within:{n, unit:'days'|'weeks'|'months'}` on specials (window end) and cover goals (deadline, combined with `by` by taking the earlier), resolved from the plan start by `withinEndOrd`; so the demand, the request window, the duplicate detection and the validator all read the same value. Cover goals handle several places at once through their scope, specials handle one place with people, seats and rules. Months are calendar months. Only 'first N' is supported, not 'last N'.
+- Not-done items taken on: control for `volume.total` (Fill mode, Visits popover); guests in the calendar pills and matrix tooltip and in the gender rule (pooled guests count by stated gender, unknown pauses the rule; the solver feasibility check and team building use the same counts).
+- Items deliberately not done: (1) lower bound and gap line. The min-cost flow only relaxes the layout part and its cost is not in the units of the full objective, so a gap shown from it would not be a valid bound; the optional item stays out rather than show a number that could be wrong. (2) fixtures: the files are not in the repo or the upload; they need to be supplied. (3) per-phase review, real devices and other browsers: not things this environment can do.
+- Version 5.1.0. After this step: test.html 336/0, ship 38/0, layout sweep of the new editors at four widths, two languages, two themes: 64 checks, no overflow.
+
 ## Changed tests
 - none so far
 
 ## Not done
-- All phases were worked in order without the per-phase Opus review the plan asks for; each phase was committed separately (git log shows P0 to P4.2) so a reviewer can go phase by phase. Earlier note: the work order says Opus reviews each phase before the next starts.
+- All phases were worked in order without the per-phase Opus review the plan asks for; each phase is its own commit (git log shows P0 to P5) so a reviewer can go phase by phase.
 - Nothing from the plan is unstarted. Open items are listed below.
 - Phase 2 gap: lower bound and gap line (see Phase 2).
-- Phase 3 gaps: no control for volume.total; guests absent from matrix and print.
+- Phase 3 gaps closed in 5.1: volume.total control and guests in the calendar and matrix. Print uses the same views.
 - Fixtures: export_a.json and export_b.json never arrived, so fixtures-v5.js does not exist.
 - js/tests/fixtures-v5.js not created: export_a.json and export_b.json were not available. Every phase must add assertions against them once they are supplied; P1.2 should be re-checked against them.
-- The visual manual sweep at 1440/1280/1100 widths was not done (only 390 px for the seat row).
+- The width sweep at 1440, 1280, 1100 and 390 px was automated (overflow and page errors only); only two screenshots were reviewed by eye, so a human visual pass is still open.
 
 ## Extension note: special rules such as "this person never goes to that place"
 Requested by the user during the build, to be added without changing the pipeline.

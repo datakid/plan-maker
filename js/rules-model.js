@@ -57,6 +57,7 @@ defRule('goal.atMost', 'rule-goals', 'layout', 'goal', 'must', 5);
 defRule('goal.maxGap', 'rule-goals', 'layout', 'goal', 'must', 5);
 defRule('goal.person', 'rule-goals', 'staff', 'goal', 'must', 5);
 defRule('goal.together', 'rule-goals', 'staff', 'goal', 'prefer', 5);
+defRule('goal.separate', 'rule-goals', 'staff', 'goal', 'must', 5);
 defRule('goal.special', 'rule-goals', 'both', 'goal', 'must', 5);
 defRule('goal.pattern', 'rule-goals', 'both', 'goal', 'must', 5);
 defRule('due.priority', 'rule-volume', 'layout', 'global', 'prefer', 3, {preferOnly:true});
@@ -64,7 +65,7 @@ defRule('skill.match', 'rule-seniority', 'staff', 'global', 'prefer', 5, {prefer
 defRule('space.shape', 'rule-rest', 'layout', 'global', 'prefer', 5, {preferOnly:true});
 defRule('p.spread', 'team', 'staff', 'person', 'prefer', 2, {preferOnly:true});
 
-const GOAL_RULE = {cover:'goal.cover', atLeast:'goal.atLeast', atMost:'goal.atMost', maxGap:'goal.maxGap', person:'goal.person', together:'goal.together', special:'goal.special', pattern:'goal.pattern'};
+const GOAL_RULE = {cover:'goal.cover', atLeast:'goal.atLeast', atMost:'goal.atMost', maxGap:'goal.maxGap', person:'goal.person', together:'goal.together', separate:'goal.separate', special:'goal.special', pattern:'goal.pattern'};
 
 function ruleSpec(id){ return typeof id==='string' ? RULE_INDEX.get(id) || null : id; }
 function strengthToW(s){ return s==='light' ? 3 : (s==='strong' ? 8 : 5); }

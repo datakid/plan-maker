@@ -135,6 +135,10 @@ function visitsPop(refresh){
     const paint = ()=>{ const pv = volumePreview(); live.textContent = t('vSummary', pv.basic, pv.contracted)+' · '+t('capLine', pv.capacity); live.style.color = pv.overCapacity ? 'var(--warn)' : ''; };
     if(V.mode==='fill'){
       box.appendChild(el('div', {class:'field'}, [el('label', null, t('vShare')), Slider(Math.round(V.share*100), v=>{ V.share = v/100; settingsChanged(); paint(); }, {min:0, max:100, step:5, format:v=>v+'%'})]));
+      box.appendChild(el('div', {class:'field'}, [el('label', null, t('vTotal')), el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
+        Stepper(V.total.n, v=>{ V.total.n = v; settingsChanged(refresh); }, {min:1, max:5000, nullable:true, sm:true, placeholder:t('noLimit')}),
+        V.total.n!=null ? Seg([{value:'upTo',label:t('vUpTo')},{value:'exactly',label:t('vExactlyOpt')}], V.total.mode, v=>{ V.total.mode = v; settingsChanged(); paint(); }, {cls:'sm'}) : null
+      ])]));
     } else if(V.mode==='exact'){
       box.appendChild(el('div', {class:'field'}, [el('label', null, t('vCountMode')), Seg([{value:'upTo',label:t('vUpTo')},{value:'exactly',label:t('vExactlyOpt')}], V.exactMode, v=>{ V.exactMode = v; settingsChanged(); }, {cls:'block'})]));
       box.appendChild(el('div', {class:'grid-2'}, [
@@ -435,6 +439,7 @@ function personPill(id, extra){
 function teamPills(v){
   const out = [];
   for(const pl of S().pools){ for(const id of (v.team[pl.id]||[])) out.push(personPill(id)); }
+  for(const gid of (v.guests||[])){ const g = guestById(gid); if(g) out.push(el('span', {class:'person guest', title:t('guestMark')}, g.name+' '+t('guestMark'))); }
   const open = sum(Object.values(v.open||{}));
   if(open) out.push(el('span', {class:'person open'}, t('openSeat')+(open>1?' ×'+open:'')));
   return out;
@@ -583,7 +588,7 @@ function viewMatrix(plan, A){
       days.forEach((d,i)=>{
         const vs = (byDate.get(d)||[]).filter(v=>v.facilityId===fid);
         const td = el('td', {class:wkStart[i]&&i?'wk-start':null});
-        if(vs.length){ tot += vs.length; td.appendChild(el('div', {class:'mx '+vs[0].kind, title:visitTeamIds(vs[0]).map(id=>(personById(id)||{}).name).join('، '), onclick:()=>openVisit(vs[0].id)}, String(visitTeamIds(vs[0]).length))); }
+        if(vs.length){ tot += vs.length; td.appendChild(el('div', {class:'mx '+vs[0].kind, title:visitTeamIds(vs[0]).map(id=>(personById(id)||{}).name).concat(visitGuestLabels(vs[0])).join('، '), onclick:()=>openVisit(vs[0].id)}, String(visitTeamIds(vs[0]).length))); }
         else td.appendChild(el('div', {class:'mx'}));
         tr.appendChild(td);
       });

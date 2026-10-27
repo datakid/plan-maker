@@ -1,4 +1,4 @@
-const APP_VERSION = '5.0.0';
+const APP_VERSION = '5.1.0';
 const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';

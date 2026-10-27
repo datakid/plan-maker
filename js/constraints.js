@@ -2,7 +2,7 @@ const CLS = {HARD:'hard', SOFT:'soft', EXC:'exception'};
 const HISTORY_LOOKBACK = 30;
 
 const KEY_RULE = {
-  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dGuestDup:'struct.onePlace', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit', dVisitPerson:'struct.fixedVisit',
+  dMissingFacility:'struct.seats', dTeamPoolUnknown:'struct.seats', dTeamUnknown:'struct.seats', dTeamDup:'struct.onePlace', dGuestDup:'struct.onePlace', dSeparate:'goal.separate', dTeamInactive:'struct.retired', dTeamPool:'struct.seats', dOpenSeats:'struct.seats', dTeamOversize:'struct.seats', dLockedMissing:'struct.fixedVisit', dVisitPerson:'struct.fixedVisit',
   dOutOfPlan:'struct.calendar', dNotWorkday:'struct.calendar', dActivityRest:'vol.activity', dWeekday:'fac.weekdays', dDayOnly:'day.only', dActivityCycleSoft:'vol.activity',
   dGender:'gender.rule', dSenior:'senior', dSeniorNone:'senior', dPair:'pair', dLate:'goal.cover', dUnavailable:'p.avail', dFixedOff:'p.avail', dPatternDay:'p.rest', dBlocked:'p.blocked', dFixedBlocked:'p.blocked', dRepeatBlock:'rotate',
   dDayDup:'struct.onePlace', dFacDup:'struct.facilityOnce', dCapDay:'struct.perDay', dCapDayCfg:'day.cap', dCapWeek:'vol.week', dSpacing:'vol.gap', dActivityRest2:'vol.activity', dActivityRun:'vol.activity',
@@ -364,10 +364,11 @@ function evaluateGoals(plan, T, ctx){
       }
       const inPlan = sum(Object.values(covered));
       const total = facs.length*times;
-      let target = remaining, paced = false, open = !g.by, byOrd = null;
+      const byFixed = coverByOrd(g, startOrd);
+      let target = remaining, paced = false, open = byFixed==null, byOrd = null;
       const missing = [];
-      if(g.by){
-        byOrd = ordOf(g.by);
+      if(byFixed!=null){
+        byOrd = byFixed;
         if(byOrd>=startOrd && byOrd<=endOrd){
           let ok = 0;
           for(const fid in need){
@@ -439,7 +440,7 @@ function evaluateGoals(plan, T, ctx){
       const f = facilityById(g.facilityId);
       if(!f){ row.state = 'new'; row.label = '—'; continue; }
       const people = liveIds(g.people);
-      const lo = g.from ? ordOf(g.from) : -Infinity, hi = g.to ? ordOf(g.to) : Infinity;
+      const lo = g.from ? ordOf(g.from) : -Infinity, hi = Math.min(g.to ? ordOf(g.to) : Infinity, withinEndOrd(startOrd, g.within));
       const q = vis.filter(x=>x.f.id===f.id && x.ord>=lo && x.ord<=hi && people.every(id=>x.ids.includes(id)));
       row.inPlan = q.length; row.target = Math.max(1, g.times||1);
       row.met = q.length>=row.target;
@@ -483,6 +484,32 @@ function evaluateGoals(plan, T, ctx){
         row.label = per.map(x=>(personById(x.id)||{}).name+' '+x.q+'/'+(g.rel==='between' ? g.n+'–'+Math.max(g.n, g.n2==null ? g.n : g.n2) : g.n)).join(' · ');
         row.state = row.met ? 'met' : 'short';
       }
+    } else if(g.type==='separate'){
+      if(!separateReady(g)){ row.state = 'new'; row.label = '—'; continue; }
+      const sides = new Map();
+      for(const x of vis){
+        const a = inScope(x.f, g.scope), b = inScope(x.f, g.scope2);
+        const side = a && !b ? 'a' : (b && !a ? 'b' : null);
+        if(!side) continue;
+        for(const id of x.ids){
+          if(!sides.has(id)) sides.set(id, {a:[], b:[]});
+          sides.get(id)[side].push(x);
+        }
+      }
+      let offenders = 0;
+      for(const [id, s2] of sides){
+        if(!s2.a.length || !s2.b.length) continue;
+        offenders++;
+        const va = s2.a[0], vb = s2.b[0];
+        const asked = x=>x.v.fixed && lockedOf(x.v).includes(id);
+        const exempt = asked(va) && asked(vb);
+        viol({key:'dSeparate', cls:exempt ? CLS.EXC : strictCls(g), units:1, people:[id], visits:[va.v.id, vb.v.id], dates:[va.v.date, vb.v.date], facilities:[va.f.id, vb.f.id], actual:s2.a.length+s2.b.length, required:0, args:[(personById(id)||{}).name||'?', va.f.name, vb.f.name]});
+      }
+      row.inPlan = offenders; row.target = 0;
+      row.met = offenders===0;
+      row.pct = row.met ? 100 : 0;
+      row.state = row.met ? 'met' : 'short';
+      row.label = row.met ? '0' : String(offenders);
     } else if(g.type==='together'){
       const rule = T.rules.together.find(x=>x.id===g.id);
       if(!rule){ row.state = 'new'; continue; }
@@ -651,9 +678,9 @@ function validatePlan(plan, opts){
     if(activitySoftDayPenalty(ord)<1) add({src:'visit', cls:CLS.SOFT, group:'cCalendar', key:'dActivityCycleSoft', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date]});
 
     const ids = x.ids;
-    const g = teamGender(ids);
-    const rule = genderRuleFor(f, x.kind, v.rules), n = sum(Object.values(need));
-    if(rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, n)) add({src:'visit', cls:CLS.SOFT, ref:rule.id==='visit' ? (v.overrideId || v.special || v.id) : rule.id, group:'cGender', key:'dGender', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, g.m, g.f]});
+    const g = teamGender(ids, v);
+    const rule = genderRuleFor(f, x.kind, v.rules), n = sum(Object.values(need)), nTot = n+visitPooledGuests(v);
+    if(rule && g.u===0 && ids.length===n && !genderValid(rule, g.m, g.f, nTot)) add({src:'visit', cls:CLS.SOFT, ref:rule.id==='visit' ? (v.overrideId || v.special || v.id) : rule.id, group:'cGender', key:'dGender', visits:[v.id], dates:[v.date], facilities:[f.id], args:[f.name, v.date, g.m, g.f]});
     const sen = set.seniority;
     const seniorLvl = seniorLevelFor(f, v.rules, false);
     if(seniorLvl!=null && ids.length){
