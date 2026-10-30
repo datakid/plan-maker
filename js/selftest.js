@@ -85,7 +85,7 @@ window.addEventListener('load', async ()=>{
     step('export matrix', ()=>exportMatrixSheet(App.plan).rows.length>2);
     step('xlsx write→read', ()=>{ if(typeof buildXlsx!=='function') return 'skipped'; const z = buildXlsx([{name:'Plan', rows:exportPlanRows(App.plan,'full')}]); return !!z && (z.size||z.length||z.byteLength)>100; });
 
-    step('approve is refused while the edited plan has hard violations', ()=>{ const r = approvePlan(); return !r.ok && r.blockers.length>0 && !App.plan.approved; });
+    step('approve is refused while the edited plan has hard violations', ()=>{ const src = App.plan.visits.find(v=>!v.fixed && !v.special && visitTeamIds(v).length); const dup = deepClone(src); dup.id = uid('v'); dup.facilityId = App.plan.visits.find(v=>v.facilityId!==src.facilityId).facilityId; App.plan.visits.push(dup); const r = approvePlan(); App.plan.visits.pop(); return !r.ok && r.blockers.length>0 && !App.plan.approved; });
     step('approve a clean regenerated plan', ()=>{ const r0 = generatePlan(); if(r0.error) return false; App.plan = r0.plan; const r = approvePlan(); if(!r.ok) throw new Error('blockers '+JSON.stringify(r.blockers.map(b=>[b.key, b.n, (b.violations||[]).slice(0,4).map(v=>v.key)]))); return App.plan.approved && B0.id in App.data.history.counts; });
     step('unapprove restores', ()=>{ const before = JSON.stringify(App.plan.snapshot.counts); unapprovePlan(); return !App.plan.approved && JSON.stringify(App.data.history.counts)===before; });
 
@@ -93,7 +93,7 @@ window.addEventListener('load', async ()=>{
       step('tab '+tab, ()=>{ goTab(tab); return $('#page').children.length>0 && !$('#page').textContent.includes('undefined') && noOverflow(); });
     }
     step('rules tab: goals section has people group', ()=>{ goTab('rules'); return $('#rule-goals') && $('#rule-goals').textContent.includes(t('gGroupPeople')) && $$('#rule-goals .gm-row.people').length===6; });
-    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===9 ? '9 types' : false; });
+    step('rules tab: add-goal menu grouped', ()=>{ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); const heads = $$('.pop .menu-head').length, items = $$('.pop .menu-item').length; closePop(); return heads===2 && items===10 ? '9 types and the simple rule' : false; });
     step('add each goal type via menu', ()=>{ const n0 = s.goals.length; for(let i=0;i<7;i++){ const b = [...$$('#rule-goals .gm-toolbar .btn')].find(x=>x.textContent.includes(t('goalAdd'))); b.click(); $$('.pop .menu-item')[i].click(); } return s.goals.length===n0+7; });
     step('unconfigured new goals are inert', ()=>withFresh(()=>{
       const before = generatePlan().plan.visits.length;
@@ -104,10 +104,10 @@ window.addEventListener('load', async ()=>{
     }));
     step('delete new goals', ()=>{ s.goals.splice(s.goals.length-7, 7); goTab('rules'); return $$('#rule-goals .gm-row').length===s.goals.length; });
 
-    step('team: person sheet', ()=>{ goTab('team'); openPerson(B0.id); const r = $('.sheet').textContent.includes(t('pPerPlan')) && $('.sheet').textContent.includes(t('pGoals')); return r; });
+    step('team: person sheet', ()=>{ goTab('team'); App.ui.personTab = 'rules'; openPerson(B0.id); const r = $('.sheet').textContent.includes(t('pPerPlan')) && $('.sheet').textContent.includes(t('pGoals')); return r; });
     step('team: quota modes', ()=>{ const seg = [...$$('.sheet .seg')].find(x=>x.textContent.includes(t('pQAuto'))); seg.children[0].click(); const a = B0.quota.min==null && B0.quota.max==null; [...$$('.sheet .seg')].find(x=>x.textContent.includes(t('pQAuto'))).children[2].click(); const r = B0.quota.max!=null; [...$$('.sheet .seg')].find(x=>x.textContent.includes(t('pQAuto'))).children[1].click(); const e = B0.quota.min!=null && B0.quota.min===B0.quota.max; sheet.current.close(true); return a && r && e; });
     step('team: per-plan chip in the table', ()=>{ goTab('team'); return !!$('#team-card') && $$('#team-card td.pt-c-quota .chip.on').length>0; });
-    step('team: add rule from person sheet', ()=>{ openPerson(D0.id); const n0 = s.goals.length; const b = [...$$('.sheet .btn.sm.ghost')].find(x=>x.textContent.trim()===t('gAddFor_person')); b.click(); const ok_ = s.goals.length===n0+1 && s.goals[s.goals.length-1].people[0]===D0.id && !!$('.sheet'); if(sheet.current) sheet.current.close(true); s.goals.pop(); return ok_; });
+    step('team: add rule from person sheet', ()=>{ App.ui.personTab = 'rules'; openPerson(D0.id); const n0 = s.goals.length; const open_ = [...$$('.sheet .btn.sm.ghost')].find(x=>x.textContent.trim()===t('ruleAdd')); open_.click(); const save = [...$$('.sheet .btn.sm.primary')].find(x=>x.textContent.trim()===t('ruleSave')); save.click(); const g = s.goals[s.goals.length-1]; const ok_ = s.goals.length===n0+1 && g.type==='person' && g.people[0]===D0.id && g.subject.kind==='people' && !!$('.sheet'); if(sheet.current) sheet.current.close(true); s.goals.pop(); return ok_; });
     step('facility sheet', ()=>{ goTab('facilities'); openFacility(App.data.facilities[10].id); const r = !!$('.sheet'); sheet.current.close(true); return r; });
 
     step('backup round-trip', ()=>{ const json = JSON.stringify(App.data); const d = normalizeData(JSON.parse(json)); return d.settings.goals.length===s.goals.length && d.people.find(x=>x.id===B0.id).quota.min===B0.quota.min; });
@@ -179,7 +179,7 @@ window.addEventListener('load', async ()=>{
       return okC && okE && S().goals.length===keep;
     });
     step('rules tab: work/rest section and every-day toggle', ()=>{ goTab('rules'); const sec = $('#rule-rest'); const vol = $('#rule-volume'); const okR = !!sec && sec.textContent.includes(t('rrActivity')) && sec.textContent.includes(t('rrPerson')) && !!vol && vol.textContent.includes(t('requireEvery')); goTab('plan'); return okR; });
-    step('person sheet shows the work/rest rules section', ()=>{ const p0 = activePeople()[0]; openPerson(p0.id); const okS = $('.sheet').textContent.includes(t('prTitle')) && $('.sheet').textContent.includes(t('prHint')); sheet.current.close(true); return okS; });
+    step('person sheet shows the work/rest rules section', ()=>{ const p0 = activePeople()[0]; App.ui.personTab = 'rules'; openPerson(p0.id); const okS = $('.sheet').textContent.includes(t('prTitle')) && $('.sheet').textContent.includes(t('prHint')); sheet.current.close(true); return okS; });
     step('editing a visit that breaks a hard rule asks before applying', ()=>withFresh(()=>{
       const keep = App.plan; const r = generatePlan(); if(r.error) return false; App.plan = r.plan; goTab('plan'); renderResults();
       const v = App.plan.visits[0], other = App.plan.visits.find(x=>x.date!==v.date && !x.fixed);
@@ -195,8 +195,9 @@ window.addEventListener('load', async ()=>{
     step('english mode', ()=>{ setLang('en'); goTab('rules'); const r = $('#rule-goals').textContent.includes('People goals'); goTab('plan'); App.ui.view = 'summary'; renderResults(); setLang('ar'); return r; });
     step('persist + reload data', ()=>{ saveNow(); const raw = JSON.parse(localStorage.getItem(STORE_KEY)); return raw.settings.goals.length===s.goals.length; });
 
-    try{ runRegress(null); }catch(e){ ok('regression suite ran', false, 'EXC '+e.message); }
-    try{ await runShipAsync(null); }catch(e){ ok('async regression suite ran', false, 'EXC '+e.message); }
+    const ONLY_RE = (()=>{ const q = new URLSearchParams(location.search).get('only'); return q ? new RegExp(q) : null; })();
+    try{ runRegress(ONLY_RE); }catch(e){ ok('regression suite ran', false, 'EXC '+e.message); }
+    try{ await runShipAsync(ONLY_RE); }catch(e){ ok('async regression suite ran', false, 'EXC '+e.message); }
     await sleep(200);
     ok('no uncaught errors', TEST.errors.length===0, TEST.errors.join(' | '));
     console.log('RESULT pass='+TEST.pass+' fail='+TEST.fail);

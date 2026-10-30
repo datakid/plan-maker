@@ -131,6 +131,7 @@ function visitsPop(refresh){
     box.appendChild(el('div', {class:'banner info'}, t('vSummary', pv.basic, pv.contracted)));
   } else {
     box.appendChild(Seg([{value:'fill',label:t('vFill')},{value:'exact',label:t('vExact')},{value:'quota',label:t('vQuota')},{value:'fixed',label:t('vFixed')}], V.mode, v=>{ V.mode = v; settingsChanged(refresh); }, {cls:'block'}));
+    box.appendChild(el('div', {class:'field'}, [el('label', null, t('vFillMode')), Seg([{value:'fill',label:t('vFillRest')},{value:'goals',label:t('vFillGoals')}], V.fill, v=>{ V.fill = v; settingsChanged(refresh); }, {cls:'block'})]));
     const live = el('div', {class:'hint'});
     const paint = ()=>{ const pv = volumePreview(); live.textContent = t('vSummary', pv.basic, pv.contracted)+' · '+t('capLine', pv.capacity); live.style.color = pv.overCapacity ? 'var(--warn)' : ''; };
     if(V.mode==='fill'){
@@ -365,6 +366,7 @@ function conflictFixLabel(c){
   if(f.type==='dayPrefer') return t('fixDayPrefer', c.args[1], c.args[0]);
   if(f.type==='goalPrefer') return t('fixGoalPrefer');
   if(f.type==='noEveryDay') return t('fixNoEveryDay');
+  if(f.type==='raisePerDay') return t('fixRaisePerDay', f.to);
   return null;
 }
 function applyConflictFix(c){
@@ -381,6 +383,7 @@ function applyConflictFix(c){
     if(!g) return false;
     g.lv = Object.assign({}, g.lv, {level:'prefer'});
   }
+  else if(f.type==='raisePerDay') { set.volume.perDay = Math.max(set.volume.perDay||1, f.to|0); }
   else if(f.type==='noEveryDay') { set.volume.requireEveryEligibleDay = false; set.volume.useAllDays = 'off'; }
   else return false;
   commit('settings');
@@ -419,6 +422,19 @@ function planStatusBanner(plan, A){
   const act = el('button', {type:'button', class:'btn sm', onclick:()=>{ App.ui.view = 'summary'; renderResults(); }}, t('vSummaryView'));
   return el('div', {class:'banner '+(kind==='infeasible' ? 'danger' : 'warn'), role:'status'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), body, act]);
 }
+function exportPlanFile(kind, mode){
+  if(!App.plan) return false;
+  mode = mode || App.ui.exportMode || 'full';
+  const base = (App.ui.lang==='ar' ? '\u0627\u0644\u062e\u0637\u0629-' : 'plan-')+App.plan.cycle;
+  if(kind==='xlsx'){
+    const rows = exportPlanRows(App.plan, mode);
+    downloadBlob(buildXlsx([{name:App.ui.lang==='ar' ? '\u0627\u0644\u062e\u0637\u0629' : 'Plan', rows, widths:rows[0].map((_, i)=>i===5 ? 40 : 18)}, exportMatrixSheet(App.plan)]), base+'.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } else {
+    downloadBlob(new TextEncoder().encode(toCSV(exportPlanRows(App.plan, mode))), base+'.csv', 'text/csv;charset=utf-8');
+  }
+  return true;
+}
+
 function showApprovalBlockers(blockers){
   const lines = [];
   for(const b of blockers){
@@ -464,7 +480,7 @@ function viewList(plan, A){
       const km = facilityKm(f), band = distBand(km);
       const dim = App.ui.focusPerson && !visitTeamIds(v).includes(App.ui.focusPerson);
       col.appendChild(el('button', {type:'button', class:'visit '+v.kind+(issues.has(v.id)?' has-issue':'')+(dim?' dim':''), 'data-v':v.id, onclick:()=>openVisit(v.id)}, [
-        el('span', {class:'fac'}, [el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag, title:t('fixedTag')}) : null, f.name]), el('span', null, [km!=null ? el('span', {class:'num'}, km+' '+t('km')) : null, f.pinned ? el('span', {html:ICON.pin}) : null, v.fixed ? el('span', null, '· '+t('fixedTag')) : null, v.special ? el('span', {style:{color:'var(--ok)'}}, '· '+t('specialTag')) : null, v.moved ? el('span', null, '· '+t('moved')) : null, v.late ? el('span', {style:{color:'var(--warn)'}}, '· '+t('lateTag')) : null])]),
+        el('span', {class:'fac'}, [el('b', null, [v.fixed ? el('span', {class:'fx-flag', html:ICON.flag, title:t('fixedTag')}) : null, f.name]), el('span', null, [km!=null ? el('span', {class:'num'}, km+' '+t('km')) : null, f.pinned ? el('span', {html:ICON.pin}) : null, v.fixed ? el('span', null, '· '+t('fixedTag')) : null, v.special ? el('span', {style:{color:'var(--ok)'}}, '· '+t('specialTag')) : null, visitOrigin(v)==='goal' ? el('span', null, '· '+t('originGoal')) : null, visitOrigin(v)==='filler' ? el('span', null, '· '+t('originFiller')) : null, v.moved ? el('span', null, '· '+t('moved')) : null, v.late ? el('span', {style:{color:'var(--warn)'}}, '· '+t('lateTag')) : null])]),
         el('span', {class:'cat tag '+v.kind}, f.category || kindLabel(v.kind)),
         el('span', {class:'team'}, teamPills(v))
       ]));
@@ -877,6 +893,7 @@ function openVisit(id){
         v.fixed ? el('span', {class:'tag warn', html:ICON.flag+' '+t('fixedTag')}) : null,
         v.special ? el('span', {class:'tag ok', html:ICON.sparkle.replace(/width="18" height="18"/,'width="13" height="13"')+' '+t('specialTag')}) : null,
         ...gNames.map(n=>el('span', {class:'tag ok', html:ICON.target+' '}, n)),
+        visitOrigin(v)==='filler' ? el('span', {class:'tag'}, t('originFiller')) : null,
         v.why && v.why.deadline ? el('span', {class:'tag'+(v.late?' warn':'')}, t('vdDeadline', fmtDate(v.why.deadline,'dm'))) : null,
         v.why ? el('span', {class:'tag'}, t('vdOverdue', v.why.overdue)) : null,
         v.why && v.why.rank!=null ? el('span', {class:'tag'}, t('vdRank', v.why.rank, kindLabel(v.kind))) : null,

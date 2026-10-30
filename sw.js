@@ -1,4 +1,4 @@
-const VERSION = '5.1.0';
+const VERSION = '5.2.0';
 const CACHE = 'alkhitta-'+VERSION;
 const ASSETS = [
   "./",
@@ -16,6 +16,8 @@ const ASSETS = [
   "js/store.js",
   "js/i18n.js",
   "js/rules-model.js",
+  "js/settings-index.js",
+  "js/palette.js",
   "js/people-rules.js",
   "js/engine.js",
   "js/goals.js",

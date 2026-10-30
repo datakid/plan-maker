@@ -132,7 +132,7 @@ function dueIndex(startOrd){
 }
 
 function makeState(plan){
-  const st = {plan, due:dueIndex(ordOf(plan.start)), eval:null, hard:0, soft:0, reward:0};
+  const st = {plan, due:dueIndex(ordOf(plan.start)), eval:null, hard:0, intent:0, soft:0, reward:0};
   evaluateState(st);
   return st;
 }
@@ -141,9 +141,17 @@ function evaluateState(st){
   const v = validatePlan(st.plan);
   const w = lvOf('due.priority').w;
   let reward = 0;
-  for(const x of st.plan.visits) reward += w*(st.due.get(x.facilityId)||0);
+  const goalsOnly = S().volume.fill==='goals';
+  const counted = new Set();
+  for(const x of st.plan.visits){
+    if(counted.has(x.facilityId)) continue;
+    counted.add(x.facilityId);
+    if(goalsOnly && visitOrigin(x)==='filler') continue;
+    reward += w*(st.due.get(x.facilityId)||0);
+  }
   st.eval = v;
   st.hard = v.hardScore;
+  st.intent = v.intentScore;
   st.reward = Math.round(reward*1000)/1000;
   st.soft = Math.round((v.softScore-st.reward)*1000)/1000;
   return st;
@@ -221,19 +229,20 @@ function applyMove(st, move){
 }
 
 function deltaMove(st, move){
-  const prev = {hard:st.hard, soft:st.soft, reward:st.reward, eval:st.eval};
+  const prev = {hard:st.hard, intent:st.intent, soft:st.soft, reward:st.reward, eval:st.eval};
   const inv = applyMove(st, move);
   evaluateState(st);
-  const d = {hard:Math.round((st.hard-prev.hard)*1000)/1000, soft:Math.round((st.soft-prev.soft)*1000)/1000};
-  const revert = ()=>{ applyMove(st, inv); st.hard = prev.hard; st.soft = prev.soft; st.reward = prev.reward; st.eval = prev.eval; };
+  const d = {hard:Math.round((st.hard-prev.hard)*1000)/1000, intent:Math.round((st.intent-prev.intent)*1000)/1000, soft:Math.round((st.soft-prev.soft)*1000)/1000};
+  const revert = ()=>{ applyMove(st, inv); st.hard = prev.hard; st.intent = prev.intent; st.soft = prev.soft; st.reward = prev.reward; st.eval = prev.eval; };
   if(App.debugScore){
     const fresh = validatePlan(JSON.parse(JSON.stringify(st.plan)));
     if(fresh.hardScore!==st.hard) throw new Error('score drift hard '+fresh.hardScore+' vs '+st.hard);
+    if(fresh.intentScore!==st.intent) throw new Error('score drift intent '+fresh.intentScore+' vs '+st.intent);
   }
   return {delta:d, revert, inverse:inv};
 }
 
 function statePlanScore(plan){
   const st = makeState(plan);
-  return {hard:st.hard, soft:st.soft};
+  return {hard:st.hard, intent:st.intent, soft:st.soft};
 }

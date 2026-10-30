@@ -1,5 +1,5 @@
 const PT_GROUPS = ['basic', 'skills', 'plan', 'avail', 'rules', 'limits'];
-const PT_DEFAULTS = {basic:true, skills:true, plan:true, avail:true, rules:true, limits:false};
+const PT_DEFAULTS = {basic:true, skills:false, plan:true, avail:true, rules:true, limits:false};
 
 function ptPersonGoals(p){
   return S().goals.filter(g=>g.on && ((g.type==='person' && g.people.includes(p.id)) || (g.type==='together' && (g.a===p.id || g.b===p.id)) || ((g.type==='special' || g.type==='pattern') && g.people.includes(p.id))));
@@ -47,6 +47,38 @@ function ptQuotaEditor(p, save, rerender){
   return out;
 }
 
+function personSearchText(p){
+  const pl = poolById(p.pool);
+  const loc = App.data.locations.find(l=>l.id===p.origin);
+  const kinds = [];
+  if(p.skill && p.skill.basic>0) kinds.push(t('kBasic'));
+  if(p.skill && p.skill.contracted>0) kinds.push(t('kContracted'));
+  return norm([p.name, p.title, pl && pl.name, pl && pl.nameEn, loc && loc.name, p.gender==='f' ? t('pFemale') : (p.gender==='m' ? t('pMale') : ''), p.retired ? t('tRetired') : '', kinds.join(' ')].filter(Boolean).join(' '));
+}
+
+function personUnavailable(p){
+  const win = planWindow();
+  if(win.error) return false;
+  if(p.avail && p.avail.mode==='weekdays' && !(p.avail.weekdays||[]).length) return true;
+  return (p.off||[]).some(r=>r.from && r.to && ordOf(r.to)>=win.start && ordOf(r.from)<=win.end);
+}
+
+function personAssigned(p){
+  return App.plan ? App.plan.visits.filter(v=>visitTeamIds(v).includes(p.id)).length : 0;
+}
+
+function personOverQuota(p, an){
+  const n = personAssigned(p);
+  if(p.quota && p.quota.max!=null && n>p.quota.max) return true;
+  return !!(an && an.expected[p.id]!=null && n>an.expected[p.id]+1);
+}
+
+function personLastInPlan(p){
+  let last = 0;
+  if(App.plan) for(const v of App.plan.visits) if(visitTeamIds(v).includes(p.id)) last = Math.max(last, ordOf(v.date));
+  return last;
+}
+
 function renderTeam(root){
   if(renderTeam.api && renderTeam.api.dispose) renderTeam.api.dispose();
   root.classList.add('page-wide');
@@ -55,6 +87,8 @@ function renderTeam(root){
   if(!U.teamCols) U.teamCols = Object.assign({}, PT_DEFAULTS);
   if(U.teamSearch==null) U.teamSearch = '';
   if(!U.teamPoolFilter) U.teamPoolFilter = [];
+  if(!U.teamFilters) U.teamFilters = {gender:null, rules:false, unavail:false, over:false};
+  if(!U.teamSort) U.teamSort = 'manual';
   if(U.teamPanel===undefined) U.teamPanel = null;
   const wide = ()=>U.teamWide!=null ? U.teamWide : window.innerWidth>=980;
   const layout = el('div', {class:'pt-layout'});
@@ -73,16 +107,47 @@ function renderTeam(root){
 
   function dispose(){
     popOverlay(closePanel);
+    document.removeEventListener('keydown', onSlash);
     lifecycle.disconnect();
     window.removeEventListener('resize', onResize);
   }
   function onResize(){ if(!wide() && U.teamPanel) closePanel(); }
   window.addEventListener('resize', onResize);
+  function onSlash(e){
+    if(e.key!=='/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT' || (e.target && e.target.isContentEditable)) return;
+    const box = layout.querySelector('.pt-search');
+    if(box){ e.preventDefault(); box.focus(); box.select(); }
+  }
+  document.addEventListener('keydown', onSlash);
 
   const save = ()=>{ commit('data'); paintMeta(); };
   const list = ()=>{
-    const q = U.teamSearch.trim().toLowerCase();
-    return App.data.people.filter(p=>(U.teamShowRetired || !p.retired) && (!U.teamPoolFilter.length || U.teamPoolFilter.includes(p.pool)) && (!q || (p.name||'').toLowerCase().includes(q)));
+    const q = norm(U.teamSearch);
+    const F = U.teamFilters;
+    const an = (F.over || U.teamSort==='load') && App.plan && !App.plan.stale ? analyzePlan(App.plan) : null;
+    const out = App.data.people.filter(p=>{
+      if(!(U.teamShowRetired || !p.retired)) return false;
+      if(U.teamPoolFilter.length && !U.teamPoolFilter.includes(p.pool)) return false;
+      if(q && !personSearchText(p).includes(q)) return false;
+      if(F.gender && p.gender!==F.gender) return false;
+      if(F.rules && !ptPersonGoals(p).length) return false;
+      if(F.unavail && !personUnavailable(p)) return false;
+      if(F.over && !personOverQuota(p, an)) return false;
+      return true;
+    });
+    const byName = (a, b)=>(a.name||'').localeCompare(b.name||'', App.ui.lang);
+    const cmp = U.teamSort==='load' ? (a, b)=>personAssigned(b)-personAssigned(a) || byName(a, b)
+      : (U.teamSort==='idle' ? (a, b)=>personLastInPlan(a)-personLastInPlan(b) || byName(a, b)
+      : (U.teamSort==='name' ? byName : null));
+    const grouped = [];
+    for(const pl of S().pools){
+      const g = out.filter(p=>p.pool===pl.id);
+      if(cmp) g.sort(cmp);
+      grouped.push(...g);
+    }
+    return grouped;
   };
   const orderIds = ()=>list().map(p=>p.id);
 
@@ -188,7 +253,8 @@ function renderTeam(root){
   }
 
   function paintMeta(){
-    info.textContent = t('teamActive', activePeople().length);
+    const shown = list().length, total = App.data.people.filter(p=>U.teamShowRetired || !p.retired).length;
+    info.textContent = shown===total ? t('teamActive', activePeople().length) : t('ptCount', shown, total);
     const an = App.plan && !App.plan.stale ? analyzePlan(App.plan) : null;
     for(const n of tableWrap.querySelectorAll('.pt-load')){ const p = personById(n.dataset.load); if(p) n.textContent = loadText(p, an); }
   }
@@ -358,9 +424,13 @@ function renderTeam(root){
     const poolChips = el('div', {class:'chips'}, S().pools.map(pl=>el('button', {type:'button', class:'chip'+(U.teamPoolFilter.includes(pl.id) ? ' on' : ''), onclick:e=>{ const i = U.teamPoolFilter.indexOf(pl.id); if(i>=0) U.teamPoolFilter.splice(i, 1); else U.teamPoolFilter.push(pl.id); e.currentTarget.classList.toggle('on', i<0); paintTable(); }}, poolName(pl))));
     const colBtn = el('button', {type:'button', class:'btn sm outline'}, t('ptColumns'));
     colBtn.addEventListener('click', ()=>popover(colBtn, ()=>[el('div', {class:'pop-title'}, t('ptColumns')), el('div', {class:'stack', style:{gap:'8px'}}, PT_GROUPS.filter(g=>g!=='basic').map(g=>el('label', {class:'row', style:{gap:'8px'}}, [Switch(U.teamCols[g]!==false, v=>{ U.teamCols[g] = v; paintTable(); }), t('ptg'+g[0].toUpperCase()+g.slice(1))])))], {width:260}));
+    const F = U.teamFilters;
+    const flag = (key, label, val)=>el('button', {type:'button', class:'chip'+(val ? ' on' : ''), 'aria-pressed':val ? 'true' : 'false', 'data-filter':key, onclick:()=>{ if(key==='f' || key==='m') F.gender = F.gender===key ? null : key; else F[key] = !F[key]; renderTab(); }}, label);
+    const filters = el('div', {class:'chips pt-filters'}, [flag('f', t('pFemale'), F.gender==='f'), flag('m', t('pMale'), F.gender==='m'), flag('rules', t('ptHasRules'), F.rules), flag('unavail', t('ptUnavail'), F.unavail), flag('over', t('ptOver'), F.over)]);
+    const sortSel = Select([{value:'manual', label:t('ptSortManual')}, {value:'name', label:t('ptSortName')}, {value:'load', label:t('ptSortLoad')}, {value:'idle', label:t('ptSortIdle')}], U.teamSort, v=>{ U.teamSort = v; paintTable(); }, {sm:true});
     const ret = el('label', {class:'row', style:{gap:'6px'}}, [Switch(!!U.teamShowRetired, v=>{ U.teamShowRetired = v; paintTable(); }), el('span', null, t('ptShowRetired'))]);
     const add = el('button', {type:'button', class:'btn primary sm', onclick:()=>{ const p = freshPerson({name:'', pool:S().pools[0].id, origin:locIdFor('دمنهور')}); openPerson(null, p, ()=>paintTable()); }}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('tAdd')]);
-    return el('div', {class:'pt-toolbar'}, [search, poolChips, el('div', {class:'spacer'}), ret, colBtn, add]);
+    return el('div', {class:'pt-toolbar'}, [search, poolChips, filters, sortSel, el('div', {class:'spacer'}), ret, colBtn, add]);
   }
 
   const card = el('section', {class:'card pt-card', id:'team-card'});

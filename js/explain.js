@@ -61,6 +61,11 @@ function whyCandidates(st, v, rnd, limit){
   return out.slice(0, limit);
 }
 
+function probeTier(v){ return v.cls==='hard' ? 0 : (INTENT_RULES.has(v.rule) ? 1 : 2); }
+function probeOrder(violations){
+  return violations.filter(v=>v.cls==='hard' || v.cls==='soft').sort((a, b)=>(probeTier(a)-probeTier(b)) || (b.weight*b.units-a.weight*a.units));
+}
+
 function explainPlan(plan, opts){
   opts = opts || {};
   const t0 = Date.now();
@@ -69,7 +74,7 @@ function explainPlan(plan, opts){
   const before = st.eval.violations;
   const beforeTotals = whyRuleTotals(before);
   const rnd = lnsRng(opts.seed || 1);
-  const targets = before.filter(v=>v.cls==='hard' || v.cls==='soft').sort((a, b)=>((b.cls==='hard')-(a.cls==='hard')) || (b.weight*b.units-a.weight*a.units));
+  const targets = probeOrder(before);
   const why = {};
   const budget = opts.ms || 300;
   const base = lnsCost(st);

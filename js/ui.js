@@ -230,30 +230,37 @@ function Stepper(value, onChange, opts){
   opts = opts||{};
   const min = opts.min==null ? 0 : opts.min, max = opts.max==null ? 999 : opts.max, step = opts.step||1;
   const base = opts.nullable && opts.base!=null ? opts.base : null;
-  let cur = value;
-  const input = el('input', {type:'text', inputmode:'numeric', value: cur==null ? '' : String(cur), placeholder: opts.placeholder||'', 'aria-label':opts.label||''});
+  let cur = value==null ? null : value;
+  const input = el('input', {type:'text', inputmode:'numeric', value: cur==null ? (base!=null ? String(base) : '') : String(cur), placeholder: opts.placeholder||'', 'aria-label':opts.label||''});
   const dec = el('button', {type:'button', 'aria-label':'−', html:ICON.minus});
   const inc = el('button', {type:'button', 'aria-label':'+', html:ICON.plus});
+  const eff = ()=>cur!=null ? cur : (base!=null ? base : min);
+  function shown(){ return cur==null ? (base!=null ? String(base) : '') : String(cur); }
   function set(v, fire){
-    if(v==null || v===''){ if(opts.nullable){ cur = null; input.value=''; paint(); if(fire) onChange(null); } else input.value = cur==null ? '' : String(cur); return; }
-    if(typeof v!=='number' || !isFinite(v)){ input.value = cur==null ? '' : String(cur); return; }
+    if(v==null || v===''){ if(opts.nullable){ cur = null; input.value = shown(); paint(); if(fire) onChange(null); } else input.value = shown(); return; }
+    if(typeof v!=='number' || !isFinite(v)){ input.value = shown(); return; }
     v = clamp(Math.round(v/step)*step, min, max);
     cur = v; input.value = String(v); paint();
     if(fire) onChange(v);
   }
   function paint(){
-    if(base!=null){ dec.disabled = (cur==null ? base : cur)<=min; inc.disabled = (cur==null ? base : cur)>=max; return; }
-    dec.disabled = opts.nullable ? cur==null : (cur!=null && cur<=min); inc.disabled = cur!=null && cur>=max;
+    dec.disabled = base!=null ? eff()<=min : (!opts.nullable && eff()<=min);
+    inc.disabled = eff()>=max;
+    const inherited = cur==null && base!=null;
+    g.classList.toggle('is-inherited', inherited);
+    if(inherited) input.dataset.inherited = 'true'; else delete input.dataset.inherited;
   }
   dec.addEventListener('click', ()=>{
-    if(base!=null){ set((cur==null ? base : cur)-step, true); return; }
-    if(cur==null) set(max<999?max:min, true); else if(opts.nullable && cur<=min) set(null, true); else set(cur-step, true);
+    if(cur==null){ set(Math.max(min, eff()-step), true); return; }
+    if(opts.nullable && cur<=min && base==null){ set(null, true); return; }
+    set(cur-step, true);
   });
-  inc.addEventListener('click', ()=>{ if(base!=null) set((cur==null ? base : cur)+step, true); else set(cur==null ? min : cur+step, true); });
-  input.addEventListener('change', ()=>{ const raw = toAsciiDigits(input.value).replace(/[^\d.-]/g,''); if(raw==='') set(null, true); else { const n = Number(raw); if(isFinite(n)) set(n, true); else input.value = cur==null ? '' : String(cur); } });
+  inc.addEventListener('click', ()=>{ set(cur==null && base==null ? min : eff()+step, true); });
+  input.addEventListener('change', ()=>{ const raw = toAsciiDigits(input.value).replace(/[^\d.-]/g,''); if(raw==='') set(null, true); else { const n = Number(raw); if(isFinite(n)) set(n, true); else input.value = shown(); } });
   input.addEventListener('keydown', e=>{ if(e.key==='ArrowUp'){ e.preventDefault(); inc.click(); } if(e.key==='ArrowDown'){ e.preventDefault(); dec.click(); } });
-  paint();
   const g = el('div', {class:'input-group'+(opts.sm?' sm':'')}, [dec, input, opts.unit ? el('span', {class:'unit'}, opts.unit) : null, inc]);
+  g.dataset.stepper = '1'; g.dataset.min = String(min); g.dataset.step = String(step); g.dataset.nullable = opts.nullable ? '1' : '0'; g.dataset.base = base==null ? '' : String(base);
+  paint();
   g.set = v=>set(v, false);
   return g;
 }

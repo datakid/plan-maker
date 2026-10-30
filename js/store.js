@@ -1,9 +1,9 @@
-const APP_VERSION = '5.1.0';
+const APP_VERSION = '5.2.0';
 const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
 const SETTINGS_REV = 6;
-const RULES_REV = 9;
+const RULES_REV = 10;
 
 const App = {
   data: null,
@@ -26,7 +26,7 @@ function defaultSettings(){
   return {
     period: {goal:'range', preset:'month', start:null, end:null, scope:{kind:'all', ids:[]}, times:1},
     calendar: {workdays:[0,1,2,3,4], holidays:[], extra:[]},
-    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, minPerDay:null, minPerDayLv:null, requireEveryEligibleDay:false, dayMode:'upTo', exactMode:'exactly', total:{mode:'upTo', n:null}},
+    volume: {mode:'fill', share:0.6, exact:{basic:12, contracted:8}, quotas:{}, perDay:1, perWeek:null, minPerDay:null, minPerDayLv:null, requireEveryEligibleDay:false, requestsExceedCap:true, fill:'fill', dayMode:'upTo', exactMode:'exactly', total:{mode:'upTo', n:null}},
     goals: defaultGoals(),
     overrides: [],
     spacing: {mode:'even', gap:2, strict:'try'},
@@ -263,6 +263,8 @@ function normalizeData(d){
   VV.exactMode = VV.exactMode==='upTo' ? 'upTo' : 'exactly';
   if(VV.useAllDays!=='off' && VV.useAllDays!=='prefer' && VV.useAllDays!=='must') VV.useAllDays = VV.requireEveryEligibleDay ? 'must' : 'off';
   VV.requireEveryEligibleDay = VV.useAllDays!=='off';
+  VV.requestsExceedCap = VV.requestsExceedCap!==false;
+  VV.fill = VV.fill==='goals' ? 'goals' : 'fill';
   const tot = VV.total && typeof VV.total==='object' ? VV.total : {};
   VV.total = {mode:tot.mode==='exactly' ? 'exactly' : 'upTo', n:tot.n==null || tot.n==='' ? null : cleanInt(tot.n, 1, 5000, null)};
   d.settings.volume.quotas = d.settings.volume.quotas || {};

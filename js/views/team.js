@@ -78,7 +78,8 @@ function personParts(p, api, saveP){
   b2.addEventListener('click', ()=>make('together', g=>{ g.a = p.id; }));
   b3.addEventListener('click', ()=>make('special', g=>{ g.people = [p.id]; g.fill = true; }));
   b4.addEventListener('click', ()=>make('pattern', g=>{ g.people = [p.id]; }));
-  gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b1, b2, b3, b4]));
+  gBox.appendChild(el('div', {class:'row wrap', style:{gap:'4px'}}, [b2, b3, b4]));
+  gBox.appendChild(RuleDraft({lockSubject:true, make:()=>{ const g = simpleRuleGoal(); g.subject = {kind:'people', ids:[]}; g.people = [p.id]; return g; }}));
   const goalsSec = el('div', {class:'stack', style:{gap:'6px'}}, [el('div', {class:'section-title', style:{marginTop:'14px'}}, t('pGoals')), gBox]);
 
   const a = p.avail;
@@ -136,10 +137,39 @@ function personParts(p, api, saveP){
   return {basics, skill, load, goalsSec, availSec, prSec, offSec, origin};
 }
 
+function personActivity(p){
+  const sec = el('section', {class:'sheet-sec'});
+  sec.appendChild(el('div', {class:'section-title'}, t('ptab_activity')));
+  const vis = App.plan ? App.plan.visits.filter(v=>visitTeamIds(v).includes(p.id)).slice().sort((a, b)=>a.date<b.date ? -1 : 1) : [];
+  const an = App.plan && !App.plan.stale ? analyzePlan(App.plan) : null;
+  const exp = an && an.expected[p.id]!=null ? an.expected[p.id] : analyzeLoadGuess(p);
+  sec.appendChild(el('div', {class:'hint'}, t('pActLoad', vis.length, Math.round(exp*10)/10)));
+  if(!vis.length) sec.appendChild(el('div', {class:'muted', style:{fontSize:'13px'}}, t('pActNone')));
+  for(const v of vis){
+    const f = facilityById(v.facilityId);
+    sec.appendChild(el('div', {class:'row', style:{padding:'5px 0', fontSize:'12.5px', borderBottom:'1px dashed var(--line)'}}, [el('span', {class:'num muted', style:{minWidth:'92px'}}, fmtDate(v.date, 'short')), el('span', null, f ? f.name : v.facilityId)]));
+  }
+  return sec;
+}
+
+const PERSON_TABS = ['profile', 'avail', 'rules', 'activity'];
+
 function personEditor(p, api, saveP){
   const x = personParts(p, api, saveP);
   x.load.appendChild(x.goalsSec);
-  return [x.basics, x.skill, x.load, x.availSec, x.prSec, x.offSec, x.origin];
+  const U = App.ui;
+  const sections = {profile:[x.basics, x.skill, x.origin], avail:[x.availSec, x.offSec], rules:[x.load, x.prSec], activity:[personActivity(p)]};
+  if(!sections[U.personTab]) U.personTab = 'profile';
+  if(!U.personScroll) U.personScroll = {};
+  const holder = ()=>document.querySelector('.pt-panel-body') || document.querySelector('.sheet-body');
+  const bar = el('div', {class:'pt-tabs', role:'tablist'}, PERSON_TABS.map(k=>el('button', {type:'button', role:'tab', class:'pt-tab'+(U.personTab===k ? ' on' : ''), 'aria-selected':U.personTab===k ? 'true' : 'false', 'data-ptab':k, onclick:()=>{
+    const h = holder();
+    if(h) U.personScroll[U.personTab] = h.scrollTop;
+    U.personTab = k;
+    api.render();
+    setTimeout(()=>{ const h2 = holder(); if(h2) h2.scrollTop = U.personScroll[k] || 0; }, 0);
+  }}, t('ptab_'+k))));
+  return [bar].concat(sections[U.personTab]);
 }
 
 function openPerson(id, draft, rerender){

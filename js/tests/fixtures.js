@@ -18,7 +18,7 @@ const Fx = {
     const end = isoOf(ordOf(start)+days-1);
     const pools = (spec.pools || [{id:'a', basic:1, contracted:1}]).map(p=>({id:p.id, name:p.id, nameEn:p.id, seats:{basic:p.basic==null?1:p.basic, contracted:p.contracted==null?1:p.contracted}, byCategory:p.byCategory||{}}));
     const facilities = (spec.facilities || []).map(f=>({
-      id:f.id, name:f.name || f.id, category:f.cat || 'B', locationId:'loc_x', kindOverride:null, freq:f.freq==null?1:f.freq,
+      id:f.id, name:f.name || f.id, category:f.cat || 'B', locationId:f.loc || 'loc_x', kindOverride:null, freq:f.freq==null?1:f.freq,
       importance:f.importance==null?50:f.importance, pinned:!!f.pinned, excluded:false, lastVisit:f.lastVisit||null,
       visitCount:f.visitCount||0, history:f.history||[], weekdays:f.weekdays||null, review:null
     }));
@@ -47,7 +47,7 @@ const Fx = {
     for(const c of (spec.categories || [])) cats.set(c.name, c.kind);
     const data = {
       version:5, rev:SETTINGS_REV, settings:merged,
-      locations:[{id:'loc_x', name:'X', km:0}],
+      locations:spec.locations || [{id:'loc_x', name:'X', km:0}],
       categories:[...cats].map(([name, kind])=>({name, kind})),
       facilities, people,
       history:Object.assign({fpv:{}, counts:{}, lastCycle:0}, spec.history || {}),
@@ -160,4 +160,101 @@ Fx.visitplanWitness = function(){
     day(3, 113, [102, 104], [109, 111]),
     day(4, 116, [101, 103], [108])
   ];
+};
+
+Fx.LOCS = [{id:'L1', name:'L1', km:0}, {id:'L2', name:'L2', km:0}, {id:'L3', name:'L3', km:0}];
+Fx.special = function(o){
+  return Object.assign(newGoal('special'), {id:'sp1', facilityId:'A', times:1, fill:false, people:[], from:null, to:null, lv:mkLv('must', 5)}, o || {});
+};
+Fx.fixedVisit = function(o){
+  return Object.assign(newOverride({id:'ov1', date:Fx.iso(2), facilityId:'B', people:[], fill:true}), o || {});
+};
+
+Fx.spx = function(o){
+  o = Object.assign({perDay:1, level:'must', people:'none', win:'week'}, o || {});
+  const fixedPeople = o.people==='none' ? [] : (o.people==='overlap' ? ['p1'] : ['p2']);
+  const specialPeople = o.people==='none' ? [] : ['p1'];
+  const lo = o.win==='week' ? 0 : 2, hi = o.win==='week' ? 4 : 2;
+  const fillers = [];
+  for(let i=1;i<=6;i++) fillers.push({id:'f'+i, loc:'L1', freq:1, importance:60-i});
+  return {
+    days:5, workdays:[0, 1, 2, 3, 4], locations:Fx.LOCS,
+    pools:[{id:'a', basic:1, contracted:1}],
+    facilities:[{id:'A', loc:'L1', importance:10}, {id:'B', loc:'L2', importance:10}].concat(fillers),
+    people:Fx.ppl(['p1', 'p2', 'p3', 'p4', 'p5', 'p6']),
+    volume:{mode:'exact', exact:{basic:4, contracted:0}, perDay:o.perDay},
+    goals:[Fx.special({facilityId:'A', from:Fx.iso(lo), to:Fx.iso(hi), people:specialPeople, lv:mkLv(o.level, 5)})],
+    overrides:[Fx.fixedVisit({date:Fx.iso(2), facilityId:'B', people:fixedPeople, fill:!fixedPeople.length})]
+  };
+};
+
+Fx.spxVariants = function(){
+  const out = [];
+  for(const perDay of [1, 2, 3]) for(const level of ['must', 'prefer']) for(const people of ['none', 'chosen', 'overlap']){
+    out.push({name:'spx-pd'+perDay+'-'+level+'-'+people+'-day', spec:()=>Fx.spx({perDay, level, people, win:'day'})});
+  }
+  for(const perDay of [1, 2]) for(const level of ['must', 'prefer']) for(const people of ['none', 'chosen']){
+    out.push({name:'spx-pd'+perDay+'-'+level+'-'+people+'-week', spec:()=>Fx.spx({perDay, level, people, win:'week'})});
+  }
+  return out;
+};
+
+Fx.g4i2 = function(o){
+  o = Object.assign({mode:'fill', fill:null}, o || {});
+  const facilities = [];
+  for(let i=1;i<=3;i++) facilities.push({id:'k'+i, cat:'K1', loc:'L1', importance:20});
+  for(let i=1;i<=3;i++) facilities.push({id:'m'+i, cat:'K2', loc:'L2', importance:20});
+  for(let i=1;i<=3;i++) facilities.push({id:'q'+i, cat:'B', loc:'L2', importance:20});
+  facilities.push({id:'s1', cat:'B', loc:'L3', importance:20}, {id:'x1', cat:'B', loc:'L3', importance:20}, {id:'x2', cat:'B', loc:'L3', importance:20});
+  for(let i=1;i<=10;i++) facilities.push({id:'o'+i, cat:'B', loc:'L1', importance:90-i, lastVisit:Fx.iso(-200-i*10), history:[Fx.iso(-200-i*10)], visitCount:1});
+  const cover = newGoal('cover'); Object.assign(cover, {id:'g_cover', scope:{kind:'category', ids:['K1']}, times:1, since:null, by:null, repeat:false, lv:mkLv('must', 5)});
+  const atLeast = newGoal('atLeast'); Object.assign(atLeast, {id:'g_atleast', scope:{kind:'location', ids:['L2']}, n:2, repeat:false, lv:mkLv('prefer', 5)});
+  const atMost = newGoal('atMost'); Object.assign(atMost, {id:'g_atmost', scope:{kind:'category', ids:['K2']}, n:1, lv:mkLv('prefer', 5)});
+  const special = Fx.special({id:'g_special', facilityId:'s1', times:1, people:[], from:Fx.iso(0), to:Fx.iso(9), lv:mkLv('prefer', 5)});
+  const volume = o.mode==='fill' ? {mode:'fill', share:0.5, perDay:2} : (o.mode==='quota' ? {mode:'quota', quotas:{B:8, K1:2, K2:1}, perDay:2} : {mode:'exact', exact:{basic:14, contracted:0}, perDay:2});
+  if(o.fill) volume.fill = o.fill;
+  return {
+    days:10, workdays:[0, 1, 2, 3, 4, 5, 6], locations:Fx.LOCS,
+    pools:[{id:'a', basic:1, contracted:1}],
+    facilities,
+    people:Fx.ppl(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']),
+    volume,
+    goals:[cover, atLeast, atMost, special],
+    overrides:[Fx.fixedVisit({id:'ov_a', date:Fx.iso(2), facilityId:'x1'}), Fx.fixedVisit({id:'ov_b', date:Fx.iso(6), facilityId:'x2'})]
+  };
+};
+
+Fx.pool = function(){
+  const facilities = [];
+  for(let i=1;i<=4;i++) facilities.push({id:'x'+i, cat:'B', loc:'L1', importance:50});
+  for(let i=1;i<=4;i++) facilities.push({id:'y'+i, cat:'C', loc:'L2', importance:50});
+  for(let i=1;i<=4;i++) facilities.push({id:'z'+i, cat:'B', loc:'L3', importance:50});
+  const pg = newGoal('person');
+  Object.assign(pg, {id:'g_never', people:['p1', 'p2'], rel:'never', scope:{kind:'location', ids:['L1']}, lv:mkLv('must', 5)});
+  const og = newGoal('person');
+  Object.assign(og, {id:'g_only', people:['p3'], rel:'only', scope:{kind:'category', ids:['C']}, lv:mkLv('must', 5)});
+  return {
+    days:6, workdays:[0, 1, 2, 3, 4, 5], locations:Fx.LOCS, categories:[{name:'C', kind:'contracted'}],
+    pools:[{id:'a', basic:1, contracted:1}],
+    facilities,
+    people:Fx.ppl(['p1', 'p2', 'p3', 'p4', 'p5', 'p6']),
+    volume:{mode:'exact', exact:{basic:3, contracted:2}, perDay:1},
+    goals:[pg, og]
+  };
+};
+
+Fx.poolRule = function(o){
+  o = Object.assign({rel:'never', level:'must', scope:{kind:'location', ids:['L1']}, subject:{kind:'pool', ids:['adm']}}, o || {});
+  const facilities = [];
+  for(const [loc, p] of [['L1', 'x'], ['L2', 'y'], ['L3', 'z']]) for(let i=1;i<=4;i++) facilities.push({id:p+i, cat:'B', loc, importance:50});
+  const g = newGoal('person');
+  Object.assign(g, {id:'g_rule', rel:o.rel, scope:o.scope, subject:o.subject, people:[], lv:mkLv(o.level, 5)});
+  return {
+    days:6, workdays:[0, 1, 2, 3, 4, 5], locations:Fx.LOCS,
+    pools:[{id:'adm', name:'Admins', basic:1, contracted:0}, {id:'oth', name:'Others', basic:1, contracted:0}],
+    facilities,
+    people:[{id:'p1', pool:'adm'}, {id:'p2', pool:'adm'}, {id:'p3', pool:'oth'}, {id:'p4', pool:'oth'}, {id:'p5', pool:'oth'}, {id:'p6', pool:'oth'}],
+    volume:{mode:'exact', exact:{basic:6, contracted:0}, perDay:1},
+    goals:[g]
+  };
 };

@@ -66,6 +66,13 @@ defs({
   fixDayPrefer:[(rule, day)=>'اجعل «'+rule+'» يوم '+day+' «مفضّل»', (rule, day)=>'Change '+rule+' on '+day+' to Prefer'],
   fixGoalPrefer:['اجعل هذا الهدف «مفضّل»','Make this goal Prefer'],
   fixNoEveryDay:['أوقف إلزام الزيارة كل يوم متاح','Stop requiring a visit on every eligible day'],
+  fixRaisePerDay:[n=>`ارفع عدد الزيارات في اليوم إلى ${n}`, n=>`Raise visits per day to ${n}`],
+  originFiller:['إضافة (متأخرة)', 'Filler (overdue)'],
+  originGoal:['هدف', 'Goal'],
+  vFillRest:['تعبئة الأيام المتبقية', 'Fill remaining days'],
+  vFillGoals:['زياراتي وأهدافي فقط', 'Only my goals and visits'],
+  vFillMode:['ماذا تضيف الخطة', 'What the plan adds'],
+  vFillModeHint:['«تعبئة» تُكمل الحجم بالجهات الأكثر تأخرًا. «زياراتي وأهدافي فقط» لا تضيف أي جهة لم تطلبها.', '"Fill" tops up the volume with the most overdue facilities. "Only my goals and visits" adds nothing you did not ask for.'],
   storageLabel:['المساحة المستخدمة','Storage used'], appVersion:['إصدار التطبيق','App version'],
 
   sPeriod:['الفترة','Period'], sWorkdays:['أيام العمل','Workdays'], sVisits:['الزيارات','Visits'], sTeam:['الفريق','Team'],
@@ -83,6 +90,8 @@ defs({
   vDayUpTo:(n,d)=>`حتى ${n} يوميًا · ${d} أيام`, vDayExactly:(n,d)=>`${n} يوميًا بالضبط · ${d} أيام`,
   vUpTo:['حتى','Up to'], vExactlyOpt:['بالضبط','Exactly'], vUseAll:['استخدام كل الأيام','Use all days'], vUseOff:['لا','Off'], vUseTry:['محاولة','Try'], vUseMust:['إلزامي','Must'],
   vUseAllHint:['«محاولة» تفضّل زيارة في كل يوم مؤهل، و«إلزامي» تفرضها.','Try prefers a visit on every eligible day; Must requires one.'], vPerDayMode:['عدد الزيارات في اليوم','Visits per day'], vCountMode:['العدد الإجمالي','Total count'],
+  vRequestsOver:['الزيارات التي أطلبها قد تتجاوز الحد اليومي', 'Visits I ask for may exceed the daily limit'],
+  vRequestsOverHint:['الزيارات المثبّتة والخاصة تأخذ يومها حتى لو امتلأ الحد، وتُعرض كاستثناء. عند الإيقاف تُترك الزيارة التي لا يوجد لها مكان مع بيان السبب.', 'Fixed and special visits take their day even when the limit is full, and show as an exception. When off, a visit with no room is left out and the reason is shown.'],
   vOver:(n,c)=>`المطلوب ${n} يتجاوز السعة ${c}`,
   capLine:c=>`السعة ${c}`,
   teamActive:n=>`${n} نشط`,
@@ -247,7 +256,7 @@ defs({
   gHintSpecial:['زيارة لجهة معينة خلال فترة مرنة، مع أشخاص محددين إن أردت. يختار المخطط أنسب يوم.','A visit to a chosen place within a flexible window, optionally with set people. The planner picks the best day.'],
   gGroupFac:['أهداف الجهات','Facility goals'], gGroupPeople:['أهداف الأشخاص','People goals'],
   gWho:['الأشخاص','People'], gRel:['القاعدة','Rule'], gVisitsN:['عدد الزيارات','Visits'], gWhere:['في','At'], gOnlyWhere:['فقط في','Only at'], gCountWhere:['تُحتسب في','Counted at'],
-  rel_never:['لا يخرج أبدًا','Never'], rel_only:['فقط','Only'], rel_exactly:['بالضبط','Exactly'], rel_between:['بين حدّين','Between'], rel_atLeast:['على الأقل','At least'], rel_atMost:['على الأكثر','At most'],
+  rel_never:['لا يخرج أبدًا','Never'], rel_reservedFor:['محجوزة لـ','Reserved for'], rel_avoid:['يفضّل ألّا يخرج','Prefers not'], rel_only:['فقط','Only'], rel_exactly:['بالضبط','Exactly'], rel_between:['بين حدّين','Between'], rel_atLeast:['على الأقل','At least'], rel_atMost:['على الأكثر','At most'],
   trel_atLeast:['معًا على الأقل','Together at least'], trel_atMost:['معًا على الأكثر','Together at most'],
   gPair:['الثنائي','Pair'], gShare:['النسبة','Share'], gTogetherHow:['النسبة من زيارات الأقل خروجًا منهما. ١٠٠٪ = دائمًا معًا، ٠٪ على الأكثر = لا يجتمعان.','Share of the visits of whichever goes out less. 100% = always together; at most 0% = never together.'],
   gBetween:['خلال','Between'], gPlanStart:['بداية الخطة','Plan start'], gPlanEnd:['نهاية الخطة','Plan end'],
@@ -259,7 +268,7 @@ defs({
   rRule:['قاعدة','rule'], rQuota:['بلغ الحد','at limit'], cPeople:['قواعد الأشخاص','People rules']
 });
 defs2({
-  gtPersonT:[(p,r,n,s,m)=>`${p}: ${({never:'لا يخرج',only:'فقط',exactly:n+' بالضبط',between:'من '+n+' إلى '+Math.max(n,m||n),atLeast:n+' على الأقل',atMost:n+' على الأكثر'})[r]}${s?' · '+s:''}`, (p,r,n,s,m)=>`${p}: ${({never:'never',only:'only',exactly:'exactly '+n,between:n+' to '+Math.max(n,m||n),atLeast:'at least '+n,atMost:'at most '+n})[r]}${s?' · '+s:''}`],
+  gtPersonT:[(p,r,n,s,m)=>`${p}: ${({never:'لا يخرج',reservedFor:'محجوز لغيره',only:'فقط',exactly:n+' بالضبط',between:'من '+n+' إلى '+Math.max(n,m||n),atLeast:n+' على الأقل',atMost:n+' على الأكثر'})[r]}${s?' · '+s:''}`, (p,r,n,s,m)=>`${p}: ${({never:'never',reservedFor:'reserved for another pool',only:'only',exactly:'exactly '+n,between:n+' to '+Math.max(n,m||n),atLeast:'at least '+n,atMost:'at most '+n})[r]}${s?' · '+s:''}`],
   gVisitsMin:['الحد الأدنى','Minimum'], gVisitsMax:['الحد الأقصى','Maximum'],
   gtTogetherT:[(a,b,r,p,s)=>`${a} + ${b}: ${r==='atLeast'?'≥':'≤'}${p}٪ معًا${s?' · '+s:''}`, (a,b,r,p,s)=>`${a} + ${b}: ${r==='atLeast'?'≥':'≤'}${p}% together${s?' · '+s:''}`],
   gtSpecialT:[(f,n)=>`زيارة خاصة: ${f}${n>1?' ×'+n:''}`, (f,n)=>`Special: ${f}${n>1?' ×'+n:''}`],
@@ -272,8 +281,27 @@ defs2({
   dTogetherNoSeats:[g=>`«${g}»: لا توجد جهة تتسع لهما معًا`, g=>`"${g}": no place has seats for both`],
   dSpecialNoFacility:[g=>`«${g}»: لم تُحدد الجهة`, g=>`"${g}": no facility set`],
   dSpecialPeopleGone:[g=>`«${g}»: بعض الأشخاص غير نشطين`, g=>`"${g}": some people are inactive`],
-  dSpecialNoDay:[g=>`«${g}»: لا يوجد يوم مناسب في الفترة`, g=>`"${g}": no suitable day in the window`]
+  dSpecialNoDay:[
+    (g, c, d, by)=>`«${g}»: ${specialCauseText(0, c, d, by)}`,
+    (g, c, d, by)=>`"${g}": ${specialCauseText(1, c, d, by)}`
+  ]
 });
+const SPECIAL_CAUSE = {
+  window:['لا يوجد يوم عمل داخل فترة الزيارة', 'no working day inside the visit dates'],
+  cap:[(d, by)=>`يوم ${d} ممتلئ${by ? ' بزيارة '+by : ''} والحد اليومي لا يسمح بزيارة أخرى`, (d, by)=>`${d} is full${by ? ' with '+by : ''} and the daily limit allows no more`],
+  seats:[(d, by)=>`يوم ${d}: لا يكفي الأفراد المتاحون للمقاعد${by ? ' بعد زيارة '+by : ''}`, (d, by)=>`${d}: not enough free people for the seats${by ? ' after '+by : ''}`],
+  people:[d=>`يوم ${d}: أحد الأشخاص المختارين غير متاح أو مشغول`, d=>`${d}: a chosen person is unavailable or busy`],
+  week:[d=>`يوم ${d}: الحد الأسبوعي مكتمل`, d=>`${d}: the weekly limit is reached`],
+  rest:[d=>`يوم ${d}: قاعدة الراحة تمنع الزيارة`, d=>`${d}: a rest rule blocks the visit`],
+  closed:[d=>`يوم ${d}: الجهة مغلقة`, d=>`${d}: the facility is closed`],
+  dayOnly:[d=>`يوم ${d}: مخصص لفئة أخرى`, d=>`${d}: reserved for another category`],
+  dup:[d=>`يوم ${d}: الجهة محجوزة بالفعل`, d=>`${d}: the facility is already booked`],
+  other:['لا يوجد يوم مناسب في الفترة', 'no suitable day in the window']
+};
+function specialCauseText(li, code, date, by){
+  const x = (SPECIAL_CAUSE[code] || SPECIAL_CAUSE.other)[li];
+  return typeof x==='function' ? x(date ? fmtDate(date, 'short') : '', by) : x;
+}
 defs2({
   gtCoverT:[(s,n)=>`تغطية ${s}${n>1?' ×'+n:''}`, (s,n)=>`Cover ${s}${n>1?' ×'+n:''}`],
   gtAtLeastT:[(n,s)=>`${n} على الأقل: ${s}`, (n,s)=>`At least ${n}: ${s}`],
@@ -426,6 +454,24 @@ defs({
   xBoundsEmpty:[(p,lo,hi)=>`${p}: حدّ أدنى ${lo} أعلى من الأقصى ${hi}`, (p,lo,hi)=>`${p}: minimum ${lo} is above maximum ${hi}`],
   xQuotaDays:[(p,lo,can)=>`${p}: يلزم ${lo} زيارة لكن أقصى ما تسمح به أيام العمل والقواعد ${can}`, (p,lo,can)=>`${p}: needs ${lo} visits but days and rules allow at most ${can}`],
   xHardOverVolume:[(n,m)=>`الالتزامات الإلزامية ${n} أكثر من الحجم المحدد ${m}`, (n,m)=>`${n} mandatory visits exceed the set volume of ${m}`],
+  xGoalsOverCapacity:[(n,c)=>`أهدافك وزياراتك تحتاج ${n} زيارة أكثر من سعة الفترة (${c})`, (n,c)=>`Your goals and visits need ${n} more visits than the period can hold (${c})`],
+  dDupWindowsApart:[(f,n)=>`${f}: ${n} طلبات لنفس الجهة بنوافذ لا تلتقي — تُركت كما هي`, (f,n)=>`${f}: ${n} requests for the same facility have windows that do not meet — kept as they are`],
+  xRuleEmptiesPool:[(g,p,n)=>`«${g}»: لا أحد من «${p}» يستطيع زيارة ${n} جهة تحتاج مقعدًا منه`, (g,p,n)=>`"${g}": nobody from "${p}" may visit ${n} facilities that need a seat from it`],
+  ruleSimple:['قاعدة بسيطة', 'Simple rule'],
+  ruleSimpleHint:['فريق أو شخص لا يخرج إلى مكان، أو يخرج إليه فقط', 'A pool or person that never or only goes somewhere'],
+  ruleAdd:['إضافة قاعدة', 'Add a rule'],
+  ruleSave:['حفظ القاعدة', 'Save rule'],
+  rSubjPerson:['شخص', 'Person'],
+  rSubjPool:['فريق', 'Pool'],
+  rRelNever:['لا يخرج أبدًا إلى', 'Never goes to'],
+  rRelAvoid:['يفضّل ألّا يخرج إلى', 'Prefers not'],
+  rRelOnly:['يخرج فقط إلى', 'Only goes to'],
+  rRelReserved:['المكان محجوز لـ', 'Place reserved for'],
+  rLevelMust:['إلزامي', 'Must'],
+  rLevelPrefer:['تفضيل', 'Prefer'],
+  gAllowed:['المسموح لهم', 'Allowed'],
+  fWhoMayVisit:['من يستطيع الزيارة', 'Who may visit'],
+  ruleImpact:[(p,n)=>`لن يستطيع أحد من «${p}» زيارة ${n} جهة تحتاج مقعدًا منه`, (p,n)=>`Nobody from "${p}" will be able to visit ${n} facilities that need a seat from it`],
   xPoolDayShort:[(p,n,d,nd,av,who)=>`${p}: ${n===1 ? 'ينقص مقعد' : (n===2 ? 'ينقص مقعدان' : 'ينقص '+n+' مقاعد')} يوم ${D(d)} (مطلوب ${nd}، متاح ${av}${who.length ? '؛ '+seatWho(who) : ''})`, (p,n,d,nd,av,who)=>`${p}: short ${n} seat${n===1?'':'s'} on ${D(d)} (need ${nd}, available ${av}${who.length ? '; '+seatWho(who) : ''})`],
   xPoolSeatsHigh:[(p,s,c)=>`«${p}»: المقاعد ${s} أكثر مما يستطيع الفريق تغطيته (${c})`, (p,s,c)=>`"${p}": ${s} seats exceed what the team can cover (${c})`],
   xPoolSeatsLow:[(p,s,c)=>`«${p}»: المقاعد ${s} أقل من مجموع الحدود الدنيا (${c})`, (p,s,c)=>`"${p}": ${s} seats are below the sum of minimums (${c})`],
@@ -588,6 +634,27 @@ defs2({dSpread:[(p,u)=>`${p}: ${u} أيام متتالية`, (p,u)=>`${p}: ${u} 
 
 defs2({
   ptSearch:['بحث عن فرد','Search people'], ptShowRetired:['عرض المتقاعدين','Show retired'], ptColumns:['الأعمدة','Columns'],
+  ptCount:[(n,m)=>`${n} من ${m}`, (n,m)=>`${n} of ${m}`],
+  rsOnlyChanged:['المعدَّل فقط', 'Show only changed'],
+  palOpen:['بحث وأوامر', 'Search and commands'],
+  palTitle:['لوحة الأوامر', 'Command palette'],
+  palPlaceholder:['اكتب أمرًا أو اسم فرد أو جهة أو إعداد…', 'Type a command, person, facility or setting…'],
+  palNone:['لا نتائج', 'No results'],
+  palG_all:['الكل', 'All'], palG_actions:['إجراءات', 'Actions'], palG_goto:['انتقال', 'Go to'], palG_find:['بحث', 'Find'], palG_create:['إنشاء', 'Create'],
+  palSetting:['إعداد', 'Setting'],
+  palVisit:['زيارة في الخطة', 'Visit in the plan'],
+  palReview:['أُنشئ معطّلًا — راجعه ثم فعّله', 'Created switched off — review it and turn it on'],
+  palFailed:['تعذّر تنفيذ الأمر', 'The command could not run'],
+  ptab_profile:['الملف', 'Profile'], ptab_avail:['التوفر', 'Availability'], ptab_rules:['القواعد', 'Rules'], ptab_activity:['النشاط', 'Activity'],
+  pActLoad:[(n,e)=>`${n} زيارة في هذه الخطة (المتوقع ${e})`, (n,e)=>`${n} visits in this plan (expected ${e})`],
+  pActNone:['لا زيارات في الخطة الحالية', 'No visits in the current plan'],
+  ptHasRules:['لها قواعد', 'Has rules'],
+  ptUnavail:['غير متاح في الفترة', 'Unavailable this period'],
+  ptOver:['فوق الحصة', 'Over quota'],
+  ptSortManual:['الترتيب الحالي', 'Current order'],
+  ptSortName:['الاسم', 'Name'],
+  ptSortLoad:['الحمل', 'Load'],
+  ptSortIdle:['الأطول غيابًا', 'Longest idle'],
   ptgBasic:['الأساسي','Basics'], ptgSkills:['المهارة','Skills'], ptgPlan:['الحِمل','Load'], ptgAvail:['التوفر والغياب','Availability and leave'], ptgRules:['الممنوعات والقواعد','Blocked and rules'], ptgLimits:['الحدود والتفضيلات','Limits and preferences'],
   ptName:['الاسم','Name'], ptPool:['المجموعة','Pool'], ptGender:['الجنس','Gender'], ptActive:['نشط','Active'], ptSkillB:['مهارة أساسية','Basic skill'], ptSkillC:['مهارة متعاقدة','Contracted skill'],
   ptPerPlan:['في الخطة','Per plan'], ptShare:['النسبة','Share'], ptMaxRun:['أقصى متتالية','Max run'], ptMaxWeek:['أقصى/أسبوع','Max/week'], ptDist:['البُعد','Distance'],

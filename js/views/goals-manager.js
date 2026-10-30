@@ -75,6 +75,8 @@ function GoalsManager(opts){
     const add = el('button', {type:'button', class:'btn sm primary'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('goalAdd')]);
     const item = type=>({label:goalTypeLabel(type), desc:goalTypeHint(type), onClick:()=>{ const g = newGoal(type); S().goals.push(g); changed(); st.filter = 'all'; st.search = ''; paintToolbar(); select(g.id); }});
     add.addEventListener('click', ()=>menu(add, [
+      {label:t('ruleSimple'), desc:t('ruleSimpleHint'), onClick:()=>{ const g = simpleRuleGoal(); S().goals.push(g); changed(); st.filter = 'all'; st.search = ''; paintToolbar(); select(g.id); }},
+      {sep:true},
       {header:true, label:t('gGroupFac'), icon:ICON.target}, ...FACILITY_GOALS.map(item),
       {sep:true},
       {header:true, label:t('gGroupPeople'), icon:ICON.users}, ...PEOPLE_GOALS.map(item)

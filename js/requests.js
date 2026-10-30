@@ -94,8 +94,12 @@ function compileRequests(win){
   const diags = raw.diags.slice();
   const drop = new Set(), replace = new Map();
   for(const members of duplicateGroupsOf(raw.list)){
-    const policy = duplicatePolicyFor(members);
     const f = members[0].r.f;
+    if(Math.max(...members.map(m=>m.r.window.lo)) > Math.min(...members.map(m=>m.r.window.hi))){
+      diags.push({sev:'info', key:'dDupWindowsApart', args:[f.name, members.length]});
+      continue;
+    }
+    const policy = duplicatePolicyFor(members);
     if(policy==='merge'){
       replace.set(members[0].i, mergeRequests(members));
       for(const m of members.slice(1)) drop.add(m.i);

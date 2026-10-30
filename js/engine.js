@@ -836,6 +836,21 @@ function analyzePlan(plan, opts){
   return out;
 }
 
+function visitOrigin(v){
+  if(v.fixed) return 'fixed';
+  if(v.special) return 'special';
+  return v.why && v.why.goals && v.why.goals.length ? 'goal' : 'filler';
+}
+function scoreOf(x){
+  return {hard:x.hardScore!=null ? x.hardScore : x.hard, intent:x.intentScore!=null ? x.intentScore : (x.intent||0), soft:x.softScore!=null ? x.softScore : x.soft};
+}
+function cmpScore(a, b){
+  const x = scoreOf(a), y = scoreOf(b);
+  if(Math.abs(x.hard-y.hard)>1e-9) return x.hard<y.hard ? -1 : 1;
+  if(Math.abs(x.intent-y.intent)>1e-9) return x.intent<y.intent ? -1 : 1;
+  if(Math.abs(x.soft-y.soft)>1e-9) return x.soft<y.soft ? -1 : 1;
+  return 0;
+}
 function clonePlan(plan){
   const c = Object.assign({}, plan);
   c.visits = deepClone(plan.visits);

@@ -106,17 +106,103 @@ function WithinEditor(g, upd, paint){
   ]);
 }
 
+function PoolPicker(ids, onChange){
+  let cur = ids.slice();
+  const wrap = el('div', {class:'chips'});
+  const paint = ()=>{
+    clear(wrap);
+    for(const pl of S().pools) wrap.appendChild(el('button', {type:'button', class:'chip'+(cur.includes(pl.id) ? ' on' : ''), 'aria-pressed':cur.includes(pl.id) ? 'true' : 'false', onclick:()=>{ cur = cur.includes(pl.id) ? cur.filter(x=>x!==pl.id) : cur.concat(pl.id); onChange(cur.slice()); paint(); }}, poolName(pl)));
+  };
+  paint();
+  return wrap;
+}
+
+function ruleImpactNow(g){
+  const had = S().goals.includes(g);
+  if(!had) S().goals.push(g);
+  try{ return ruleImpact(g); } finally { if(!had) S().goals.pop(); }
+}
+
+function RuleImpactNote(g){
+  if(!goalMust(g)) return null;
+  const hits = ruleImpactNow(g);
+  if(!hits.length) return null;
+  const e = hits[0];
+  const pl = S().pools.find(x=>x.id===e.pool);
+  return el('div', {class:'banner warn', role:'alert'}, t('ruleImpact', pl ? poolName(pl) : '—', e.facilities.length));
+}
+
+function SubjectRow(g, upd, paint){
+  const kind = goalSubjectKind(g);
+  return el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [
+    Seg([{value:'people', label:t('rSubjPerson')}, {value:'pool', label:t('rSubjPool')}], kind, v=>{ g.subject = {kind:v, ids:[]}; if(v==='pool' && S().pools.length) g.subject.ids = [S().pools[0].id]; upd(); paint(); }, {cls:'sm'}),
+    kind==='pool' ? PoolPicker(goalSubjectIds(g), ids=>{ g.subject = {kind:'pool', ids}; upd(); paint(); }) : PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })
+  ]);
+}
+
+function RuleSentence(g, upd, opts){
+  opts = opts || {};
+  const host = el('div', {class:'rule-sentence stack', style:{gap:'8px'}});
+  const relKey = ()=>g.rel==='never' && g.lv.level==='prefer' ? 'avoid' : g.rel;
+  const setLevel = lv=>{ g.lv = Object.assign({}, g.lv, {level:lv}); };
+  const paint = ()=>{
+    clear(host);
+    if(!opts.lockSubject) host.appendChild(SubjectRow(g, upd, paint));
+    host.appendChild(Seg([{value:'never', label:t('rRelNever')}, {value:'avoid', label:t('rRelAvoid')}, {value:'only', label:t('rRelOnly')}, {value:'reservedFor', label:t('rRelReserved')}], relKey(), v=>{
+      if(v==='avoid'){ g.rel = 'never'; setLevel('prefer'); }
+      else if(v==='never'){ g.rel = 'never'; setLevel('must'); }
+      else g.rel = v;
+      upd(); paint();
+    }, {cls:'sm wrap-seg'}));
+    if(!opts.lockScope) host.appendChild(ScopePicker(g.scope, ()=>{ upd(); paint(); }));
+    if(g.rel==='only' || g.rel==='reservedFor') host.appendChild(Seg([{value:'must', label:t('rLevelMust')}, {value:'prefer', label:t('rLevelPrefer')}], g.lv.level, v=>{ setLevel(v); upd(); paint(); }, {cls:'sm'}));
+    const note = RuleImpactNote(g);
+    if(note) host.appendChild(note);
+  };
+  paint();
+  return host;
+}
+
+function RuleDraft(opts){
+  const box = el('div', {class:'stack', style:{gap:'8px'}});
+  let g = null;
+  const paint = ()=>{
+    clear(box);
+    if(!g){
+      box.appendChild(el('button', {type:'button', class:'btn sm ghost', style:{alignSelf:'flex-start'}, onclick:()=>{ g = opts.make(); paint(); }}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('ruleAdd')]));
+      return;
+    }
+    box.appendChild(RuleSentence(g, ()=>{}, opts));
+    box.appendChild(el('div', {class:'row', style:{gap:'8px'}}, [
+      el('button', {type:'button', class:'btn sm primary', onclick:()=>{ const done = g; g = null; S().goals.push(done); commit('settings'); if(opts.onAdd) opts.onAdd(done); paint(); }}, t('ruleSave')),
+      el('button', {type:'button', class:'btn sm ghost', onclick:()=>{ g = null; paint(); }}, t('cancel'))
+    ]));
+  };
+  paint();
+  return box;
+}
+
+function simpleRuleGoal(){
+  const g = newGoal('person');
+  g.rel = 'never';
+  g.lv = mkLv('must', 5);
+  g.subject = {kind:'pool', ids:S().pools.length ? [S().pools[0].id] : []};
+  return g;
+}
+
 function goalFields(g, upd, paint){
   const row = (lab, ctl)=>el('div', {class:'rc-row'}, [el('span', {class:'lab'}, lab), ctl]);
   const out = [];
   if(g.type==='person'){
-    out.push(row(t('gWho'), PersonPicker(g.people.slice(), ids=>{ g.people = ids; upd(); paint(); })));
+    out.push(row(g.rel==='reservedFor' ? t('gAllowed') : t('gWho'), SubjectRow(g, upd, paint)));
     out.push(row(t('gRel'), Seg(PERSON_RELS.map(r=>({value:r, label:t('rel_'+r)})), g.rel, v=>{ g.rel = v; upd(); paint(); }, {cls:'sm wrap-seg'})));
     if(g.rel==='between'){
       out.push(row(t('gVisitsMin'), Stepper(g.n, v=>{ g.n = v; if(g.n2<v) g.n2 = v; upd(); paint(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
       out.push(row(t('gVisitsMax'), Stepper(Math.max(g.n, g.n2||0), v=>{ g.n2 = Math.max(v, g.n); upd(); paint(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
     } else if(g.rel!=='never' && g.rel!=='only') out.push(row(t('gVisitsN'), Stepper(g.n, v=>{ g.n = v; upd(); }, {min:0, max:60, sm:true, unit:t('gPerPlan')})));
-    out.push(row(g.rel==='never' ? t('gWhere') : (g.rel==='only' ? t('gOnlyWhere') : t('gCountWhere')), ScopePicker(g.scope, upd)));
+    out.push(row(g.rel==='never' || g.rel==='reservedFor' ? t('gWhere') : (g.rel==='only' ? t('gOnlyWhere') : t('gCountWhere')), ScopePicker(g.scope, upd)));
+    const impact = RuleImpactNote(g);
+    if(impact) out.push(impact);
   } else if(g.type==='together'){
     out.push(row(t('gPair'), el('div', {class:'row wrap', style:{gap:'6px'}}, [
       PersonSelect(g.a, v=>{ g.a = v; upd(); paint(); }, {exclude:[g.b]}),

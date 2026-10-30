@@ -1,5 +1,45 @@
 const EMPTY_LIST = Object.freeze([]);
-const PERSON_RELS = ['between','exactly','atLeast','atMost','only','never'];
+const PERSON_RELS = ['between','exactly','atLeast','atMost','only','never','reservedFor'];
+const DENY_RELS = ['never', 'only', 'reservedFor'];
+
+function goalSubjectKind(g){ return g.subject && g.subject.kind==='pool' ? 'pool' : 'people'; }
+function goalSubjectIds(g){ return g.subject && Array.isArray(g.subject.ids) ? g.subject.ids : []; }
+function goalPeople(g){
+  if(g.rel==='reservedFor'){
+    const allowed = goalSubjectKind(g)==='pool' ? new Set(goalSubjectIds(g)) : null;
+    const keep = new Set(liveIds(g.people));
+    return activePeople().filter(p=>allowed ? !allowed.has(p.pool) : !keep.has(p.id)).map(p=>p.id);
+  }
+  if(goalSubjectKind(g)==='pool'){
+    const ids = new Set(goalSubjectIds(g));
+    return activePeople().filter(p=>ids.has(p.pool)).map(p=>p.id);
+  }
+  return liveIds(g.people);
+}
+function ruleImpact(g, rules){
+  if(!g || g.type!=='person' || !DENY_RELS.includes(g.rel)) return [];
+  rules = rules || compilePeopleRules();
+  const out = [];
+  const facs = schedulableFacilities();
+  for(const pl of S().pools){
+    const members = activePeople().filter(p=>p.pool===pl.id);
+    if(!members.length) continue;
+    const hit = [];
+    for(const f of facs){
+      if(!(seatsForF(pl, visitKindOf(f), f)>0)) continue;
+      if(members.every(p=>rules.denied(p.id, f)==='must') && members.some(p=>rules.deniedBy(p.id, f, g.id))) hit.push(f.id);
+    }
+    if(hit.length) out.push({pool:pl.id, facilities:hit});
+  }
+  return out;
+}
+function goalSubjectLabel(g){
+  if(goalSubjectKind(g)==='pool'){
+    const names = goalSubjectIds(g).map(id=>{ const pl = S().pools.find(x=>x.id===id); return pl ? poolName(pl) : null; }).filter(Boolean);
+    return names.length ? names.join('، ') : '—';
+  }
+  return personNames(g.people);
+}
 
 function scopeOrNull(sc){ return sc && sc.kind && sc.kind!=='all' ? sc : null; }
 function inScopeOpt(f, scope){ return !scope || inScope(f, scope); }
@@ -18,9 +58,9 @@ function compilePeopleRules(){
     if(!g.on) continue;
     const must = goalMust(g);
     if(g.type==='person'){
-      for(const pid of g.people||[]){
+      for(const pid of goalPeople(g)){
         if(!active.has(pid)) continue;
-        if(g.rel==='never' || g.rel==='only') push(deny, pid, {gid:g.id, scope:g.scope, invert:g.rel==='only', must});
+        if(DENY_RELS.includes(g.rel)) push(deny, pid, {gid:g.id, scope:g.scope, invert:g.rel==='only', must});
         else addCount(pid, {id:g.id, gid:g.id, src:'goal', scope:scopeOrNull(g.scope), min:g.rel==='atMost' ? null : g.n, max:g.rel==='atLeast' ? null : (g.rel==='between' ? Math.max(g.n, g.n2==null ? g.n : g.n2) : g.n), must});
       }
     } else if(g.type==='separate'){

@@ -68,7 +68,11 @@ function renderRules(root){
   const search = el('input', {type:'search', class:'input sm', id:'rules-search', placeholder:t('rulesSearch'), 'aria-label':t('rulesSearch')});
   const modeSeg = Seg([{value:'simple', label:t('rulesSimple')}, {value:'advanced', label:t('rulesAdvanced')}], App.ui.rulesMode, v=>{ App.ui.rulesMode = v; try{ localStorage.setItem('alkhitta.rulesmode', v); }catch(e){} renderTab(); }, {cls:'sm'});
   const noMatch = el('div', {class:'muted', id:'rules-nomatch', hidden:true, style:{padding:'12px 4px'}}, t('rulesNoMatch'));
-  root.appendChild(el('div', {class:'rules-bar'}, [modeSeg, search, simple ? el('span', {class:'muted', style:{fontSize:'12px'}}, t('rulesSimpleHint')) : null]));
+  const results = el('div', {class:'rules-results', role:'listbox', hidden:true});
+  const searchBox = el('div', {class:'rules-searchbox'}, [search, results]);
+  const onlyChanged = !!App.ui.rulesOnlyChanged;
+  const changedToggle = el('label', {class:'row', style:{gap:'6px'}}, [Switch(onlyChanged, v=>{ App.ui.rulesOnlyChanged = v; paintChanged(); }, t('rsOnlyChanged')), el('span', {style:{fontSize:'12.5px'}}, t('rsOnlyChanged'))]);
+  root.appendChild(el('div', {class:'rules-bar'}, [modeSeg, searchBox, changedToggle, simple ? el('span', {class:'muted', style:{fontSize:'12px'}}, t('rulesSimpleHint')) : null]));
   root.appendChild(layout);
 
   const gl = (id, opts)=>LevelChip(lvOf(id), id, v=>{ if(!set.lv) set.lv = {}; set.lv[id] = v; commit('settings'); if(opts && opts.repaint) opts.repaint(); }, Object.assign({simple}, opts));
@@ -85,6 +89,7 @@ function renderRules(root){
     const V = set.volume, sp = set.spacing;
     return [
       setting(t('sVisits'), null, Seg([{value:'fill',label:t('vFill')},{value:'exact',label:t('vExact')},{value:'quota',label:t('vQuota')},{value:'fixed',label:t('vFixed')}], V.mode, v=>{ V.mode = v; commit('settings'); paint(); })),
+      setting(t('vFillMode'), t('vFillModeHint'), Seg([{value:'fill',label:t('vFillRest')},{value:'goals',label:t('vFillGoals')}], V.fill, v=>{ V.fill = v; commit('settings'); paint(); })),
       V.mode==='fill' ? setting(t('vShare'), null, gl('vol.share'), {full:Slider(Math.round(V.share*100), v=>{ V.share = v/100; commit('settings'); }, {min:0, max:100, step:5, format:v=>v+'%'})}) : null,
       V.mode==='exact' ? setting(t('vCountMode'), null, Seg([{value:'upTo',label:t('vUpTo')},{value:'exactly',label:t('vExactlyOpt')}], V.exactMode, v=>{ V.exactMode = v; commit('settings'); })) : null,
       V.mode==='exact' ? setting(t('vExact'), null, [el('span', {class:'muted', style:{fontSize:'12px'}}, t('kBasic')), Stepper(V.exact.basic, v=>{ V.exact.basic = v; commit('settings'); }, {min:0, max:500, sm:true}), el('span', {class:'muted', style:{fontSize:'12px'}}, t('kContracted')), Stepper(V.exact.contracted, v=>{ V.exact.contracted = v; commit('settings'); }, {min:0, max:500, sm:true}), gl('vol.exact')]) : null,
@@ -97,6 +102,7 @@ function renderRules(root){
       setting(t('rSpacing'), null, [Seg([{value:'even',label:t('spEven')},{value:'pack',label:t('spPack')},{value:'gap',label:t('spGap')}], sp.mode, v=>{ sp.mode = v; commit('settings'); paint(); }), sp.mode==='gap' ? null : gl('space.shape')]),
       sp.mode==='gap' ? setting(t('spGapDays'), null, Stepper(sp.gap||2, v=>{ sp.gap = v; commit('settings'); }, {min:2, max:14})) : null,
       sp.mode==='gap' ? setting(t('spStrict'), t('spStrictHint'), gl('vol.gap')) : null,
+      setting(t('vRequestsOver'), t('vRequestsOverHint'), Switch(V.requestsExceedCap!==false, v=>{ V.requestsExceedCap = v; commit('settings'); paint(); }, t('vRequestsOver'))),
       setting(t('vUseAll'), t('vUseAllHint'), [Seg([{value:'off',label:t('vUseOff')},{value:'prefer',label:t('vUseTry')},{value:'must',label:t('vUseMust')}], V.useAllDays, v=>{ V.useAllDays = v; V.requireEveryEligibleDay = v!=='off'; commit('settings'); paint(); }), LevelChip(lvOf('vol.everyDay'), 'vol.everyDay', v=>{ if(!set.lv) set.lv = {}; set.lv['vol.everyDay'] = v; if(V.useAllDays!=='off') V.useAllDays = v.level==='must' ? 'must' : 'prefer'; commit('settings'); paint(); }, {simple})]),
       setting(t('rn_due.priority'), t('rn_dueNote'), gl('due.priority')),
       setting(t('rn_structural'), null, null, {full:el('div', {class:'always-list'}, STRUCTURAL_RULES.map(x=>el('span', {class:'chip always-item'}, [AlwaysTag(x.name), t(x.name)])))})
@@ -273,7 +279,26 @@ function renderRules(root){
     nav.querySelectorAll('a').forEach(a=>{ const sec = document.getElementById(a.getAttribute('href').slice(1)); a.classList.toggle('rs-hide', !!(sec && sec.classList.contains('rs-hide'))); });
     noMatch.hidden = !q || shown>0;
   }
-  search.addEventListener('input', applySearch);
+  function paintResults(){
+    clear(results);
+    const hits = searchSettings(search.value, 8);
+    results.hidden = !hits.length;
+    hits.forEach((e, i)=>results.appendChild(el('button', {type:'button', role:'option', class:'rr-item', 'data-setting':e.id, onclick:()=>{ results.hidden = true; goToSetting(e); }}, [el('b', null, settingLabel(e)), el('span', {class:'muted'}, e.tab==='team' ? t('tTitle') : (e.tab==='data' ? t('bkTitle') : e.section))])));
+  }
+  function paintChanged(){
+    const chg = changedSections();
+    const only = !!App.ui.rulesOnlyChanged;
+    for(const sec of main.querySelectorAll('.rule-sec')){
+      const on = chg.has(sec.id);
+      const h = sec.querySelector('.card-head h2'); if(h) h.classList.toggle('chg', on);
+      sec.classList.toggle('rs-nochg', only && !on);
+      const a = nav.querySelector('a[href="#'+sec.id+'"]'); if(a){ a.classList.toggle('chg', on); a.classList.toggle('rs-nochg', only && !on); }
+    }
+  }
+  search.addEventListener('input', ()=>{ applySearch(); paintResults(); });
+  search.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const first = searchSettings(search.value, 1)[0]; if(first){ e.preventDefault(); results.hidden = true; goToSetting(first); } } else if(e.key==='Escape') results.hidden = true; });
+  on('settings', paintChanged);
+  paintChanged();
   function spy(){
     if(!layout.isConnected){ window.removeEventListener('scroll', spy); return; }
     if(Date.now()<navLock) return;

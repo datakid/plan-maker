@@ -46,6 +46,8 @@ function normalizeGoal(g){
   if(type==='person'){
     out.people = Array.isArray(out.people) ? [...new Set(out.people.filter(Boolean))] : [];
     if(!PERSON_RELS.includes(out.rel)) out.rel = 'never';
+    const sk = out.subject && out.subject.kind==='pool' ? 'pool' : 'people';
+    out.subject = {kind:sk, ids:sk==='pool' && Array.isArray(out.subject.ids) ? [...new Set(out.subject.ids.filter(Boolean))] : []};
     out.n = cleanInt(out.n, 0, 999, dflt.n);
     out.n2 = Math.max(out.n, cleanInt(out.n2, 0, 999, out.n+1));
   }
@@ -58,7 +60,7 @@ function normalizeGoal(g){
     out.times = cleanInt(out.times, 1, 50, 1);
     out.fill = out.fill!==false;
     out.seats = cleanSeatMap(out.seats); out.only = cleanIdList(out.only); out.never = cleanIdList(out.never);
-    out.rules = cleanVisitRules(out.rules); out.guests = cleanIdList(out.guests); out.dupChoice = out.dupChoice==='merge' || out.dupChoice==='keep' ? out.dupChoice : null;
+    out.rules = cleanVisitRules(out.rules); out.guests = cleanIdList(out.guests); out.dupChoice = ['merge', 'keep', 'reject'].includes(out.dupChoice) ? out.dupChoice : null;
     out.within = cleanWithin(out.within);
     out.from = cleanIso(out.from, null);
     out.to = cleanIso(out.to, null);
@@ -112,7 +114,7 @@ function normalizeOverride(o){
   x.people = Array.isArray(x.people) ? [...new Set(x.people.filter(Boolean))] : [];
   x.fill = !!x.fill; x.on = x.on!==false;
   x.seats = cleanSeatMap(x.seats); x.only = cleanIdList(x.only); x.never = cleanIdList(x.never);
-  x.rules = cleanVisitRules(x.rules); x.guests = cleanIdList(x.guests); x.dupChoice = x.dupChoice==='merge' || x.dupChoice==='keep' ? x.dupChoice : null;
+  x.rules = cleanVisitRules(x.rules); x.guests = cleanIdList(x.guests); x.dupChoice = ['merge', 'keep', 'reject'].includes(x.dupChoice) ? x.dupChoice : null;
   return x;
 }
 
@@ -151,7 +153,7 @@ function goalStatusLine(g){
     const late = list.filter(f=>!f.lastVisit || t0-ordOf(f.lastVisit) > (g.days||0)).length;
     return {late, total:list.length};
   }
-  if(g.type==='person') return {people:liveIds(g.people).length, total:goalFacilities(g).length};
+  if(g.type==='person') return {people:goalPeople(g).length, total:goalFacilities(g).length};
   if(g.type==='together') return {ok:!!(g.a && g.b && g.a!==g.b)};
   if(g.type==='separate') return {ok:separateReady(g)};
   if(g.type==='special') return {ok:!!facilityById(g.facilityId)};
@@ -259,7 +261,7 @@ function buildDemand(win, fixed, placed){
           const n = r.need-preAt(r.f, sinceOrd);
           if(n<=0) continue;
           if(goalMust(g)) ob(g.id, r.f, 'must', n, {kind:'cover', open:true});
-          else prefer(r.f, g.id);
+          else { ob(g.id, r.f, goalStrict(g), n, {kind:'cover', open:true}); prefer(r.f, g.id); }
         }
         report[g.id].open = true;
       }
@@ -286,11 +288,18 @@ function buildDemand(win, fixed, placed){
       const open = scope.filter(f=>g.repeat || !preFacs.has(f.id));
       const shared = open.filter(f=>withOb.has(f.id)).sort(byScore), rest = open.filter(f=>!withOb.has(f.id)).sort(byScore);
       const order = shared.concat(rest);
-      for(const f of order){
-        if(left<=0) break;
+      const limits = goals.filter(m=>m.type==='atMost');
+      const obFacs = new Set(obligations.filter(o=>o.count>0).map(o=>o.facilityId));
+      const room = new Map(limits.map(m=>[m.id, Math.max(0, (m.n||0) - preIn(m.scope)) - [...obFacs].filter(id=>inScope(facilityById(id), m.scope)).length]));
+      const fits = f=>obFacs.has(f.id) || limits.every(m=>!inScope(f, m.scope) || room.get(m.id)>0);
+      const taken = new Set();
+      const take = f=>{
         ob(g.id, f, goalStrict(g), 1, {kind:'atLeast', pooled:true});
-        left--;
-      }
+        left--; taken.add(f.id);
+        if(!obFacs.has(f.id)){ obFacs.add(f.id); for(const m of limits) if(inScope(f, m.scope)) room.set(m.id, room.get(m.id)-1); }
+      };
+      for(const f of order){ if(left<=0) break; if(fits(f)) take(f); }
+      for(const f of order){ if(left<=0) break; if(!taken.has(f.id)) take(f); }
       for(let round=1; g.repeat && left>0 && order.length && round<50; round++){
         for(const f of order){
           if(left<=0) break;
@@ -339,9 +348,9 @@ function buildDemand(win, fixed, placed){
   for(const g of goals){
     if(g.type==='person'){
       report[g.id] = {type:'person'};
-      if(!liveIds(g.people).length) continue;
+      if(!goalPeople(g).length) continue;
       if(g.rel==='exactly' || g.rel==='atLeast' || g.rel==='between'){
-        for(const pid of liveIds(g.people)){
+        for(const pid of goalPeople(g)){
           const p = personById(pid);
           const avail = win.days.filter(o=>personAvailable(p, o)).length;
           if(avail < g.n) diags.push({sev:goalMust(g)?'warn':'info', key:'dPersonFewDays', args:[p.name, g.n, avail]});
@@ -377,7 +386,7 @@ function goalTitleBase(g){
   if(g.type==='atLeast') return t('gtAtLeastT', g.n||0, sc);
   if(g.type==='atMost') return t('gtAtMostT', g.n||0, sc);
   if(g.type==='maxGap') return t('gtMaxGapT', sc, g.days||0);
-  if(g.type==='person') return t('gtPersonT', personNames(g.people), g.rel, g.n||0, g.scope && g.scope.kind!=='all' ? sc : '', g.n2||0);
+  if(g.type==='person') return t('gtPersonT', goalSubjectLabel(g), g.rel, g.n||0, g.scope && g.scope.kind!=='all' ? sc : '', g.n2||0);
   if(g.type==='together') return t('gtTogetherT', personNames([g.a]), personNames([g.b]), g.rel, g.pct||0, g.scope && g.scope.kind!=='all' ? sc : '');
   if(g.type==='separate') return t('gtSeparateT', scopeLabel(g.scope), scopeLabel(g.scope2));
   if(g.type==='special'){ const f = facilityById(g.facilityId); return t('gtSpecialT', f ? f.name : '—', g.times||1); }

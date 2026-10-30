@@ -269,6 +269,15 @@ function preflightPlan(info, plan){
   }
 
   const eligibleDays = win.days.filter(normalWorkday);
+  for(const g of set.goals){
+    if(!g.on || g.type!=='person' || !goalMust(g)) continue;
+    for(const e of ruleImpact(g, rules)){ const pl = set.pools.find(x=>x.id===e.pool); add('xRuleEmptiesPool', [goalTitle(g), poolName(pl), e.facilities.length], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}}); }
+  }
+  const over = info.sel && info.sel.diags.find(d=>d.key==='dGoalOverCap');
+  if(over){
+    const need = Math.ceil((over.args[0]+over.args[1])/Math.max(1, eligibleDays.length));
+    add('xGoalsOverCapacity', [over.args[0], over.args[1]], need<=10 && need>(set.volume.perDay||1) ? {fix:{type:'raisePerDay', to:need}} : {});
+  }
   const cands = schedulableFacilities();
     if(volume.mode==='exact'){
     const exact = {basic:volume.exact.basic|0, contracted:volume.exact.contracted|0};
@@ -316,7 +325,7 @@ function preflightPlan(info, plan){
       const distinct = g.repeat ? Infinity : fac.length;
       if(!fac.length || distinct<g.n) add('xAtLeastPool', [goalTitle(g), g.n, fac.length], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}});
     }
-    if(g.type==='person' && g.rel==='only' && liveIds(g.people).length && !goalFacilities(g).length) add('xOnlyEmpty', [goalTitle(g)], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}});
+    if(g.type==='person' && g.rel==='only' && goalPeople(g).length && !goalFacilities(g).length) add('xOnlyEmpty', [goalTitle(g)], {goal:g.id, fix:{type:'goalPrefer', goal:g.id}});
     if(g.type==='atLeast'){
       for(const c of set.goals){
         if(c===g || !c.on || c.type!=='atMost' || !goalMust(c)) continue;

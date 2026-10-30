@@ -49,6 +49,7 @@ function renderTopbar(){
     el('div', {class:'brand'}, [el('span', {class:'brand-mark', html:WORDMARK}), el('span', {class:'brand-name'}, t('appName'))]),
     tabs,
     el('div', {class:'top-actions'}, [
+      el('button', {type:'button', class:'icon-btn', id:'pal-btn', 'aria-label':t('palOpen'), title:t('palOpen')+' (Ctrl+K)', html:ICON.search, onclick:()=>palOpen()}),
       el('button', {type:'button', class:'icon-btn', 'aria-label':t('themeToggle'), title:t('themeToggle'), html:thIcon, onclick:()=>setTheme(nextTheme)}),
       el('button', {type:'button', class:'icon-btn lang-btn', 'aria-label':t('language'), title:t('langToggle'), onclick:()=>setLang(App.ui.lang==='ar'?'en':'ar')}, [el('span', {class:'lang-long'}, t('langToggle')), el('span', {class:'lang-short'}, App.ui.lang==='ar'?'EN':'ع')])
     ])
@@ -144,7 +145,7 @@ function boot(){
   const lang = localStorage.getItem('alkhitta.lang'); App.ui.lang = lang==='en' ? 'en' : 'ar';
   const th = localStorage.getItem('alkhitta.theme'); App.ui.theme = (th==='light'||th==='dark') ? th : 'auto';
   const v = localStorage.getItem('alkhitta.view'); if(['list','calendar','matrix','summary'].includes(v)) App.ui.view = v;
-  const h = (location.hash||'').slice(1); if(TABS.some(x=>x.id===h)) App.ui.tab = h;
+  const h = (location.hash||'').slice(1); const hTab = h.split('/')[0]; if(TABS.some(x=>x.id===hTab)) App.ui.tab = hTab;
   document.documentElement.lang = App.ui.lang; document.documentElement.dir = App.ui.lang==='ar' ? 'rtl' : 'ltr';
   document.title = t('appName');
   loadAll();
@@ -160,7 +161,8 @@ function boot(){
   on('settings', ()=>{ if(App.ui.tab==='plan' && PlanView.strip && PlanView.strip.isConnected) PlanView.strip.update(); });
   on('data', ()=>{ renderTopbar(); });
   window.addEventListener('scroll', ()=>{ const b = document.getElementById('topbar'); if(b) b.classList.toggle('scrolled', window.scrollY>4); }, {passive:true});
-  window.addEventListener('hashchange', ()=>{ const id = (location.hash||'').slice(1); if(id!==App.ui.tab && TABS.some(x=>x.id===id)) goTab(id); });
+  window.addEventListener('hashchange', ()=>{ const raw = (location.hash||'').slice(1); const id = raw.split('/')[0]; if(raw.includes('/')){ applyDeepLink(raw); return; } if(id!==App.ui.tab && TABS.some(x=>x.id===id)) goTab(id); });
+  if(h.includes('/')) setTimeout(()=>applyDeepLink(h), 250);
   window.addEventListener('storage', e=>{ if(e.key===null || e.key===STORE_KEY || e.key===PLAN_KEY) markForeignWrite(e.key===null ? STORE_KEY : e.key); });
   window.addEventListener('beforeunload', ()=>{ if(App.readOnly) return; clearTimeout(saveTimer); saveNow(); });
   if(App.readOnly) showReadOnlyBanner();

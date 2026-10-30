@@ -84,7 +84,7 @@ regress('T5 v4: the solver score equals validatePlan exactly on 200 random fixtu
     n++;
     const s = r.plan.gen && r.plan.gen.search && r.plan.gen.search.score;
     const v = validatePlan(r.plan);
-    if(!s || s.hard!==v.hardScore || Math.abs(s.soft-v.softScore)>1e-6) bad = 'seed '+seed+' '+JSON.stringify(s)+' vs '+v.hardScore+'/'+v.softScore;
+    if(!s || s.hard!==v.hardScore || Math.abs((s.intent||0)-v.intentScore)>1e-6 || Math.abs(s.soft-v.softScore)>1e-6) bad = 'seed '+seed+' '+JSON.stringify(s)+' vs '+v.hardScore+'/'+v.intentScore+'/'+v.softScore;
   }
   return verdict(!bad && n>150, n+' fixtures equal', bad || 'only '+n+' plans');
 });

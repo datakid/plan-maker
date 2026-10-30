@@ -8,7 +8,10 @@ const P5 = {
     App.ui.teamPoolFilter = [];
     App.ui.teamShowRetired = false;
     App.ui.teamWide = true;
-    App.ui.teamCols = Object.assign({}, PT_DEFAULTS, extra || {});
+    App.ui.teamCols = Object.assign({}, PT_DEFAULTS, {skills:true}, extra || {});
+    App.ui.teamFilters = null;
+    App.ui.teamSort = null;
+    App.ui.personTab = null;
     goTab('team');
     renderTab();
   },
@@ -202,6 +205,7 @@ regress('team: off-days popover clear works from table', ()=>P5.check(()=>{
 regress('team: panel edits repaint the row', ()=>P5.check(()=>{
   const id = P5.rows()[0].dataset.pid, p = personById(id);
   p.avail.mode = 'plan';
+  App.ui.personTab = 'avail';
   renderTeam.api.openPanel(id);
   P5.button('.pt-panel .seg', t('pAvailWeekdays')).click();
   const row = P5.rows().find(r=>r.dataset.pid===id);

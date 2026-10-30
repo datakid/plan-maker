@@ -12,7 +12,7 @@ regress('v5 P1.1: seat stepper with a default steps from the shown default, not 
   return verdict(trail.join(',')==='1,0,1,3', 'null,-,-,+ gives 1,0,1 and a fresh + gives 3', trail.join(','));
 });
 
-regress('v5 P1.1: steppers without a default keep their old behaviour', ()=>{
+regress('v6 P5.1: steppers without a default start at min with either button and clear at min', ()=>{
   let got = 'unset';
   const a = Stepper(null, v=>{ got = v; }, {min:1, max:10, nullable:true, placeholder:'—'});
   a.querySelectorAll('button')[1].click();
@@ -25,7 +25,7 @@ regress('v5 P1.1: steppers without a default keep their old behaviour', ()=>{
   const c = Stepper(1, v=>{ got = v; }, {min:1, max:10, nullable:true, placeholder:'—'});
   c.querySelectorAll('button')[0].click();
   const clr = got;
-  return verdict(up===1 && dn==='unset' && clr===null, 'null+ gives min, null- is disabled, min- clears', 'up '+up+' dn '+dn+' clr '+clr);
+  return verdict(up===1 && dn===1 && clr===null, 'null+ gives min, null- gives min, min- clears', 'up '+up+' dn '+dn+' clr '+clr);
 });
 
 regress('v5 P1.1: the per-pool Default button clears the override and the chip marks a custom value', ()=>{
@@ -384,9 +384,9 @@ regress('v5 P4.2: the model numbers equal the search score and the terms add up'
   S().period = Object.assign({}, S().period, {goal:'range', preset:'custom', start:Fx.W1.start, end:'2026-10-29'});
   const r = generatePlan({seed:2, iters:60, skipExplain:true});
   const m = buildModel(r.plan), sc = r.plan.gen.search.score;
-  const hardSum = m.hardTerms.reduce((a, e)=>a+e.hard, 0), softSum = m.softTerms.reduce((a, e)=>a+e.soft, 0);
+  const hardSum = m.hardTerms.reduce((a, e)=>a+e.hard, 0), softSum = m.softTerms.reduce((a, e)=>a+e.soft, 0), intentSum = m.intentTerms.reduce((a, e)=>a+e.soft, 0);
   const close = (a, b)=>Math.abs(a-b)<0.01;
-  return verdict(m.hardScore===sc.hard && m.softScore===sc.soft && close(hardSum, m.hardScore) && close(softSum-m.dueReward.value, m.softScore), 'hard, soft and term sums match', JSON.stringify({m:[m.hardScore, m.softScore], sc, hardSum, softSum, due:m.dueReward.value}));
+  return verdict(m.hardScore===sc.hard && m.softScore===sc.soft && m.intentScore===(sc.intent||0) && close(hardSum, m.hardScore) && close(intentSum, m.intentScore) && close(softSum-m.dueReward.value, m.softScore), 'hard, intent, soft and term sums match', JSON.stringify({m:[m.hardScore, m.intentScore, m.softScore], sc, hardSum, intentSum, softSum, due:m.dueReward.value}));
 });
 
 regress('v5 P4.2: active zero-unit terms are listed with level and weight, and violations land on their rule', ()=>{
@@ -420,7 +420,7 @@ regress('v5 P4.2: the Model card renders inside the Summary with Copy and two ex
   return verdict(!!pre && btns.length===3 && /JetBrains|mono/i.test(font) && saved.length===2 && saved[0][0].endsWith('.txt') && saved[1][0].endsWith('.json') && json.includes('json'), 'card, 3 buttons, mono font, two exports', JSON.stringify({btns:btns.length, font, saved}));
 });
 
-regress('v5 migration: a rev 8 save gains the v5 settings with the same behaviour and moves to rev 9', ()=>{
+regress('v5 migration: a rev 8 save gains the v5 settings with the same behaviour and moves to the current rev', ()=>{
   const old = JSON.parse(SEED_JSON);
   old.rulesRev = 8;
   const V = old.settings.volume;
@@ -431,7 +431,7 @@ regress('v5 migration: a rev 8 save gains the v5 settings with the same behaviou
   old.locations.forEach(l=>{ delete l.seats; });
   const d = normalizeData(old);
   const v = d.settings.volume;
-  return verdict(d.rulesRev===RULES_REV && RULES_REV===9 && v.dayMode==='upTo' && v.useAllDays==='must' && v.requireEveryEligibleDay===true && v.exactMode==='exactly' && v.total.n===null && Array.isArray(d.settings.guests) && d.settings.duplicates==='ask' && d.locations.every(l=>l.seats==null || Object.keys(l.seats).length===0), 'rev 9, up-to, Must from true, exactly, ask, empty guests', JSON.stringify({rev:d.rulesRev, v:[v.dayMode, v.useAllDays, v.exactMode], dup:d.settings.duplicates}));
+  return verdict(d.rulesRev===RULES_REV && RULES_REV>=9 && v.dayMode==='upTo' && v.useAllDays==='must' && v.requireEveryEligibleDay===true && v.exactMode==='exactly' && v.total.n===null && Array.isArray(d.settings.guests) && d.settings.duplicates==='ask' && d.locations.every(l=>l.seats==null || Object.keys(l.seats).length===0), 'rev 9, up-to, Must from true, exactly, ask, empty guests', JSON.stringify({rev:d.rulesRev, v:[v.dayMode, v.useAllDays, v.exactMode], dup:d.settings.duplicates}));
 });
 
 regress('v5.1 within: a special visit marked for the first week lands in the first 7 days of the plan', ()=>{

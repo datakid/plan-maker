@@ -1,0 +1,25 @@
+Baseline on main at 8c46d72 (v5.1.0), recorded before any v6 change.
+
+test.html (1280px)            RESULT pass=336 fail=0
+ship-test.html                RESULT pass=38 fail=0
+people-test.html              RESULT pass=10 fail=0
+docs/people-matrix.html       MATRIX pass=32 fail=0
+scripts/ci-run.js app e2e     ok (CSP clean, worker, fonts, offline, cache list)
+
+Intent suite on main (intent-test.html, js/tests/intent.js)
+  I1  fixed visits present with their people         passes (F-SPX 184 plans, F-4G2I 28 plans)
+  I2  specials placed or named cause                  FAILS F-SPX: 104 of 184 plans have a skipped special with no named cause
+  I3  locked people survive the search                passes through the normal search, FAILS in the LNS move stress:
+        N3chain, N3restaff, N3hungarian drop the locked person of a special
+  I4  requests stay inside their windows              passes through the normal search, FAILS in the LNS move stress:
+        N4day, N4swapDays move a special outside its window
+  I5  goals-only mode adds nothing extra              FAILS (the mode does not exist before P2)
+  I6  goal visits are not displaced (F-4G2I)          FAILS 23 of 28 plans (an at-most goal is exceeded, others displaced)
+  I7  person never/only rules hold (F-POOL)           passes
+
+The failures above are the to-do list for P1 (I2, I3, I4) and P2 (I5, I6). They are registered in INTENT.known
+and print as XFAIL; a phase removes its codes from that set when it makes them pass.
+
+Golden plans: 36 snapshots (js/tests/golden-data.js), 12 request, 3 rule, 3 plain fixtures x 3 seeds each, recorded with
+iters=150 and timeScale=40 so the clock does not change the result. Recording twice gives identical files.
+Record again with: node docs/golden-record.js . js/tests/golden-data.js

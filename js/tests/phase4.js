@@ -31,9 +31,13 @@ const P4 = {
       for(const l of P4.render()) all.add(l);
     }
     P4.prepare('fill', 'even');
-    openPerson(activePeople()[0].id);
-    for(const l of P4.labels()) all.add(l);
-    sheet.current.close(true);
+    for(const k of PERSON_TABS){
+      App.ui.personTab = k;
+      openPerson(activePeople()[0].id);
+      for(const l of P4.labels()) all.add(l);
+      sheet.current.close(true);
+    }
+    App.ui.personTab = null;
     openFacility(schedulableFacilities()[0].id);
     for(const l of P4.labels()) all.add(l);
     sheet.current.close(true);

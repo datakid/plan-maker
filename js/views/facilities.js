@@ -152,7 +152,12 @@ function openFacility(id, draft){
       if(!h.length) sec3.appendChild(el('div', {class:'muted', style:{fontSize:'13px'}}, t('vdNoHistory')));
       for(const x of h) sec3.appendChild(el('div', {class:'row', style:{padding:'5px 0', fontSize:'12.5px', borderBottom:'1px dashed var(--line)'}}, [el('span', {class:'num muted', style:{minWidth:'92px'}}, x.date), el('span', null, (x.team||[]).join('، '))]));
       if(f.review) sec3.appendChild(el('button', {type:'button', class:'btn sm', style:{marginTop:'10px'}, onclick:()=>{ f.review = null; saveF(); api.render(); }}, t('fReview')+' ✓'));
-      return [sec1, sec2, sec2b, sec3];
+      const secWho = el('section', {class:'sheet-sec stack', style:{gap:'8px'}}, [el('div', {class:'section-title'}, t('fWhoMayVisit'))]);
+      if(App.data.facilities.includes(f)){
+        for(const g of S().goals.filter(x=>x.type==='person' && x.scope && x.scope.kind==='facility' && x.scope.ids.includes(f.id))) secWho.appendChild(el('div', {class:'goal-row'+(g.on?'':' off')}, [el('span', {class:'goal-ic', html:ICON.target}), el('div', {class:'gl-main'}, [el('b', null, goalTitle(g))])]));
+        secWho.appendChild(RuleDraft({lockScope:true, make:()=>{ const g = simpleRuleGoal(); g.rel = 'reservedFor'; g.scope = {kind:'facility', ids:[f.id]}; return g; }, onAdd:()=>api.render()}));
+      }
+      return [sec1, sec2, sec2b, secWho, sec3];
     },
     foot:api=>[
       isNew && !App.data.facilities.includes(f) ? null : el('button', {type:'button', class:'btn ghost', style:{color:'var(--danger)'}, onclick:()=>confirmDialog(t('fDelete'), t('fDeleteQ'), {danger:true, label:t('del'), onConfirm:()=>{ App.data.facilities = App.data.facilities.filter(x=>x!==f); commit('data'); api.close(); if(PlanView.facRepaint) PlanView.facRepaint(); }})}, t('fDelete')),

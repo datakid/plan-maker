@@ -12,6 +12,7 @@ const KEY_RULE = {
 };
 const ALWAYS_LV = {level:'always', w:10};
 const DAY_RULE_FIELD = {'day.cap':'cap', 'day.min':'min', 'day.kind':'kind', 'day.band':'band', 'day.category':'category', 'day.only':'only'};
+const INTENT_RULES = new Set(['goal.special', 'goal.cover', 'goal.atLeast', 'goal.atMost', 'fac.pinned']);
 const PERSON_RULE_FIELD = {'p.spread':'spread', 'p.blocked':'blocked', 'p.avail':'avail', 'p.maxRun':'maxRun', 'p.maxWeek':'maxWeek', 'p.rest':'rest', 'p.quota':'quota', 'p.dist':'dist'};
 
 function violationLv(v){
@@ -440,7 +441,9 @@ function evaluateGoals(plan, T, ctx){
       const f = facilityById(g.facilityId);
       if(!f){ row.state = 'new'; row.label = '—'; continue; }
       const people = liveIds(g.people);
-      const lo = g.from ? ordOf(g.from) : -Infinity, hi = Math.min(g.to ? ordOf(g.to) : Infinity, withinEndOrd(startOrd, g.within));
+      const sw = specialWindow(g, {start:startOrd, end:endOrd});
+      if(!sw){ row.state = 'new'; row.label = '—'; continue; }
+      const lo = sw.lo, hi = sw.hi;
       const q = vis.filter(x=>x.f.id===f.id && x.ord>=lo && x.ord<=hi && people.every(id=>x.ids.includes(id)));
       row.inPlan = q.length; row.target = Math.max(1, g.times||1);
       row.met = q.length>=row.target;
@@ -448,8 +451,8 @@ function evaluateGoals(plan, T, ctx){
       row.state = row.met ? 'met' : 'short';
       if(!row.met) viol({key:'dSpecialShort', units:Math.max(1, row.target-q.length), actual:q.length, required:row.target, facilities:[f.id], args:[row.title, q.length, row.target]});
     } else if(g.type==='person'){
-      const ids = liveIds(g.people);
-      if(g.rel==='never' || g.rel==='only'){
+      const ids = goalPeople(g);
+      if(DENY_RELS.includes(g.rel)){
         let bad = 0;
         const badVisits = [];
         for(const x of vis) for(const id of x.ids) if(ids.includes(id) && T.rules.deniedBy(id, x.f, g.id)){
@@ -735,7 +738,8 @@ function validatePlan(plan, opts){
       } else facSeen.set(x.f.id, x.v);
     }
     const ord = ordOf(date), dcap = dayCap(ord);
-    const free = list.filter(x=>!x.v.fixed).length;
+    const askedOver = S().volume.requestsExceedCap!==false;
+    const free = list.filter(x=>!x.v.fixed && !(askedOver && x.v.special)).length;
     const perDay = S().volume.perDay|0;
     const cfgCap = dayView(dayRuleOf(ord)).cap;
     if(perDay>0 && list.length>perDay) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:perDay, units:list.length-perDay, args:[date, list.length, perDay]});
@@ -817,7 +821,7 @@ function validatePlan(plan, opts){
   for(const row of out.goals) row.source = 'current';
 
   const eligible = fr.days.filter(normalWorkday);
-  const requireDays = !!set.volume.requireEveryEligibleDay;
+  const requireDays = !!set.volume.requireEveryEligibleDay && set.volume.fill!=='goals';
   const covered = [], uncovered = [];
   const badVisit = new Set();
   for(const v of out.violations) if(v.cls===CLS.HARD) for(const id of v.visits) badVisit.add(id);
@@ -828,13 +832,13 @@ function validatePlan(plan, opts){
   if(requireDays) for(const o of uncovered) add({src:'volume', cls:CLS.HARD, group:'cDays', key:'dEveryDay', dates:[isoOf(o)], args:[isoOf(o)]});
   out.days = {required:requireDays, eligible:eligible.length, covered:covered.length, uncovered:uncovered.map(isoOf), used:dayDates.length};
 
-  out.hardScore = 0; out.softScore = 0;
+  out.hardScore = 0; out.softScore = 0; out.intentScore = 0;
   for(const v of out.violations){
-    if(v.cls===CLS.HARD){ out.hard++; out.hardScore += v.weight*v.units; } else if(v.cls===CLS.SOFT){ out.soft++; out.softScore += v.weight*v.units; } else out.exceptions++;
+    if(v.cls===CLS.HARD){ out.hard++; out.hardScore += v.weight*v.units; } else if(v.cls===CLS.SOFT){ out.soft++; if(INTENT_RULES.has(v.rule)) out.intentScore += v.weight*v.units; else out.softScore += v.weight*v.units; } else out.exceptions++;
     out.byGroup[v.group] = out.byGroup[v.group] || {hard:0, soft:0, exceptions:0};
     out.byGroup[v.group][v.cls==='hard' ? 'hard' : (v.cls==='soft' ? 'soft' : 'exceptions')]++;
   }
-  out.hardScore = Math.round(out.hardScore*1000)/1000; out.softScore = Math.round(out.softScore*1000)/1000;
+  out.hardScore = Math.round(out.hardScore*1000)/1000; out.softScore = Math.round(out.softScore*1000)/1000; out.intentScore = Math.round(out.intentScore*1000)/1000;
   out.valid = out.hard===0;
   out.vis = vis;
   return out;
@@ -863,18 +867,25 @@ function buildModel(plan){
   const all = [...byRule.values()].map(e=>Object.assign(e, {hardUnits:round(e.hardUnits), softUnits:round(e.softUnits), hard:round(e.hard), soft:round(e.soft)}));
   const order = key=>(a, b)=>b[key]-a[key] || (a.id<b.id ? -1 : 1);
   const hardTerms = all.filter(e=>e.level==='must' || e.hardUnits>0).sort(order('hard'));
-  const softTerms = all.filter(e=>e.level==='prefer' || e.softUnits>0).sort(order('soft'));
+  const softTerms = all.filter(e=>(e.level==='prefer' || e.softUnits>0) && !INTENT_RULES.has(e.id)).sort(order('soft'));
+  const intentTerms = all.filter(e=>(e.level==='prefer' || e.softUnits>0) && INTENT_RULES.has(e.id)).sort(order('soft'));
   const wDue = lvOf('due.priority').w;
   let dueSum = 0;
-  for(const x of plan.visits) dueSum += st.due.get(x.facilityId)||0;
+  const dueSeen = new Set();
+  for(const x of plan.visits){
+    if(dueSeen.has(x.facilityId)) continue;
+    dueSeen.add(x.facilityId);
+    if(S().volume.fill==='goals' && visitOrigin(x)==='filler') continue;
+    dueSum += st.due.get(x.facilityId)||0;
+  }
   const V = S().volume;
   return {
     version:1,
-    objective:'minimize H*hardScore + softScore',
-    H:1e6,
-    hardScore:st.hard, softScore:st.soft,
+    objective:'minimize H*hardScore + I*intentScore + softScore',
+    H:1e9, I:1e5,
+    hardScore:st.hard, intentScore:st.intent, softScore:st.soft,
     softBeforeReward:round(val.softScore),
-    hardTerms, softTerms,
+    hardTerms, intentTerms, softTerms,
     dueReward:{w:wDue, dueSum:round(dueSum), value:st.reward},
     structural:STRUCTURAL_RULES.map(r=>r.id),
     facts:{mode:V.mode, dayMode:V.dayMode, perDay:V.perDay, perWeek:V.perWeek, minPerDay:V.minPerDay, useAllDays:V.useAllDays, exactMode:V.exactMode,
@@ -890,12 +901,15 @@ function modelText(m){
   const pad = (s, n)=>String(s).length>=n ? String(s) : String(s)+' '.repeat(n-String(s).length);
   const row = (e, units, val)=>'  '+pad(e.id, 16)+pad(lvTag(e), 14)+pad('units='+units, 14)+pad('= '+val, 12)+name(e.id);
   const out = [];
-  out.push('minimize  H * hardScore + softScore        (H = 1e6, lexicographic)');
+  out.push('minimize  H * hardScore + I * intentScore + softScore        (H = 1e9, I = 1e5, lexicographic)');
   out.push('');
   out.push('hardScore = sum over Must terms of  w * units  =  '+m.hardScore);
   for(const e of m.hardTerms) out.push(row(e, e.hardUnits, e.hard));
   out.push('');
-  out.push('softScore = sum over Prefer terms of  w * units  -  w_due * sum(dueReward)  =  '+m.softScore);
+  out.push('intentScore = sum over Prefer terms the user asked for (special, cover, at least, at most, pinned) of  w * units  =  '+m.intentScore);
+  for(const e of m.intentTerms) out.push(row(e, e.softUnits, e.soft));
+  out.push('');
+  out.push('softScore = sum over the other Prefer terms of  w * units  -  w_due * sum(dueReward)  =  '+m.softScore);
   for(const e of m.softTerms) out.push(row(e, e.softUnits, e.soft));
   out.push('  '+pad('due.priority', 16)+pad('[Prefer *'+m.dueReward.w+']', 14)+pad('reward='+m.dueReward.dueSum, 14)+pad('= -'+m.dueReward.value, 12));
   out.push('  (sum of Prefer terms before the reward = '+m.softBeforeReward+')');
