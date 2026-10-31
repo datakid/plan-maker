@@ -114,7 +114,7 @@ function seedData(){
   });
   const people = SEED_PEOPLE.map(p=>freshPerson(Object.assign({}, p, {origin: locIdFor(p.origin||'دمنهور')})));
   return {version:5, rev:SETTINGS_REV, rulesRev:RULES_REV, settings:defaultSettings(), locations, categories, facilities, people,
-    history:{fpv:{}, counts:{}, lastCycle:0}, aliases:{people:{}}, unresolved:[]};
+    history:{fpv:{}, counts:{}, lastCycle:0, keys:[]}, aliases:{people:{}, facilities:{}}, unresolved:[]};
 }
 
 function freshPerson(p){
@@ -297,8 +297,8 @@ function normalizeData(d){
     if(g.a && !ids.has(g.a)) g.a = null;
     if(g.b && !ids.has(g.b)) g.b = null;
   }
-  d.history = Object.assign({fpv:{}, counts:{}, lastCycle:0}, d.history||{});
-  d.aliases = d.aliases || {people:{}};
+  d.history = Object.assign({fpv:{}, counts:{}, lastCycle:0, keys:[]}, d.history||{});
+  d.aliases = d.aliases || {people:{}, facilities:{}};
   d.unresolved = d.unresolved || [];
   const known = new Set(d.categories.map(c=>c.name));
   for(const f of d.facilities) if(f.category && !known.has(f.category)){ d.categories.push({name:f.category, kind:'excluded'}); known.add(f.category); }
@@ -469,8 +469,10 @@ function sanitizeBackup(raw){
   d.history.fpv = obj(d.history.fpv) ? d.history.fpv : {};
   d.history.counts = obj(d.history.counts) ? d.history.counts : {};
   d.history.lastCycle = cleanInt(d.history.lastCycle, 0, 100000, 0);
-  d.aliases = obj(d.aliases) ? d.aliases : {people:{}};
+  d.aliases = obj(d.aliases) ? d.aliases : {people:{}, facilities:{}};
   if(!obj(d.aliases.people)) d.aliases.people = {};
+  if(!obj(d.aliases.facilities)) d.aliases.facilities = {};
+  d.history.keys = Array.isArray(d.history.keys) ? d.history.keys.filter(k=>typeof k==='string' && k.length<300).slice(0, 20000) : [];
   d.unresolved = list(d.unresolved);
   for(const k of ['period','calendar','volume','spacing','seniority','fairness','rotation','repeatBlock','distance','days','patterns']) if(!obj(d.settings[k])) delete d.settings[k];
   for(const k of ['pools','genderRules','pairs','goals','overrides']) if(!Array.isArray(d.settings[k])) delete d.settings[k];

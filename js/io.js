@@ -73,7 +73,7 @@ async function readZip(buf){
   }
   return out;
 }
-async function readXlsx(buf){
+async function readWorkbook(buf){
   const z = await readZip(buf), dec = new TextDecoder();
   const parse = s=>new DOMParser().parseFromString(s, 'application/xml');
   const shared = z.has('xl/sharedStrings.xml') ? [...parse(dec.decode(z.get('xl/sharedStrings.xml'))).getElementsByTagName('si')].map(si=>[...si.getElementsByTagName('t')].map(x=>x.textContent).join('')) : [];
@@ -84,23 +84,44 @@ async function readXlsx(buf){
     const xfs = doc.getElementsByTagName('cellXfs')[0];
     dateStyles = xfs ? [...xfs.getElementsByTagName('xf')].map(x=>{ const id = +x.getAttribute('numFmtId'); return (id>=14 && id<=22) || (id>=45 && id<=47) || (custom[id] && /[ydYD]/.test(custom[id].replace(/"[^"]*"|\[[^\]]*\]/g,''))); }) : [];
   }
-  const sheetName = [...z.keys()].filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort()[0];
-  if(!sheetName) throw new Error('sheet');
-  const doc = parse(dec.decode(z.get(sheetName)));
-  return [...doc.getElementsByTagName('row')].map(r=>{
-    const row = [];
-    for(const c of r.getElementsByTagName('c')){
-      const ref = c.getAttribute('r')||''; const m = ref.match(/^[A-Z]+/);
-      let idx = 0; if(m) for(const ch of m[0]) idx = idx*26 + ch.charCodeAt(0)-64; idx--;
-      const tp = c.getAttribute('t'), s = c.getAttribute('s');
-      let v = '';
-      if(tp==='inlineStr'){ const is = c.getElementsByTagName('is')[0]; v = is ? [...is.getElementsByTagName('t')].map(x=>x.textContent).join('') : ''; }
-      else { const ve = c.getElementsByTagName('v')[0]; const raw = ve ? ve.textContent : ''; v = tp==='s' ? (shared[+raw]||'') : ((s!=null && dateStyles[+s] && raw) ? isoOf(Math.floor(+raw) - 25569) : raw); }
-      while(row.length<idx) row.push('');
-      row[idx] = v;
+  const files = [];
+  if(z.has('xl/workbook.xml')){
+    const wb = parse(dec.decode(z.get('xl/workbook.xml')));
+    const rels = {};
+    if(z.has('xl/_rels/workbook.xml.rels')) for(const r of parse(dec.decode(z.get('xl/_rels/workbook.xml.rels'))).getElementsByTagName('Relationship')) rels[r.getAttribute('Id')] = r.getAttribute('Target');
+    for(const sh of wb.getElementsByTagName('sheet')){
+      const rid = sh.getAttribute('r:id') || sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+      let target = rels[rid] || '';
+      target = target.replace(/^\//, '');
+      if(target && !target.startsWith('xl/')) target = 'xl/'+target;
+      if(z.has(target)) files.push({name:sh.getAttribute('name') || target, file:target});
     }
-    return row;
+  }
+  if(!files.length) [...z.keys()].filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort((a, b)=>parseInt(a.match(/\d+/)[0], 10)-parseInt(b.match(/\d+/)[0], 10)).forEach((k, i)=>files.push({name:'Sheet'+(i+1), file:k}));
+  if(!files.length) throw new Error('sheet');
+  return files.map(f=>{
+    const doc = parse(dec.decode(z.get(f.file)));
+    const rows = [...doc.getElementsByTagName('row')].map(r=>{
+      const row = [];
+      for(const c of r.getElementsByTagName('c')){
+        const ref = c.getAttribute('r')||''; const m = ref.match(/^[A-Z]+/);
+        let idx = 0; if(m) for(const ch of m[0]) idx = idx*26 + ch.charCodeAt(0)-64; idx--;
+        const tp = c.getAttribute('t'), st = c.getAttribute('s');
+        let v = '';
+        if(tp==='inlineStr'){ const is = c.getElementsByTagName('is')[0]; v = is ? [...is.getElementsByTagName('t')].map(x=>x.textContent).join('') : ''; }
+        else { const ve = c.getElementsByTagName('v')[0]; const raw = ve ? ve.textContent : ''; v = tp==='s' ? (shared[+raw]||'') : ((st!=null && dateStyles[+st] && raw) ? isoOf(Math.floor(+raw) - 25569) : raw); }
+        while(row.length<idx) row.push('');
+        row[idx] = v;
+      }
+      return row;
+    });
+    return {name:f.name, rows};
   });
+}
+async function readXlsx(buf){ return (await readWorkbook(buf))[0].rows; }
+async function readSheets(file){
+  if(/\.xlsx$/i.test(file.name)) return readWorkbook(await file.arrayBuffer());
+  return [{name:file.name, rows:parseDelimited(await file.text())}];
 }
 function parseDelimited(text){
   text = text.replace(/^\uFEFF/,'');
@@ -128,7 +149,7 @@ function toCSV(rows){ return '\uFEFF'+rows.map(r=>r.map(v=>{ const s = csvSafe(v
 const IMPORT_SPECS = {
   history: {cols:{facility:['جهة المرور','الجهة','facility'], category:['المنطقة','التصنيف','category'], cycle:['الخطة','الدورة','cycle'], type:['المرور','النوع','type'], date:['التاريخ','date'], team:['القائم بالمرور','الفريق','team']}, required:['facility','date','team'],
     template:[['جهة المرور','المنطقة','الخطة','المرور','التاريخ','القائم بالمرور'],['ابو حمص','الثانية','12','أساسي','2026-08-02','أباظة-أماني-حمودين-شرنوبي'],['مركز دمنهور للاشعة','اشعة','12','متعاقد','2026-08-03','شلتوت-ميسرة-شوقي']]},
-  facilities: {cols:{name:['الاسم','اسم الجهة','name'], category:['التصنيف','المنطقة','category'], location:['الموقع','location'], km:['المسافة (كم)','المسافة','km'], freq:['الوتيرة','الوزن','frequency'], importance:['الأهمية','importance'], status:['الحالة','status'], last:['آخر زيارة','last visit']}, required:['name','category'],
+  facilities: {cols:{name:['الاسم','اسم الجهة','الجهة','name'], category:['التصنيف','المنطقة','category'], location:['الموقع','location'], km:['المسافة (كم)','المسافة','km'], freq:['الوتيرة','الوزن','frequency'], importance:['الأهمية','importance'], status:['الحالة','status'], last:['آخر زيارة','last visit']}, required:['name','category'],
     template:[['الاسم','التصنيف','الموقع','المسافة (كم)','الوتيرة','الأهمية','الحالة','آخر زيارة'],['مركز دمنهور للاشعة','اشعة','دمنهور','0','1','50','مُدرجة','2026-08-01'],['صيدلية النصر','صيدلية','كفر الدوار','37','0.5','50','مستبعدة','']]},
   team: {cols:{name:['الاسم','name'], pool:['المجموعة','group','pool'], gender:['النوع','gender'], active:['نشط','active'], skillB:['خبرة أساسية','skill basic'], skillC:['خبرة متعاقدة','skill contracted'], fixed:['عدد ثابت','حصة ثابتة','fixed']}, required:['name'],
     template:[['الاسم','المجموعة','النوع','نشط','خبرة أساسية','خبرة متعاقدة','عدد ثابت'],['محمود عزت','مالي واداري','ذكر','نعم','50','50',''],['هبة السيد','فني','أنثى','نعم','75','50','6']]}
@@ -152,28 +173,25 @@ function resolvePerson(raw){
 }
 function resolveFacility(raw){
   const n = norm(raw);
-  return App.data.facilities.find(f=>norm(f.name)===n) || null;
+  const al = App.data.aliases && App.data.aliases.facilities && App.data.aliases.facilities[ImpText.key(raw)];
+  const viaAlias = al ? App.data.facilities.find(f=>f.id===al) : null;
+  return viaAlias || App.data.facilities.find(f=>norm(f.name)===n) || null;
 }
 
-function previewImport(kind, rows){
+function previewImportSheets(kind, sheets, opts){
+  if(kind==='history') return ImportPipeline.previewHistory(sheets, opts);
+  const ranking = ImportPipeline.rankSheets(kind, sheets);
+  const chosen = opts && opts.sheet && sheets.some(s=>s.name===opts.sheet) ? opts.sheet : ranking[0].name;
+  const pv = previewImport(kind, sheets.find(s=>s.name===chosen).rows);
+  return Object.assign(pv, {sheets:ranking, sheet:chosen, source:sheets, opts:Object.assign({}, opts, {sheet:chosen})});
+}
+
+function previewImport(kind, rows, opts){
+  if(kind==='history') return ImportPipeline.previewHistory([{name:'sheet', rows}], opts);
   const header = rows[0]||[], body = rows.slice(1);
   const {map, missing} = mapColumns(kind, header);
   if(missing.length) return {error: t('impMissingCols', missing.join('، '))};
   const get = (r,k)=>map[k]!=null ? String(r[map[k]]==null?'':r[map[k]]).trim() : '';
-  if(kind==='history'){
-    const recs = [], unknownPeople = new Map(), newFacilities = new Set();
-    let bad = 0;
-    for(const r of body){
-      const date = parseDate(get(r,'date')); const fname = get(r,'facility');
-      if(!fname) continue;
-      if(!date){ bad++; continue; }
-      if(!resolveFacility(fname)) newFacilities.add(fname);
-      const names = get(r,'team').split(/[-–،,]/).map(s=>s.trim()).filter(Boolean);
-      for(const nm of names) if(!resolvePerson(nm)){ const k = norm(nm); unknownPeople.set(k, {name:nm, count:(unknownPeople.get(k)||{count:0}).count+1}); }
-      recs.push({fname, cat:get(r,'category'), date, names, cycle:parseInt(toAsciiDigits(get(r,'cycle')),10)});
-    }
-    return {kind, recs, total:body.length, bad, newFacilities:[...newFacilities], unknownPeople:[...unknownPeople.values()]};
-  }
   if(kind==='facilities'){
     const added = [], changed = [];
     for(const r of body){
@@ -195,6 +213,7 @@ function previewImport(kind, rows){
 }
 
 function applyImport(pv){
+  if(pv.kind==='history') return ImportPipeline.applyHistory(pv);
   takeSnapshot('import');
   const before = JSON.stringify(App.data);
   const D = App.data;
@@ -206,23 +225,7 @@ function applyImport(pv){
     return l.id;
   };
   const ensureCat = name=>{ if(name && !D.categories.some(c=>c.name===name)) D.categories.push({name, kind:'excluded'}); };
-  if(pv.kind==='history'){
-    for(const r of pv.recs){
-      let f = resolveFacility(r.fname);
-      if(!f){ ensureCat(r.cat); f = {id:uid('f'), name:r.fname, category:r.cat||'', locationId:null, kindOverride:null, freq:1, importance:50, pinned:false, excluded:false, lastVisit:null, visitCount:0, history:[], weekdays:null, review:'new'}; D.facilities.push(f); }
-      f.visitCount = (f.visitCount||0)+1;
-      if(!f.lastVisit || r.date>f.lastVisit) f.lastVisit = r.date;
-      f.history = [{date:r.date, team:r.names}].concat(f.history||[]).sort((a,b)=>a.date<b.date?1:-1).slice(0,20);
-      for(const nm of r.names){
-        const p = resolvePerson(nm);
-        if(!p) continue;
-        D.history.counts[p.id] = (D.history.counts[p.id]||0)+1;
-        D.history.fpv[f.id+'|'+p.id] = (D.history.fpv[f.id+'|'+p.id]||0)+1;
-      }
-      if(!isNaN(r.cycle)) D.history.lastCycle = Math.max(D.history.lastCycle||0, r.cycle);
-    }
-    for(const u of pv.unknownPeople) if(!D.unresolved.some(x=>norm(x.name)===norm(u.name))) D.unresolved.push(u);
-  } else if(pv.kind==='facilities'){
+  if(pv.kind==='facilities'){
     const apply = (f, r)=>{
       if(r.category){ ensureCat(r.category); f.category = r.category; }
       if(r.location) f.locationId = ensureLoc(r.location, r.km);

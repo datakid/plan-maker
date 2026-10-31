@@ -17,31 +17,54 @@ function renderData(root){
     const pv = App.ui.impPreview;
     if(!pv){
       const input = el('input', {type:'file', accept:'.xlsx,.csv,.tsv,.txt', hidden:true});
-      const handle = async file=>{ try{ const rows = await readTable(file); App.ui.impPreview = previewImport(kind, rows); }catch(e){ console.error(e); App.ui.impPreview = {error:t('impError')}; } node.render(); };
+      const handle = async file=>{ try{ const sheets = await readSheets(file); App.ui.impOpts = {}; App.ui.impPreview = previewImportSheets(kind, sheets, App.ui.impOpts); }catch(e){ console.error(e); App.ui.impPreview = {error:t('impError')}; } node.render(); };
       input.addEventListener('change', ()=>{ if(input.files[0]) handle(input.files[0]); });
       const drop = el('div', {class:'drop', tabindex:'0', role:'button', onclick:()=>input.click(), onkeydown:e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); input.click(); } }}, [el('div', {html:ICON.upload, style:{display:'flex', justifyContent:'center', marginBottom:'6px'}}), t('impDrop')]);
       drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('over'); });
       drop.addEventListener('dragleave', ()=>drop.classList.remove('over'));
       drop.addEventListener('drop', e=>{ e.preventDefault(); drop.classList.remove('over'); if(e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]); });
       const ta = el('textarea', {class:'input', rows:4, placeholder:t('impPaste'), style:{width:'100%', fontFamily:'var(--font-num)', fontSize:'12px'}});
-      appendKids(body, [drop, input, ta, el('div', {class:'row'}, el('button', {type:'button', class:'btn sm', onclick:()=>{ if(!ta.value.trim()) return; App.ui.impPreview = previewImport(kind, parseDelimited(ta.value)); node.render(); }}, t('impParse')))]);
+      appendKids(body, [drop, input, ta, el('div', {class:'row'}, el('button', {type:'button', class:'btn sm', onclick:()=>{ if(!ta.value.trim()) return; App.ui.impOpts = {}; App.ui.impPreview = previewImportSheets(kind, [{name:'paste', rows:parseDelimited(ta.value)}], App.ui.impOpts); node.render(); }}, t('impParse')))]);
     } else if(pv.error){
       appendKids(body, [el('div', {class:'banner warn'}, pv.error), el('button', {type:'button', class:'btn sm', style:{alignSelf:'flex-start'}, onclick:()=>{ App.ui.impPreview = null; node.render(); }}, t('back'))]);
     } else {
       const lines = [];
-      if(pv.kind==='history'){
-        lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impRows', pv.recs.length, pv.total)]));
-        if(pv.newFacilities.length) lines.push(el('div', {class:'check soft'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('impNew')+': '+pv.newFacilities.length+' '+t('tabFacilities'), el('span', {class:'n'}, pv.newFacilities.slice(0,4).join('، '))]));
-        if(pv.unknownPeople.length) lines.push(el('div', {class:'check soft'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), t('impUnknown')+': '+pv.unknownPeople.map(u=>u.name).join('، ')]));
-        if(pv.bad) lines.push(el('div', {class:'check bad'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), String(pv.bad)]));
-      } else {
+      const rePreview = patch=>{ App.ui.impOpts = Object.assign({}, App.ui.impOpts || pv.opts || {}, patch); App.ui.impPreview = previewImportSheets(kind, pv.source, App.ui.impOpts); node.render(); };
+      if(pv.sheets && pv.sheets.length>1){
+        lines.push(el('div', {class:'field'}, [el('label', null, t('impSheet')), Select(pv.sheets.map(s=>({value:s.name, label:s.name+' · '+s.rows})), pv.sheet, v=>rePreview({sheet:v, includeTypes:null, peopleMap:{}, facilityMap:{}}), {sm:true})]));
+      }
+      if(pv.kind==='history' && pv.recs){
+        lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impHNew', pv.recs.length), el('span', {class:'n'}, t('impHOf', pv.total))]));
+        if(pv.hasType){
+          lines.push(el('div', {class:'field'}, [el('label', null, t('impTypes')), el('div', {class:'chips'}, pv.types.map(x=>el('button', {type:'button', class:'chip'+(x.included ? ' on' : ''), 'aria-pressed':x.included ? 'true' : 'false', 'data-type':x.key, onclick:()=>{ const on = pv.types.filter(y=>y.included && y.key!==x.key).map(y=>y.key); if(!x.included) on.push(x.key); rePreview({includeTypes:on}); }}, x.label+' · '+x.count))), el('div', {class:'hint'}, pv.typeFallback ? t('impTypesFallback') : t('impTypesHint'))]));
+        }
+        if(pv.dupExisting+pv.dupFile>0) lines.push(el('div', {class:'check soft'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('impHDup', pv.dupExisting+pv.dupFile)]));
+        if(pv.noTeam>0) lines.push(el('div', {class:'check soft'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('impHNoTeam', pv.noTeam)]));
+        if(pv.bad>0) lines.push(el('div', {class:'check bad'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), t('impHBad', pv.bad, pv.badRows.join('، '))]));
+        const okPeople = pv.people.filter(p=>p.id);
+        if(okPeople.length) lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impHPeople', okPeople.length), el('span', {class:'n'}, okPeople.slice(0, 6).map(p=>p.name).join('، '))]));
+        const pm = (App.ui.impOpts && App.ui.impOpts.peopleMap) || {};
+        const fm = (App.ui.impOpts && App.ui.impOpts.facilityMap) || {};
+        const unP = pv.people.filter(p=>!p.id);
+        if(unP.length){
+          lines.push(el('div', {class:'field'}, [el('label', null, t('impHUnknownPeople')), ...unP.map(p=>el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [el('b', null, p.name), el('span', {class:'muted'}, '× '+p.count), Select([{value:'', label:t('impLater')}, {value:'new', label:t('impCreate')}, {value:'skip', label:t('impIgnore')}].concat(p.candidates.map(c=>({value:c.id, label:(personById(c.id)||{}).name}))), pm[p.key] || '', v=>{ const m = Object.assign({}, pm); if(v) m[p.key] = v; else delete m[p.key]; rePreview({peopleMap:m}); }, {sm:true})]))]));
+        }
+        const unF = pv.facilities.filter(f=>!f.id);
+        if(pv.facilities.length-unF.length) lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impHFacMatched', pv.facilities.length-unF.length)]));
+        if(unF.length){
+          lines.push(el('div', {class:'field'}, [el('label', null, t('impHNewFacilities')), ...unF.map(f=>el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [el('b', null, f.name), el('span', {class:'muted'}, '× '+f.count), Select([{value:'', label:t('impCreate')}, {value:'skip', label:t('impIgnore')}].concat(f.candidates.map(c=>({value:c.id, label:(facilityById(c.id)||{}).name}))), fm[f.key] || '', v=>{ const m = Object.assign({}, fm); if(v) m[f.key] = v; else delete m[f.key]; rePreview({facilityMap:m}); }, {sm:true})]))]));
+        }
+      }
+      if(pv.kind==='history' && !pv.recs){
+        lines.push(el('div', {class:'banner warn'}, pv.error || t('impError')));
+      } else if(pv.kind!=='history'){
         lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('impNew'), el('span', {class:'n'}, String(pv.added.length))]));
         lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.refresh, style:{display:'flex'}}), t('impChanged'), el('span', {class:'n'}, String(pv.changed.length))]));
         if(pv.added.length) lines.push(el('div', {class:'chips'}, pv.added.slice(0,20).map(r=>el('span', {class:'chip'}, r.name))));
       }
       appendKids(body, [el('div', {class:'stack', style:{gap:'6px'}}, lines), el('div', {class:'row'}, [
         el('button', {type:'button', class:'btn ghost', onclick:()=>{ App.ui.impPreview = null; node.render(); }}, t('cancel')),
-        el('button', {type:'button', class:'btn primary', onclick:()=>{ applyImport(pv); App.ui.impPreview = null; node.render(); }}, t('impApply'))
+        el('button', {type:'button', class:'btn primary', disabled:pv.kind==='history' && !(pv.recs && pv.recs.length), onclick:()=>{ applyImport(pv); App.ui.impPreview = null; node.render(); }}, t('impApply'))
       ])]);
     }
     imp.appendChild(body);
