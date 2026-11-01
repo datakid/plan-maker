@@ -36,6 +36,7 @@ const ASSETS = [
   "js/diag.js",
   "js/io.js",
   "js/importer.js",
+  "js/import-kinds.js",
   "js/views/plan.js",
   "js/views/facilities.js",
   "js/views/team.js",

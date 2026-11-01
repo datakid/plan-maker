@@ -101,20 +101,7 @@ function impFacilityMatcher(){
   return new EntityMatcher(D.facilities.map(f=>({id:f.id, names:[f.name]})), (D.aliases && D.aliases.facilities) || {});
 }
 
-const HISTORY_SPEC = {
-  cols:{
-    facility:['جهة المرور', 'الجهة', 'اسم الجهة', 'facility'],
-    category:['المنطقة', 'التصنيف', 'category'],
-    cycle:['الخطة', 'الدورة', 'cycle'],
-    type:['المرور', 'نوع المرور', 'النوع', 'type'],
-    date:['التاريخ', 'date'],
-    team:['القائم بالمرور', 'القائمين بالمرور', 'الفريق', 'team'],
-    location:['الموقع', 'location']
-  },
-  required:['facility', 'date', 'team'],
-  sheetHints:['الاصلي', 'original', 'history', 'visits', 'السجل'],
-  defaultTypes:['خطة المرور']
-};
+function typeFallbackNote(fallback){ return fallback ? t('impTypesFallback') : t('impTypesHint'); }
 
 const ImportPipeline = {
   findHeader(rows, spec){
@@ -127,17 +114,47 @@ const ImportPipeline = {
       const hit = Object.keys(map).length;
       const missing = spec.required.filter(k=>map[k]==null);
       const score = hit*2 + (missing.length ? 0 : 10);
-      if(!best || score>best.score) best = {index:i, map, missing, score};
+      const used = new Set(Object.values(map));
+      const unused = header.map((h, c)=>({h:ImpText.clean(h), c})).filter(x=>x.h && !used.has(x.c)).map(x=>x.h);
+      if(!best || score>best.score) best = {index:i, map, missing, score, unused};
     }
-    return best || {index:0, map:{}, missing:spec.required.slice(), score:0};
+    return best || {index:0, map:{}, missing:spec.required.slice(), score:0, unused:[]};
+  },
+  colLetter(n){ let s = ''; n++; while(n>0){ s = String.fromCharCode(65+(n-1)%26)+s; n = Math.floor((n-1)/26); } return s; },
+  tables(sheets){
+    const out = [];
+    for(const sh of sheets){
+      const width = Math.max(0, ...sh.rows.map(r=>r.length));
+      const filled = [];
+      for(let c=0; c<width; c++) filled.push(sh.rows.some(r=>ImpText.clean(r[c])!==''));
+      const blocks = [];
+      let start = -1;
+      for(let c=0; c<=width; c++){
+        if(c<width && filled[c]){ if(start<0) start = c; }
+        else if(start>=0){ blocks.push([start, c-1]); start = -1; }
+      }
+      if(blocks.length<=1){ out.push({id:sh.name, label:sh.name, sheet:sh.name, rows:sh.rows}); continue; }
+      for(const [a, b] of blocks){
+        const rows = sh.rows.map(r=>r.slice(a, b+1)).filter(r=>r.some(x=>ImpText.clean(x)!==''));
+        if(b-a<1 && rows.length<3) continue;
+        out.push({id:sh.name+' · '+ImportPipeline.colLetter(a)+':'+ImportPipeline.colLetter(b), label:sh.name+' · '+ImportPipeline.colLetter(a)+':'+ImportPipeline.colLetter(b), sheet:sh.name, rows});
+      }
+    }
+    return out;
+  },
+  pickTable(kind, sheets, opts){
+    const tables = ImportPipeline.tables(sheets);
+    const ranking = ImportPipeline.rankSheets(kind, tables);
+    const chosen = opts && opts.sheet && tables.some(x=>x.id===opts.sheet) ? opts.sheet : ranking[0].name;
+    return {tables, ranking, chosen, table:tables.find(x=>x.id===chosen)};
   },
   rankSheets(kind, sheets){
     const spec = kind==='history' ? HISTORY_SPEC : IMPORT_SPECS[kind];
     const ranked = sheets.map((sh, order)=>{
       const h = ImportPipeline.findHeader(sh.rows, spec);
-      const hint = (spec.sheetHints || []).some(x=>ImpText.key(sh.name)===norm(x)) ? 3 : 0;
+      const hint = (spec.sheetHints || []).some(x=>ImpText.key(sh.name || sh.sheet)===norm(x) || ImpText.key(sh.sheet || '')===norm(x)) ? 3 : 0;
       const cols = Object.keys(h.map).length;
-      return {name:sh.name, order, rows:Math.max(0, sh.rows.length-h.index-1), cols, complete:!h.missing.length, score:h.score+hint+Math.min(2, Math.log10(1+sh.rows.length))};
+      return {name:sh.id || sh.name, label:sh.label || sh.name, order, rows:Math.max(0, sh.rows.length-h.index-1), cols, complete:!h.missing.length, score:h.score+hint+Math.min(2, Math.log10(1+sh.rows.length))};
     });
     ranked.sort((a, b)=>(b.complete-a.complete) || (b.score-a.score) || (a.order-b.order));
     return ranked;
@@ -173,10 +190,9 @@ const ImportPipeline = {
   },
   previewHistory(sheets, opts){
     opts = opts || {};
-    const ranking = ImportPipeline.rankSheets('history', sheets);
-    const chosen = opts.sheet && sheets.some(s=>s.name===opts.sheet) ? opts.sheet : ranking[0].name;
-    const sheet = sheets.find(s=>s.name===chosen);
-    const parsed = ImportPipeline.parseRows(sheet, HISTORY_SPEC);
+    const pick = ImportPipeline.pickTable('history', sheets, opts);
+    const ranking = pick.ranking, chosen = pick.chosen;
+    const parsed = ImportPipeline.parseRows(pick.table, HISTORY_SPEC);
     const base = {kind:'history', sheets:ranking, sheet:chosen, opts:Object.assign({}, opts, {sheet:chosen}), source:sheets};
     if(parsed.error) return Object.assign(base, {error:parsed.error});
     const hasType = parsed.header.map.type!=null;
@@ -224,7 +240,24 @@ const ImportPipeline = {
     }
     const peopleList = [...pStat.values()].sort((a, b)=>b.count-a.count);
     const facList = [...fStat.values()];
+    const panels = [];
+    panels.push({type:'check', tone:'ok', text:t('impHNew', recs.length), detail:t('impHOf', parsed.recs.length)});
+    if(hasType) panels.push({type:'chips', label:t('impTypes'), hint:typeFallbackNote(hasType && !defaultPresent), opt:'includeTypes', items:types.map(x=>({key:x.key, label:x.label+' · '+x.count, on:x.included}))});
+    if(dupExisting+dupFile>0) panels.push({type:'check', tone:'soft', text:t('impHDup', dupExisting+dupFile)});
+    if(noTeam>0) panels.push({type:'check', tone:'soft', text:t('impHNoTeam', noTeam)});
+    if(parsed.bad>0) panels.push({type:'check', tone:'bad', text:t('impHBad', parsed.bad, parsed.badRows.join('، '))});
+    const okPeople = peopleList.filter(p=>p.id);
+    if(okPeople.length) panels.push({type:'check', tone:'ok', text:t('impHPeople', okPeople.length), detail:okPeople.slice(0, 6).map(p=>p.name).join('، ')});
+    const unP = peopleList.filter(p=>!p.id && peopleMap[p.key]!=='skip' && peopleMap[p.key]!=='new');
+    const unPAll = peopleList.filter(p=>!p.id || p.tier==='chosen');
+    if(unPAll.length) panels.push({type:'map', label:t('impHUnknownPeople'), opt:'peopleMap', rows:unPAll.map(p=>({key:p.key, name:p.name, count:p.count, value:peopleMap[p.key] || '', options:[{value:'', label:t('impLater')}, {value:'new', label:t('impCreate')}, {value:'skip', label:t('impIgnore')}].concat(p.candidates.map(c=>({value:c.id, label:(personById(c.id) || {}).name})))}))});
+    const matchedFac = facList.filter(f=>f.id).length;
+    if(matchedFac) panels.push({type:'check', tone:'ok', text:t('impHFacMatched', matchedFac)});
+    const unF = facList.filter(f=>!f.id || f.tier==='chosen');
+    if(unF.length) panels.push({type:'map', label:t('impHNewFacilities'), opt:'facilityMap', rows:unF.map(f=>({key:f.key, name:f.name, count:f.count, value:facMap[f.key] || '', options:[{value:'', label:t('impCreate')}, {value:'skip', label:t('impIgnore')}].concat(f.candidates.map(c=>({value:c.id, label:(facilityById(c.id) || {}).name})))}))});
+    if(parsed.header.unused.length) panels.push({type:'check', tone:'soft', text:t('impUnused', parsed.header.unused.join('، '))});
     return Object.assign(base, {
+      panels:ImportPipeline.order(panels), canApply:recs.length>0, unused:parsed.header.unused,
       recs, total:parsed.recs.length, bad:parsed.bad, badRows:parsed.badRows, blank:parsed.blank,
       hasType, types, typeFallback:hasType && !defaultPresent,
       ignoredByType:types.filter(x=>!x.included).reduce((a, x)=>a+x.count, 0),
@@ -242,7 +275,15 @@ const ImportPipeline = {
     if(!D.aliases.facilities) D.aliases.facilities = {};
     if(!D.history.keys) D.history.keys = [];
     const keys = new Set(D.history.keys);
-    const ensureCat = name=>{ if(name && !D.categories.some(c=>c.name===name)) D.categories.push({name, kind:'excluded'}); };
+    const catM = impCategoryMatcher();
+    const catFor = name=>{
+      if(!name) return '';
+      const m = catM.resolve(name);
+      if(m.id) return m.id;
+      if(m.candidates[0] && m.candidates[0].score>=0.8) return m.candidates[0].id;
+      if(!D.categories.some(c=>c.name===name)) D.categories.push({name, kind:'excluded'});
+      return name;
+    };
     const ensureLoc = name=>{
       if(!name) return null;
       let l = D.locations.find(x=>ImpText.key(x.name)===ImpText.key(name));
@@ -258,8 +299,7 @@ const ImportPipeline = {
         return f;
       }
       if(newFac.has(r.fkey)) return newFac.get(r.fkey);
-      ensureCat(r.category);
-      f = {id:uid('f'), name:r.fname, category:r.category || '', locationId:ensureLoc(r.location), kindOverride:null, freq:1, importance:50, pinned:false, excluded:false, lastVisit:null, visitCount:0, history:[], weekdays:null, review:'new'};
+      f = {id:uid('f'), name:r.fname, category:catFor(r.category), locationId:ensureLoc(r.location), kindOverride:null, freq:1, importance:50, pinned:false, excluded:false, lastVisit:null, visitCount:0, history:[], weekdays:null, review:'new'};
       D.facilities.push(f);
       newFac.set(r.fkey, f);
       return f;
