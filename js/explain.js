@@ -49,7 +49,7 @@ function whyCandidates(st, v, rnd, limit){
           const busy = lnsBusy(plan, x.date, new Set([x.id]));
           const taken = new Set(cur);
           taken.delete(pid);
-          for(const q of lnsEligible(plan, x, pl.id, x.date, busy, taken)){
+          for(const q of lnsEligibleKeep(plan, x, pl.id, x.date, busy, taken)){
             if(q.id===pid) continue;
             const next = cur.slice(); next[i] = q.id;
             out.push({name:'replacePerson', ops:[{op:'set', id:x.id, fields:{team:Object.assign({}, x.team, {[pl.id]:next})}}]});
@@ -68,31 +68,34 @@ function probeOrder(violations){
 
 function explainPlan(plan, opts){
   opts = opts || {};
-  const t0 = Date.now();
   const work = clonePlan(plan);
   const st = makeState(work);
   const before = st.eval.violations;
   const beforeTotals = whyRuleTotals(before);
-  const rnd = lnsRng(opts.seed || 1);
+  const rnd = rng(opts.seed || 1);
   const targets = probeOrder(before);
   const why = {};
-  const budget = opts.ms || 300;
-  const base = lnsCost(st);
+  const T = budgetFor(plan.days.length, opts.quality, plan.visits.length);
+  const maxProbes = opts.max || T.explainProbes;
+  const base = lnsKey(st);
   let probed = 0;
   for(const v of targets){
     const sig = violationSig(v);
     if(why[sig]) continue;
-    if(Date.now()-t0>budget || probed>=(opts.max || 14)){ why[sig] = {fixable:null}; continue; }
+    if(probed>=maxProbes || genAborted()){ why[sig] = {fixable:null}; continue; }
     probed++;
-    let best = null;
-    for(const move of whyCandidates(st, v, rnd, opts.limit || 60)){
+    let best = null, bestKey = null;
+    for(const move of whyCandidates(st, v, rnd, opts.limit || T.explainMoves)){
       const d = deltaMove(st, move);
       const after = st.eval.violations;
       if(!after.some(x=>violationSig(x)===sig)){
         const totals = whyRuleTotals(after);
-        const worse = Object.keys(totals).filter(r=>totals[r]>(beforeTotals[r] || 0)+1e-9 && r!==v.rule).map(r=>({rule:r, units:Math.round((totals[r]-(beforeTotals[r] || 0))*1000)/1000}));
-        const damage = lnsCost(st)-base;
-        if(!best || worse.length<best.worse.length || (worse.length===best.worse.length && damage<best.damage)) best = {fixable:true, move:move.name, worse, damage:Math.round(damage*1000)/1000};
+        const tierOf = r=>after.some(x=>x.rule===r && x.cls==='hard') ? 'hard' : (INTENT_RULES.has(r) ? 'intent' : 'soft');
+        const worse = Object.keys(totals).filter(r=>totals[r]>(beforeTotals[r] || 0)+1e-9 && r!==v.rule).map(r=>({rule:r, tier:tierOf(r), units:Math.round((totals[r]-(beforeTotals[r] || 0))*1000)/1000}));
+        const key = lnsKey(st);
+        const damage = key[2]-base[2];
+        const cmp = bestKey ? lnsCmp(key, bestKey) : -1;
+        if(!best || cmp<0 || (cmp===0 && worse.length<best.worse.length)){ best = {fixable:true, move:move.name, worse, damage:Math.round(damage*1000)/1000, delta:[Math.round((key[0]-base[0])*1000)/1000, Math.round((key[1]-base[1])*1000)/1000, Math.round(damage*1000)/1000]}; bestKey = key; }
       }
       d.revert();
     }

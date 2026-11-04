@@ -727,13 +727,16 @@ function planTally(plan){
   const ctx = tallyCtx(compilePeopleRules());
   const fr = planFrame(plan);
   seedHistory(ctx, fr.start);
-  for(const v of plan.visits){
-    const f = facilityById(v.facilityId); if(!f) continue;
-    const ids = uniqIds(visitTeamIds(v)), ord = ordOf(v.date);
-    for(const id of ids) ctxTally(ctx, id, ord, f, 1);
-    ctxPairTally(ctx, ids, f, 1);
-  }
+  for(const v of plan.visits) tallyVisit(ctx, v, 1);
   return ctx;
+}
+
+function tallyVisit(ctx, v, d){
+  const f = facilityById(v.facilityId);
+  if(!f) return;
+  const ids = uniqIds(visitTeamIds(v)), ord = ordOf(v.date);
+  for(const id of ids) ctxTally(ctx, id, ord, f, d);
+  ctxPairTally(ctx, ids, f, d);
 }
 
 function pairBreaks(ids){
@@ -850,6 +853,10 @@ function cmpScore(a, b){
   if(Math.abs(x.intent-y.intent)>1e-9) return x.intent<y.intent ? -1 : 1;
   if(Math.abs(x.soft-y.soft)>1e-9) return x.soft<y.soft ? -1 : 1;
   return 0;
+}
+function isPerfect(v){
+  const x = scoreOf(v);
+  return Math.abs(x.hard)<1e-9 && Math.abs(x.intent)<1e-9 && x.soft<=1e-9;
 }
 function clonePlan(plan){
   const c = Object.assign({}, plan);

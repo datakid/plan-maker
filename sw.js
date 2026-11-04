@@ -1,4 +1,4 @@
-const VERSION = '5.2.0';
+const VERSION = '5.2.1';
 const CACHE = 'alkhitta-'+VERSION;
 const ASSETS = [
   "./",
@@ -30,12 +30,14 @@ const ASSETS = [
   "js/solver.js",
   "js/lns.js",
   "js/explain.js",
+  "js/scope.js",
   "js/planner.js",
   "js/genrun.js",
   "js/ui.js",
   "js/diag.js",
   "js/io.js",
   "js/importer.js",
+  "js/import-kinds.js",
   "js/views/plan.js",
   "js/views/facilities.js",
   "js/views/team.js",

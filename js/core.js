@@ -183,3 +183,15 @@ const ICON = {
   sparkle: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>', 18)
 };
 const WORDMARK = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 3a13 13 0 1 0 13 13"/><path d="M8.5 21c3.4 0 5-3.2 8.5-3.2S22 14.6 25.5 14.6"/><circle cx="8.5" cy="21" r="2.1" fill="currentColor" stroke="none"/><circle cx="25.5" cy="14.6" r="2.1" fill="currentColor" stroke="none"/></svg>';
+
+function rng(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const GenGuard = {abort:null};
+function genAborted(){ return GenGuard.abort!==null && GenGuard.abort()===true; }

@@ -30,41 +30,21 @@ function renderData(root){
     } else {
       const lines = [];
       const rePreview = patch=>{ App.ui.impOpts = Object.assign({}, App.ui.impOpts || pv.opts || {}, patch); App.ui.impPreview = previewImportSheets(kind, pv.source, App.ui.impOpts); node.render(); };
+      const curMap = opt=>Object.assign({}, (App.ui.impOpts && App.ui.impOpts[opt]) || {});
       if(pv.sheets && pv.sheets.length>1){
-        lines.push(el('div', {class:'field'}, [el('label', null, t('impSheet')), Select(pv.sheets.map(s=>({value:s.name, label:s.name+' · '+s.rows})), pv.sheet, v=>rePreview({sheet:v, includeTypes:null, peopleMap:{}, facilityMap:{}}), {sm:true})]));
+        lines.push(el('div', {class:'field'}, [el('label', null, t('impSheet')), Select(pv.sheets.map(x=>({value:x.name, label:(x.label || x.name)+' · '+x.rows})), pv.sheet, v=>rePreview({sheet:v, includeTypes:null, fields:null, peopleMap:{}, facilityMap:{}, categoryMap:{}, poolMap:{}}), {sm:true})]));
       }
-      if(pv.kind==='history' && pv.recs){
-        lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impHNew', pv.recs.length), el('span', {class:'n'}, t('impHOf', pv.total))]));
-        if(pv.hasType){
-          lines.push(el('div', {class:'field'}, [el('label', null, t('impTypes')), el('div', {class:'chips'}, pv.types.map(x=>el('button', {type:'button', class:'chip'+(x.included ? ' on' : ''), 'aria-pressed':x.included ? 'true' : 'false', 'data-type':x.key, onclick:()=>{ const on = pv.types.filter(y=>y.included && y.key!==x.key).map(y=>y.key); if(!x.included) on.push(x.key); rePreview({includeTypes:on}); }}, x.label+' · '+x.count))), el('div', {class:'hint'}, pv.typeFallback ? t('impTypesFallback') : t('impTypesHint'))]));
-        }
-        if(pv.dupExisting+pv.dupFile>0) lines.push(el('div', {class:'check soft'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('impHDup', pv.dupExisting+pv.dupFile)]));
-        if(pv.noTeam>0) lines.push(el('div', {class:'check soft'}, [el('span', {html:ICON.info, style:{display:'flex'}}), t('impHNoTeam', pv.noTeam)]));
-        if(pv.bad>0) lines.push(el('div', {class:'check bad'}, [el('span', {html:ICON.alert, style:{display:'flex'}}), t('impHBad', pv.bad, pv.badRows.join('، '))]));
-        const okPeople = pv.people.filter(p=>p.id);
-        if(okPeople.length) lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impHPeople', okPeople.length), el('span', {class:'n'}, okPeople.slice(0, 6).map(p=>p.name).join('، '))]));
-        const pm = (App.ui.impOpts && App.ui.impOpts.peopleMap) || {};
-        const fm = (App.ui.impOpts && App.ui.impOpts.facilityMap) || {};
-        const unP = pv.people.filter(p=>!p.id);
-        if(unP.length){
-          lines.push(el('div', {class:'field'}, [el('label', null, t('impHUnknownPeople')), ...unP.map(p=>el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [el('b', null, p.name), el('span', {class:'muted'}, '× '+p.count), Select([{value:'', label:t('impLater')}, {value:'new', label:t('impCreate')}, {value:'skip', label:t('impIgnore')}].concat(p.candidates.map(c=>({value:c.id, label:(personById(c.id)||{}).name}))), pm[p.key] || '', v=>{ const m = Object.assign({}, pm); if(v) m[p.key] = v; else delete m[p.key]; rePreview({peopleMap:m}); }, {sm:true})]))]));
-        }
-        const unF = pv.facilities.filter(f=>!f.id);
-        if(pv.facilities.length-unF.length) lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.ok, style:{display:'flex'}}), t('impHFacMatched', pv.facilities.length-unF.length)]));
-        if(unF.length){
-          lines.push(el('div', {class:'field'}, [el('label', null, t('impHNewFacilities')), ...unF.map(f=>el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}}, [el('b', null, f.name), el('span', {class:'muted'}, '× '+f.count), Select([{value:'', label:t('impCreate')}, {value:'skip', label:t('impIgnore')}].concat(f.candidates.map(c=>({value:c.id, label:(facilityById(c.id)||{}).name}))), fm[f.key] || '', v=>{ const m = Object.assign({}, fm); if(v) m[f.key] = v; else delete m[f.key]; rePreview({facilityMap:m}); }, {sm:true})]))]));
-        }
+      const tone = {ok:ICON.ok, soft:ICON.info, bad:ICON.alert};
+      for(const pn of pv.panels || []){
+        if(pn.type==='check') lines.push(el('div', {class:'check '+pn.tone}, [el('span', {html:tone[pn.tone] || ICON.info, style:{display:'flex'}}), pn.text, pn.detail ? el('span', {class:'n'}, pn.detail) : null]));
+        else if(pn.type==='chips') lines.push(el('div', {class:'field'}, [el('label', null, pn.label), el('div', {class:'chips'}, pn.items.map(x=>el('button', {type:'button', class:'chip'+(x.on ? ' on' : ''), 'aria-pressed':x.on ? 'true' : 'false', 'data-key':x.key, onclick:()=>{ const on = pn.items.filter(y=>y.on && y.key!==x.key).map(y=>y.key); if(!x.on) on.push(x.key); rePreview({[pn.opt]:on}); }}, x.label))), pn.hint ? el('div', {class:'hint'}, pn.hint) : null]));
+        else if(pn.type==='changes') lines.push(el('div', {class:'field'}, [el('label', null, pn.label), el('div', {class:'stack', style:{gap:'2px', fontSize:'12.5px'}}, pn.rows.map(r=>el('div', {class:'muted'}, r)).concat(pn.more ? [el('div', {class:'muted'}, t('impMore', pn.more))] : []))]));
+        else if(pn.type==='map') lines.push(el('div', {class:'field'}, [el('label', null, pn.label), ...pn.rows.map(r=>el('div', {class:'row wrap', style:{gap:'8px', alignItems:'center'}, 'data-row':r.key}, [el('b', null, r.name), r.count>1 ? el('span', {class:'muted'}, '× '+r.count) : null, Select(r.options, r.value, v=>{ const m = curMap(pn.opt); if(v) m[r.key] = v; else delete m[r.key]; rePreview({[pn.opt]:m}); }, {sm:true})]))]));
       }
-      if(pv.kind==='history' && !pv.recs){
-        lines.push(el('div', {class:'banner warn'}, pv.error || t('impError')));
-      } else if(pv.kind!=='history'){
-        lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.plus, style:{display:'flex'}}), t('impNew'), el('span', {class:'n'}, String(pv.added.length))]));
-        lines.push(el('div', {class:'check ok'}, [el('span', {html:ICON.refresh, style:{display:'flex'}}), t('impChanged'), el('span', {class:'n'}, String(pv.changed.length))]));
-        if(pv.added.length) lines.push(el('div', {class:'chips'}, pv.added.slice(0,20).map(r=>el('span', {class:'chip'}, r.name))));
-      }
+      if(!pv.panels) lines.push(el('div', {class:'banner warn'}, t('impError')));
       appendKids(body, [el('div', {class:'stack', style:{gap:'6px'}}, lines), el('div', {class:'row'}, [
         el('button', {type:'button', class:'btn ghost', onclick:()=>{ App.ui.impPreview = null; node.render(); }}, t('cancel')),
-        el('button', {type:'button', class:'btn primary', disabled:pv.kind==='history' && !(pv.recs && pv.recs.length), onclick:()=>{ applyImport(pv); App.ui.impPreview = null; node.render(); }}, t('impApply'))
+        el('button', {type:'button', class:'btn primary', disabled:!pv.canApply, onclick:()=>{ applyImport(pv); App.ui.impPreview = null; node.render(); }}, t('impApply'))
       ])]);
     }
     imp.appendChild(body);

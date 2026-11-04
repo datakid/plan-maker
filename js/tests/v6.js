@@ -316,18 +316,18 @@ shipAsync('R-A2 LNS insert respects day-only rules, at-most limits and wants a s
   Fx.use({days:6, facilities:Fx.fac(6), people:Fx.ppl(['p1', 'p2', 'p3']), volume:{mode:'exact', exact:{basic:3, contracted:0}, perDay:2}});
   const plan = Fx.manualPlan([]);
   for(let wd=0; wd<7; wd++) S().days[wd] = normalizeDay({only:['C']});
-  const rnd = lnsRng(5);
+  const rnd = rng(5);
   let blocked = 0;
   for(let i=0; i<100; i++) if(lnsInsertSlot(plan, rnd, null)) blocked++;
   Fx.use({days:6, facilities:Fx.fac(6), people:Fx.ppl(['p1', 'p2', 'p3']), volume:{mode:'exact', exact:{basic:3, contracted:0}, perDay:2}, goals:[{type:'cover', strict:'must', times:2, since:Fx.iso(-30), by:null, scope:{kind:'facility', ids:['f1']}}]});
   const p2 = Fx.manualPlan([{date:Fx.iso(1), facilityId:'f1', team:{a:['p1']}}]);
-  const rnd2 = lnsRng(6);
+  const rnd2 = rng(6);
   const second = [];
   for(let i=0; i<200; i++){ const s = lnsInsertSlot(p2, rnd2, null); if(s && s.f.id==='f1') second.push(s.date); }
   const am = newGoal('atMost'); Object.assign(am, {id:'g_am2', scope:{kind:'facility', ids:['f2', 'f3']}, n:1, lv:mkLv('prefer', 5)});
   S().goals.push(am);
   const p3 = Fx.manualPlan([{date:Fx.iso(1), facilityId:'f2', team:{a:['p1']}}]);
-  const rnd3 = lnsRng(7);
+  const rnd3 = rng(7);
   let capBroken = 0;
   for(let i=0; i<200; i++){ const s = lnsInsertSlot(p3, rnd3, null); if(s && s.f.id==='f3') capBroken++; }
   return verdict(blocked===0 && second.length>0 && !second.includes(Fx.iso(1)) && capBroken===0, 'day-only blocked all, second copy offered on another day, at-most limit kept', 'dayOnlyInserts '+blocked+' secondCopies '+second.length+' sameDay '+second.includes(Fx.iso(1))+' capBroken '+capBroken);

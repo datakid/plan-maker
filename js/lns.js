@@ -1,7 +1,3 @@
-function lnsRng(a){
-  return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-}
-
 function lnsSeatNeed(v, pool){
   const f = facilityById(v.facilityId);
   return f ? visitSeatNeed(v, pool, f) : 0;
@@ -55,7 +51,15 @@ function lnsBusy(plan, date, exceptIds){
 
 function lnsReindex(st){
   st.busyIdx = busyIndexBuild(st.plan);
+  st.tally = planTally(st.plan);
   st.vIdxArr = null;
+}
+
+function lnsEligibleKeep(plan, v, pool, date, busy, taken){
+  const f = facilityById(v.facilityId);
+  const base = lnsEligible(plan, v, pool, date, busy, taken);
+  if(!f || !lvMust('senior')) return base;
+  return base.filter(p=>lnsSeniorHolds(v, f, Object.assign({}, v.team, {[pool]:[...(taken || []), p.id]})));
 }
 
 function lnsEligible(plan, v, pool, date, busy, taken){
@@ -173,21 +177,157 @@ function lnsCountMove(plan, rnd, live){
   return {name:'N5swapInsert', ops:[{op:'remove', id:v.id}, {op:'add', visit:lnsNewVisit(plan, slot.f, slot.date, rnd)}]};
 }
 
-function lnsMoves(st, rnd, focus, focusPeople){
+const LNS_GROUPS = [
+  {name:'N4day', lo:0, hi:0.10, w:0.10},
+  {name:'N4swapDays', lo:0.10, hi:0.15, w:0.05},
+  {name:'N4facility', lo:0.15, hi:0.20, w:0.05},
+  {name:'N3chain', lo:0.20, hi:0.50, w:0.30},
+  {name:'N3restaff', lo:0.50, hi:0.58, w:0.08},
+  {name:'N3person', lo:0.58, hi:0.80, w:0.22},
+  {name:'N3hungarian', lo:0.80, hi:0.88, w:0.08},
+  {name:'N3swap', lo:0.88, hi:0.96, w:0.08},
+  {name:'N5count', lo:0.96, hi:1, w:0.04},
+  {name:'Rweek', lo:2, hi:2, w:0.10},
+  {name:'Rdays', lo:2, hi:2, w:0.10},
+  {name:'NGoal', lo:2, hi:2, w:0.10}
+];
+
+function lnsPickGroup(rnd, weights){
+  let total = 0;
+  for(const w of weights) total += w;
+  let x = rnd()*total;
+  for(let i=0; i<weights.length; i++){ x -= weights[i]; if(x<0) return i; }
+  return weights.length-1;
+}
+
+function lnsGroupKind(g, rnd){ return g.lo+rnd()*(g.hi-g.lo)*0.999999; }
+
+function lnsGoalMove(st, rnd, live){
+  const plan = st.plan;
+  const short = st.eval.violations.filter(v=>v.src==='goal' && (v.key==='dCoverShort' || v.key==='dAtLeastShort'));
+  if(!short.length) return null;
+  const sv = short[Math.floor(rnd()*short.length)];
+  const g = S().goals.find(x=>x.id===sv.goal);
+  if(!g) return null;
+  const count = new Map();
+  for(const x of plan.visits) count.set(x.facilityId, (count.get(x.facilityId) || 0)+1);
+  let facs;
+  if(sv.key==='dCoverShort') facs = (sv.facilities || []).map(id=>facilityById(id)).filter(Boolean);
+  else if(g.scope) facs = schedulableFacilities().filter(f=>inScope(f, g.scope));
+  else return null;
+  facs = facs.filter(f=>(count.get(f.id) || 0)<lnsCopiesWanted(f));
+  const days = plan.days.filter(d=>normalWorkday(ordOf(d)) && plan.visits.filter(x=>x.date===d).length<dayCap(ordOf(d)));
+  if(!facs.length || !days.length) return null;
+  const d = days[Math.floor(rnd()*days.length)];
+  const fit = facs.filter(f=>slotAllowed(plan, f, d));
+  if(!fit.length) return null;
+  const f = fit[Math.floor(rnd()*fit.length)];
+  const ops = [{op:'add', visit:lnsNewVisit(plan, f, d, rnd)}];
+  if(!lnsCountFree()){
+    const out = live.filter(x=>!x.special && !x.fixed && (!g.scope || !inScope(facilityById(x.facilityId), g.scope)));
+    if(!out.length) return null;
+    ops.push({op:'remove', id:out[Math.floor(rnd()*out.length)].id});
+  }
+  return {name:'NGoal', ops};
+}
+
+function lnsRuin(plan, rnd, live, mode, v){
+  const pools = S().pools;
+  const pl = pools[Math.floor(rnd()*pools.length)];
+  if(!pl) return null;
+  let vs;
+  if(mode==='week'){
+    const wk = weekKey(ordOf(v.date));
+    vs = live.filter(x=>weekKey(ordOf(x.date))===wk);
+  } else {
+    const k = 1+Math.floor(rnd()*3), o0 = ordOf(v.date);
+    vs = live.filter(x=>{ const d = ordOf(x.date)-o0; return d>=0 && d<k; });
+  }
+  const cap = Math.max(3, Math.min(8, Math.round(live.length*0.25)));
+  if(vs.length>cap){
+    const keyed = vs.map(x=>({x, k:x.id===v.id ? -1 : rnd()})).sort((a, b)=>a.k-b.k);
+    vs = keyed.slice(0, cap).map(e=>e.x);
+  }
+  if(vs.length<2) return null;
+  const seats = [];
+  for(const x of vs) for(let i=0; i<lnsSeatNeed(x, pl); i++) seats.push({x, i});
+  const people = activePeople().filter(p=>p.pool===pl.id);
+  if(!seats.length || seats.length>people.length) return null;
+  const skip = new Set(vs.map(x=>x.id));
+  const rules = lnsRules();
+  const noBusy = new Set();
+  const busyBy = new Map();
+  for(const x of vs) if(!busyBy.has(x.date)) busyBy.set(x.date, lnsBusy(plan, x.date, skip));
+  const cost = seats.map(s=>people.map(p=>{
+    const held = ((s.x.team || {})[pl.id] || [])[s.i];
+    if(held && s.x.locked && s.x.locked.includes(held)) return p.id===held ? 0 : 1e6;
+    if(busyBy.get(s.x.date).has(p.id) || !canSeat(p, s.x, s.x.date, plan, {busy:noBusy, rules})) return 1e6;
+    return (held===p.id ? 0 : 1)+rnd()*0.9;
+  }));
+  const h = hungarian(cost);
+  if(h.rows.some((j, i)=>j<0 || cost[i][j]>=1e6)) return null;
+  const teams = new Map(vs.map(x=>[x.id, Object.assign({}, x.team || {}, {[pl.id]:[]})]));
+  seats.forEach((s, i)=>{ teams.get(s.x.id)[pl.id].push(people[h.rows[i]].id); });
+  const dayUse = new Map();
+  for(const x of vs){
+    for(const id of teams.get(x.id)[pl.id]){
+      const key = x.date+'|'+id;
+      if(dayUse.has(key)) return null;
+      dayUse.set(key, 1);
+    }
+  }
+  return {name:mode==='week' ? 'Rweek' : 'Rdays', ops:vs.map(x=>({op:'set', id:x.id, fields:{team:teams.get(x.id)}}))};
+}
+
+function lnsSeniorHolds(v, f, team){
+  const lvl = seniorLevelFor(f, v.rules, false);
+  if(lvl==null) return true;
+  const ids = [];
+  for(const pk of Object.keys(team || {})) for(const id of team[pk]) ids.push(id);
+  if(!ids.length) return true;
+  return ids.some(id=>{ const p = personById(id); return p && skillOf(p, v.kind, f.category)>=lvl; });
+}
+
+function lnsBreaksSenior(plan, move){
+  if(!lvMust('senior')) return false;
+  for(const op of move.ops){
+    if(op.op!=='set' || !op.fields.team) continue;
+    const v = plan.visits.find(x=>x.id===op.id);
+    const f = v && facilityById(op.fields.facilityId || v.facilityId);
+    if(!v || !f) continue;
+    if(lnsSeniorHolds(v, f, v.team) && !lnsSeniorHolds(v, f, op.fields.team)) return true;
+  }
+  return false;
+}
+
+function lnsDayFull(plan, v, d){
+  let n = 0;
+  for(const x of plan.visits) if(x.date===d && x.id!==v.id) n++;
+  return n>=dayCap(ordOf(d));
+}
+
+function lnsMoves(st, rnd, focus, focusPeople, group, mode){
+  mode = mode || {};
   const plan = st.plan;
   const live = plan.visits.filter(v=>!v.fixed && facilityById(v.facilityId));
   if(!live.length) return null;
   const pickVisit = ()=>{
     const pool = focus && focus.length ? focus.filter(id=>live.some(v=>v.id===id)) : null;
     if(pool && pool.length && rnd()<0.8){ const id = pool[Math.floor(rnd()*pool.length)]; return live.find(v=>v.id===id); }
+    if(mode.openBias && rnd()<0.3){
+      const holes = live.filter(x=>S().pools.some(pl=>((x.team || {})[pl.id] || []).length<lnsSeatNeed(x, pl)));
+      if(holes.length) return holes[Math.floor(rnd()*holes.length)];
+    }
     return live[Math.floor(rnd()*live.length)];
   };
   const v = pickVisit();
-  const kind = rnd();
+  if(group && group.name==='NGoal') return lnsGoalMove(st, rnd, live);
+  if(group && (group.name==='Rweek' || group.name==='Rdays')) return lnsRuin(plan, rnd, live, group.name==='Rweek' ? 'week' : 'days', v);
+  const kind = group ? lnsGroupKind(group, rnd) : rnd();
   const days = plan.days.filter(d=>normalWorkday(ordOf(d)));
   if(kind<0.10){
     const d = days[Math.floor(rnd()*days.length)];
-    if(!d || d===v.date || !lnsDayOk(v, d)) return null;
+    if(!d || d===v.date || !lnsDayOk(v, d) || lnsDayFull(plan, v, d)) return null;
     if(plan.visits.some(x=>x.id!==v.id && x.date===d && x.facilityId===v.facilityId)) return null;
     return {name:'N4day', ops:[{op:'set', id:v.id, fields:{date:d, team:lnsRestaff(plan, v, d, rnd, true)}}]};
   }
@@ -232,7 +372,7 @@ function lnsMoves(st, rnd, focus, focusPeople){
       if(w.id===v.id || !visitTeamIds(w).includes(p.id) || Math.abs(ordOf(w.date)-ord)>2) continue;
       const wBusy = lnsBusy(plan, w.date, new Set([w.id]));
       const wl = (w.team[pl.id] || []).slice();
-      const spare = lnsEligible(plan, w, pl.id, w.date, wBusy, new Set(wl)).filter(q=>q.id!==p.id);
+      const spare = lnsEligibleKeep(plan, w, pl.id, w.date, wBusy, new Set(wl)).filter(q=>q.id!==p.id);
       if(!spare.length || (w.locked && w.locked.includes(p.id))) return null;
       wl[wl.indexOf(p.id)] = spare[Math.floor(rnd()*spare.length)].id;
       ops.push({op:'set', id:w.id, fields:{team:Object.assign({}, w.team, {[pl.id]:wl})}});
@@ -248,13 +388,18 @@ function lnsMoves(st, rnd, focus, focusPeople){
     if(!pools.length) return null;
     const pl = pools[Math.floor(rnd()*pools.length)];
     const cur = v.team[pl.id].slice();
+    if(mode.openBias && cur.length<lnsSeatNeed(v, pl)){
+      const busy0 = lnsBusy(plan, v.date, new Set([v.id]));
+      const cand0 = lnsEligibleKeep(plan, v, pl.id, v.date, busy0, new Set(cur));
+      if(cand0.length) return {name:'N3fill', ops:[{op:'set', id:v.id, fields:{team:Object.assign({}, v.team, {[pl.id]:cur.concat([cand0[Math.floor(rnd()*cand0.length)].id])})}}]};
+    }
     const hit = cur.map((id, k)=>focusPeople && focusPeople.includes(id) ? k : -1).filter(k=>k>=0);
     const i = hit.length ? hit[Math.floor(rnd()*hit.length)] : Math.floor(rnd()*cur.length);
     if(v.locked && v.locked.includes(cur[i])) return null;
     const busy = lnsBusy(plan, v.date, new Set([v.id]));
     const taken = new Set(cur);
     taken.delete(cur[i]);
-    const cand = lnsEligible(plan, v, pl.id, v.date, busy, taken).filter(p=>p.id!==cur[i]);
+    const cand = lnsEligibleKeep(plan, v, pl.id, v.date, busy, taken).filter(p=>p.id!==cur[i]);
     if(!cand.length) return null;
     cur[i] = cand[Math.floor(rnd()*cand.length)].id;
     return {name:'N3person', ops:[{op:'set', id:v.id, fields:{team:Object.assign({}, v.team, {[pl.id]:cur})}}]};
@@ -301,26 +446,63 @@ function lnsMoves(st, rnd, focus, focusPeople){
   return {name:'N3swap', ops:[{op:'set', id:v.id, fields:{team:Object.assign({}, v.team, {[pl.id]:a})}}, {op:'set', id:w.id, fields:{team:Object.assign({}, w.team, {[pl.id]:b})}}]};
 }
 
-function lnsDescent(st, rnd, deadline, maxEvals, flag){
+function lnsSeatPolish(st, maxEvals, passes, flag){
+  const plan = st.plan;
+  let evals = 0;
+  for(let pass=0; pass<passes; pass++){
+    const live = plan.visits.filter(v=>!v.fixed && facilityById(v.facilityId)).sort((a, b)=>a.date<b.date ? -1 : (a.date>b.date ? 1 : (a.id<b.id ? -1 : 1)));
+    let best = null, bestKey = lnsKey(st);
+    for(const v of live){
+      for(const pl of S().pools){
+        const cur = (v.team || {})[pl.id] || [];
+        for(let i=0; i<cur.length; i++){
+          if(v.locked && v.locked.includes(cur[i])) continue;
+          const busy = lnsBusy(plan, v.date, new Set([v.id]));
+          const taken = new Set(cur);
+          taken.delete(cur[i]);
+          const cand = lnsEligibleKeep(plan, v, pl.id, v.date, busy, taken).filter(p=>p.id!==cur[i]);
+          for(const p of cand){
+            if(evals>=maxEvals) break;
+            if(genAborted()){ if(flag) flag.truncated = true; return evals; }
+            evals++;
+            const team = cur.slice();
+            team[i] = p.id;
+            const move = {name:'Ppolish', ops:[{op:'set', id:v.id, fields:{team:Object.assign({}, v.team, {[pl.id]:team})}}]};
+            const r = deltaMove(st, move);
+            const c = lnsKey(st);
+            r.revert();
+            if(lnsCmp(c, bestKey)<0){ bestKey = c; best = move; }
+          }
+        }
+      }
+    }
+    if(!best) break;
+    deltaMove(st, best);
+    if(evals>=maxEvals) break;
+  }
+  return evals;
+}
+
+function lnsDescent(st, rnd, maxEvals, flag){
   const plan = st.plan;
   const days = plan.days.filter(d=>normalWorkday(ordOf(d)));
   let evals = 0;
   for(;;){
     const live = plan.visits.filter(v=>!v.fixed && facilityById(v.facilityId));
-    const base = lnsCost(st);
-    let best = null, bestCost = base;
+    let best = null, bestKey = lnsKey(st);
     const tryMove = move=>{
       if(evals>=maxEvals) return;
-      if(Date.now()>deadline){ if(flag) flag.truncated = true; return; }
+      if(genAborted()){ if(flag) flag.truncated = true; return; }
+      if(lnsBreaksSenior(st.plan, move)) return;
       evals++;
       const r = deltaMove(st, move);
-      const c = lnsCost(st);
+      const c = lnsKey(st);
       r.revert();
-      if(c<bestCost-1e-9){ bestCost = c; best = move; }
+      if(lnsCmp(c, bestKey)<0){ bestKey = c; best = move; }
     };
     for(const v of live){
       for(const d of days){
-        if(d===v.date || !lnsDayOk(v, d)) continue;
+        if(d===v.date || !lnsDayOk(v, d) || lnsDayFull(plan, v, d)) continue;
         if(plan.visits.some(x=>x.id!==v.id && x.date===d && x.facilityId===v.facilityId)) continue;
         tryMove({name:'N4day', ops:[{op:'set', id:v.id, fields:{date:d, team:lnsRestaff(plan, v, d, rnd, true)}}]});
       }
@@ -332,36 +514,49 @@ function lnsDescent(st, rnd, deadline, maxEvals, flag){
         tryMove({name:'N4swapDays', ops:[{op:'set', id:v.id, fields:{date:w.date, team:lnsRestaff(plan, Object.assign({}, v), w.date, rnd, true)}}, {op:'set', id:w.id, fields:{date:v.date, team:lnsRestaff(plan, Object.assign({}, w), v.date, rnd, true)}}]});
       }
     }
-    if(!best || evals>=maxEvals || Date.now()>deadline) { if(best) deltaMove(st, best); break; }
+    if(!best || evals>=maxEvals || genAborted()) { if(best) deltaMove(st, best); break; }
     deltaMove(st, best);
   }
   return evals;
 }
 
-function lnsCost(st){ return st.hard*1e9+st.intent*1e5+st.soft; }
+function lnsKey(st){ return [st.hard, st.intent, st.soft]; }
 
-function lnsRun(plan, seed, maxIters, maxMs, onProgress){
-  const t0 = Date.now();
+function lnsCmp(a, b){
+  for(let i=0; i<3; i++){
+    const d = a[i]-b[i];
+    if(d>1e-9) return 1;
+    if(d<-1e-9) return -1;
+  }
+  return 0;
+}
+
+function lnsRun(plan, seed, maxIters, onProgress, mode){
+  mode = mode || {};
   const opts = {seed};
-  const rnd = lnsRng(seed>>>0);
+  const rnd = rng(seed>>>0);
   lnsRulesCache = compilePeopleRules();
   const work = clonePlan(plan);
   const st = makeState(work);
   lnsReindex(st);
   lnsState = st;
-  const startCost = lnsCost(st);
-  let best = clonePlan(work), bestCost = startCost, bestHard = st.hard;
+  const startKey = lnsKey(st);
+  let best = clonePlan(work), bestKey = startKey, bestHard = st.hard;
   const quiet = Math.max(400, 30*work.visits.length);
-  const hist = new Array(50).fill(bestCost);
-  const stats = {iters:0, accepted:0, improved:0, byMove:{}, ms:0, stage:'lns', optimal:false, seed:opts.seed || 20260101};
+  const histLen = mode.scaled ? Math.min(1000, Math.max(50, work.visits.length)) : 50;
+  const kickEvery = mode.scaled ? Math.max(400, 10*work.visits.length) : 400;
+  const hist = new Array(histLen).fill(startKey);
+  const useGroups = !!(mode.ruin || mode.adaptive || mode.goal);
+  const gw = LNS_GROUPS.map(g=>(g.name[0]==='R' && !mode.ruin) || (g.name==='NGoal' && !mode.goal) ? 0 : g.w), gScore = LNS_GROUPS.map(()=>0), gUse = LNS_GROUPS.map(()=>0);
+  const stats = {iters:0, accepted:0, improved:0, byMove:{}, stage:'lns', optimal:false, seed:opts.seed || 20260101};
   let sinceBest = 0;
   for(let it=0; it<maxIters; it++){
-    if((it&15)===0 && Date.now()-t0>maxMs*0.75){ stats.truncated = true; break; }
+    if((it&15)===0 && genAborted()){ stats.truncated = true; break; }
     if(onProgress && (it&63)===0) onProgress(it/maxIters);
-    if(st.hard===0 && st.intent===0 && st.soft<=0 && it>0 && opts.stopAtZero) break;
+    if(it>0 && opts.stopAtZero && isPerfect(st)) break;
     if(bestHard===0 && sinceBest>quiet) break;
     stats.iters++;
-    if(sinceBest>0 && sinceBest%400===0){
+    if(sinceBest>0 && sinceBest%kickEvery===0){
       work.visits = clonePlan(best).visits;
       lnsReindex(st);
       evaluateState(st);
@@ -370,7 +565,7 @@ function lnsRun(plan, seed, maxIters, maxMs, onProgress){
         const km = lnsMoves(st, rnd, null, null);
         if(km) deltaMove(st, km);
       }
-      hist.fill(lnsCost(st));
+      hist.fill(lnsKey(st));
       sinceBest++;
     }
     let focus = null, focusPeople = null;
@@ -384,60 +579,72 @@ function lnsRun(plan, seed, maxIters, maxMs, onProgress){
         focus = pick.visits; focusPeople = pick.people;
       }
     }
-    const move = lnsMoves(st, rnd, focus, focusPeople);
-    if(!move) continue;
-    const before = lnsCost(st);
+    const gi = useGroups ? lnsPickGroup(rnd, gw) : 0;
+    const move = lnsMoves(st, rnd, focus, focusPeople, useGroups ? LNS_GROUPS[gi] : undefined, mode);
+    if(!move || lnsBreaksSenior(plan, move)) continue;
+    const before = lnsKey(st);
     const r = deltaMove(st, move);
-    const c = lnsCost(st);
-    const slot = it%50;
+    const c = lnsKey(st);
+    const slot = it%histLen;
+    gUse[gi]++;
     const stat = stats.byMove[move.name] || (stats.byMove[move.name] = {tried:0, accepted:0, improved:0});
     stat.tried++;
-    if(c<=before || c<=hist[slot]){
+    if(lnsCmp(c, before)<=0 || lnsCmp(c, hist[slot])<=0){
       stats.accepted++; stat.accepted++;
-      if(c<bestCost){ best = clonePlan(work); bestCost = c; bestHard = st.hard; stats.improved++; stat.improved++; sinceBest = 0; } else sinceBest++;
+      if(lnsCmp(c, bestKey)<0){ best = clonePlan(work); bestKey = c; bestHard = st.hard; stats.improved++; stat.improved++; sinceBest = 0; gScore[gi] += 33; } else {
+        sinceBest++;
+        gScore[gi] += lnsCmp(c, before)<0 ? 9 : 13;
+      }
     } else { r.revert(); sinceBest++; }
-    hist[slot] = lnsCost(st);
+    hist[slot] = lnsKey(st);
+    if(mode.adaptive && (it+1)%100===0){
+      const ratio = LNS_GROUPS.map((g, k)=>gUse[k] ? gScore[k]/gUse[k] : null);
+      const used = ratio.filter(x=>x!==null);
+      const mean = used.length ? used.reduce((a, b)=>a+b, 0)/used.length : 0;
+      if(mean>0) LNS_GROUPS.forEach((g, k)=>{
+        if(ratio[k]===null) return;
+        const target = Math.min(4*g.w, Math.max(0.25*g.w, g.w*ratio[k]/mean));
+        gw[k] = 0.9*gw[k]+0.1*target;
+      });
+      gScore.fill(0); gUse.fill(0);
+    }
   }
   {
     work.visits = clonePlan(best).visits;
     lnsReindex(st);
     evaluateState(st);
-    stats.descentEvals = lnsDescent(st, rnd, t0+maxMs, Math.max(60, Math.floor(maxIters*0.15)), stats);
-    if(lnsCost(st)<bestCost-1e-9){ best = clonePlan(work); bestCost = lnsCost(st); stats.improved++; }
+    stats.descentEvals = lnsDescent(st, rnd, Math.max(60, Math.floor(maxIters*0.15)), stats);
+    if(mode.polish) stats.polishEvals = lnsSeatPolish(st, Math.max(200, Math.floor(maxIters*0.5)), 8, stats);
+    if(lnsCmp(lnsKey(st), bestKey)<0){ best = clonePlan(work); bestKey = lnsKey(st); stats.improved++; }
   }
   lnsRulesCache = null;
   lnsState = null;
   refreshOpenSeats(best);
-  stats.ms = Date.now()-t0;
   const bv = validatePlan(best);
   stats.hard = bv.hardScore; stats.intent = bv.intentScore; stats.soft = bv.softScore;
-  return {plan:best, info:stats, improved:bestCost<startCost, cost:bestCost};
+  return {plan:best, info:stats, improved:lnsCmp(bestKey, startKey)<0, key:bestKey};
 }
 
 function lnsPlan(plan, info, opts){
   opts = opts || {};
-  const t0 = Date.now();
   const span = plan.days.length;
-  const bud = span<=7 ? {iters:3000, ms:400} : (span<=31 ? {iters:8000, ms:1500} : {iters:15000, ms:5000});
-  const maxIters = opts.iters || bud.iters;
-  const maxMs = opts.ms || bud.ms;
+  const maxIters = opts.iters || budgetFor(span, opts.quality, plan.visits.length).lnsIters;
   const base = (opts.seed || 20260101)>>>0;
   const start = validatePlan(plan);
   const runs = start.hard>0 ? (opts.runs || 3) : 1;
+  const perRun = Math.ceil(maxIters/runs);
   let best = null;
-  const total = {iters:0, accepted:0, ms:0, byMove:{}, runs:0};
+  const total = {iters:0, accepted:0, byMove:{}, runs:0};
   for(let r=0; r<runs; r++){
-    const left = maxMs-(Date.now()-t0);
-    if(left<=5) break;
-    const out = lnsRun(plan, (base+Math.imul(r+1, 0x9E3779B1))>>>0, Math.ceil(maxIters/runs), left/(runs-r), opts.onProgress ? (q=>opts.onProgress((r+q)/runs)) : null);
+    if(r>0 && genAborted()){ total.truncated = true; break; }
+    const out = lnsRun(plan, (base+Math.imul(r+1, 0x9E3779B1))>>>0, perRun, opts.onProgress ? (q=>opts.onProgress((r+q)/runs)) : null, {adaptive:!!opts.adaptive, scaled:!!opts.scaled, ruin:!!opts.ruin, polish:!!opts.polish, goal:!!opts.goal, openBias:!!opts.openBias});
     total.runs++; total.iters += out.info.iters; total.accepted += out.info.accepted;
     if(out.info.truncated) total.truncated = true;
     for(const k of Object.keys(out.info.byMove)){ const m = total.byMove[k] || (total.byMove[k] = {tried:0, accepted:0, improved:0}); for(const f of ['tried', 'accepted', 'improved']) m[f] += out.info.byMove[k][f]; }
-    if(!best || out.cost<best.cost) best = out;
-    if(best.info.hard===0 && best.info.soft<=0) break;
+    if(!best || lnsCmp(out.key, best.key)<0) best = out;
+    if(isPerfect(best.info)) break;
   }
-  if(!best) return {plan, info:{iters:0, accepted:0, ms:0, byMove:{}, stage:'lns', optimal:false, seed:base, hard:start.hardScore, intent:start.intentScore, soft:start.softScore}, improved:false};
-  total.ms = Date.now()-t0;
-  const merged = Object.assign({}, best.info, {iters:total.iters, accepted:total.accepted, byMove:total.byMove, runs:total.runs, ms:total.ms, seed:opts.seed || 20260101, truncated:!!total.truncated});
+  if(!best) return {plan, info:{iters:0, accepted:0, byMove:{}, stage:'lns', optimal:false, seed:base, hard:start.hardScore, intent:start.intentScore, soft:start.softScore}, improved:false};
+  const merged = Object.assign({}, best.info, {iters:total.iters, accepted:total.accepted, byMove:total.byMove, runs:total.runs, seed:opts.seed || 20260101, truncated:!!total.truncated});
   return {plan:best.plan, info:merged, improved:best.improved};
 }

@@ -595,6 +595,7 @@ function genSnapshot(extra){
 
 function validatePlan(plan, opts){
   opts = opts || {};
+  const memo = opts.memo || null;
   if(plan && opts.source==='snapshot' && plan.gen && plan.gen.settings){
     const r = withGenSnapshot(plan, ()=>validatePlan(plan, Object.assign({}, opts, {source:'current'})));
     r.source = 'snapshot';
@@ -623,7 +624,22 @@ function validatePlan(plan, opts){
       if(guestSeen.has(gk) && guestSeen.get(gk)!==v.id){ const gg = guestById(gid); add({src:'visit', cls:CLS.HARD, group:'cDup', key:'dGuestDup', visits:[v.id, guestSeen.get(gk)], dates:[v.date], facilities:[f.id], args:[gg ? gg.name : '?', f.name, v.date]}); }
       else guestSeen.set(gk, v.id);
     }
-    if(!f){ add({src:'visit', cls:CLS.HARD, group:'cTeam', key:'dMissingFacility', visits:[v.id], dates:[v.date]}); continue; }
+    const memoKey = memo && !whyMap ? JSON.stringify(v)+'|'+(plan.approved ? 1 : 0) : null;
+    if(memoKey!==null){
+      const hit = memo.get(memoKey);
+      if(hit){
+        for(const o of hit.list){ const c = Object.assign({}, o); c.id = 'x'+out.violations.length; out.violations.push(c); }
+        x.ids = hit.ids.slice(); x.open = hit.open;
+        continue;
+      }
+    }
+    const memoStart = out.violations.length;
+    const memoStore = ()=>{
+      if(memoKey===null) return;
+      if(memo.size>20000) memo.clear();
+      memo.set(memoKey, {list:out.violations.slice(memoStart), ids:x.ids.slice(), open:x.open});
+    };
+    if(!f){ add({src:'visit', cls:CLS.HARD, group:'cTeam', key:'dMissingFacility', visits:[v.id], dates:[v.date]}); memoStore(); continue; }
     const fixed = !!v.fixed;
     const team = v.team && typeof v.team==='object' ? v.team : {};
     const seen = new Set();
@@ -715,6 +731,7 @@ function validatePlan(plan, opts){
       const rb = set.repeatBlock;
       if(rotateMustActive() && !plan.approved && ((App.data.history.fpv||{})[f.id+'|'+id]||0) >= rb.times) add({src:'person', cls:exempt ? CLS.EXC : CLS.HARD, group:'cPeople', key:'dRepeatBlock', people:[id], visits:[v.id], dates:[v.date], facilities:[f.id], args:[p.name, f.name]});
     }
+    memoStore();
   }
 
   const byDate = groupBy(vis.filter(x=>x.f), x=>x.v.date);
@@ -800,7 +817,7 @@ function validatePlan(plan, opts){
     }
   }
 
-  const T = planTally(plan);
+  const T = opts.tally || planTally(plan);
   out.tally = T;
   const exemptQ = {};
   for(const x of vis) if(x.f) for(const id of x.ids) if(isExemptLocked(x.v, id)) for(const r of T.rules.countsOf(id)) if(inScopeOpt(x.f, r.scope)) exemptQ[r.key] = (exemptQ[r.key]||0)+1;
