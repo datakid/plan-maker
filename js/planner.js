@@ -116,11 +116,32 @@ function selectUnits(win, fixed, demand, placed){
 function lastIdxBy(days, dl){ let k = -1; for(let i=0;i<days.length;i++) if(days[i]<=dl) k = i; return k; }
 function firstIdxFrom(days, lo){ for(let i=0;i<days.length;i++) if(days[i]>=lo) return i; return days.length; }
 
+function adoptsOver(cand, cur){ return cmpScore(cand, cur)<0; }
+
+function adaptWarmPlan(warm, draft){
+  const days = new Set(draft.days);
+  const facs = new Set(schedulableFacilities().map(f=>f.id));
+  const people = new Set(activePeople().map(p=>p.id));
+  const visits = [];
+  const taken = new Set();
+  for(const v of warm.visits){
+    if(!days.has(v.date) || !facs.has(v.facilityId)) continue;
+    const c = JSON.parse(JSON.stringify(v));
+    const team = {};
+    for(const pk of Object.keys(c.team || {})) team[pk] = (c.team[pk] || []).filter(id=>people.has(id));
+    c.team = team;
+    c.locked = c.locked ? c.locked.filter(id=>people.has(id)) : c.locked;
+    visits.push(c);
+  }
+  if(!visits.length) return null;
+  const out = Object.assign({}, draft, {visits});
+  refreshOpenSeats(out);
+  return out;
+}
+
 function generatePlanOnce(opts){
   opts = opts || {};
-  const genStart = Date.now();
   const prog = (stage, pct)=>{ if(opts.onProgress) opts.onProgress(stage, pct); };
-  const tScale = opts.timeScale==null ? 4 : opts.timeScale;
   prog('select', 0);
   const set = S(), V = set.volume, sp = set.spacing;
   const win = planWindow();
@@ -663,58 +684,54 @@ function generatePlanOnce(opts){
   };
   plan.targets = {mode:set.volume.mode==='fixed' ? 'exact' : set.volume.mode, upTo:set.volume.mode==='exact' && set.volume.exactMode==='upTo', basic:win.prev.basic, contracted:win.prev.contracted, share:win.prev.total ? win.prev.basic/win.prev.total : set.volume.share, quota:set.volume.mode==='quota' ? Object.assign({}, set.volume.quotas || {}) : null, pinned:schedulableFacilities().filter(f=>f.pinned).map(f=>f.id)};
   const info = {win, fixed, placed:placedSpecials, demand, sel};
+  if(opts.warmFrom && opts.warmFrom.visits){
+    const wp = adaptWarmPlan(opts.warmFrom, plan);
+    if(wp && cmpScore(validatePlan(wp), validatePlan(plan))<=0) plan = wp;
+  }
   const draftPlan = plan;
   const pre = preflightPlan(info, plan);
   let search = null;
   let val = validatePlan(plan);
   const draftHard = val.hardScore;
-  const tStart = Date.now();
   prog('search', 0.55);
+  const scale = opts.budgetScale==null ? 1 : opts.budgetScale;
   if(val.hard>0 && !opts.skipSearch){
     const bud = Object.assign({}, opts.budget || {});
     const proven = pre.conflicts.length>0;
-    if(proven) bud.ms = Math.min(bud.ms || 1500, 300);
-    const r = searchPlan(plan, info, {budget:bud, seed:opts.seed});
+    const bScale = proven ? scale*0.2 : scale;
+    const T = budgetFor(N, opts.quality, plan.visits.length, bScale);
+    const r = searchPlan(plan, info, {budget:bud, seed:opts.seed, span:N, quality:opts.quality, budgetScale:bScale, prefer:opts.warmFrom ? warmPrefer(plan) : null});
     plan = r.plan; search = Object.assign({}, r.info, {stage:'search'});
     val = validatePlan(plan);
     if(val.hard>0){
-      const total = proven ? 600 : (bud.maxMs || 4000);
-      const left = total - (Date.now()-tStart);
-      if(left>50){
-        const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:bud.iters, onProgress:p=>prog('lns', 0.6+0.2*p)});
-        search = Object.assign({}, search, {iters:a.info.iters, lnsMs:a.info.ms, byMove:a.info.byMove, seed:a.info.seed, truncated:!!(search.truncated || a.info.truncated)});
-        if(a.improved){
-          const av = validatePlan(a.plan);
-          if(cmpScore(av, val)<0){ plan = a.plan; val = av; search.stage = 'lns'; }
-        }
+      const a = lnsPlan(plan, info, {seed:opts.seed, iters:bud.iters || T.lnsIters, onProgress:p=>prog('lns', 0.6+0.2*p)});
+      search = Object.assign({}, search, {iters:a.info.iters, byMove:a.info.byMove, seed:a.info.seed, truncated:!!(search.truncated || a.info.truncated)});
+      if(a.improved){
+        const av = validatePlan(a.plan);
+        if(cmpScore(av, val)<0){ plan = a.plan; val = av; search.stage = 'lns'; }
       }
     }
     if(val.hardScore>draftHard){ plan = draftPlan; val = validatePlan(plan); }
-    search.ms = Date.now()-tStart;
     search.found = val.hard===0 ? search.stage : null;
   }
-  if(val.hard===0 && !opts.skipSearch && !opts.skipPolish && plan.visits.length>1){
-    const capBase = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.8;
-    const cap = capBase*tScale;
-    const left = cap-(Date.now()-genStart);
-    if(left<=40 && (val.softScore>0 || val.intentScore>0) && !opts.iters) search = Object.assign({}, search || {}, {truncated:true});
-    if(left>40 && (val.softScore>0 || val.intentScore>0)){
-      const a = lnsPlan(plan, info, {seed:opts.seed, ms:left, iters:opts.iters || Math.max(40, Math.min(200+60*plan.visits.length, Math.floor(capBase/4))), onProgress:p=>prog('polish', 0.6+0.3*p)});
-      search = Object.assign({}, search || {}, {stage:(search && search.stage) || 'lns', polish:{iters:a.info.iters, ms:a.info.ms, accepted:a.info.accepted, byMove:a.info.byMove, truncated:!!a.info.truncated}, seed:a.info.seed, truncated:!!((search && search.truncated) || a.info.truncated)});
-      if(a.improved){
-        const sa = makeState(a.plan), sb = makeState(plan);
-        if(sa.hard===0 && sa.soft<sb.soft){ plan = a.plan; val = sa.eval; }
-      }
+  if(val.hard===0 && !opts.skipSearch && !opts.skipPolish && plan.visits.length>1 && (val.softScore>0 || val.intentScore>0)){
+    const T = budgetFor(N, opts.quality, plan.visits.length, scale);
+    const a = lnsPlan(plan, info, Object.assign({seed:opts.seed, iters:opts.iters || T.polishIters, polish:true, onProgress:p=>prog('polish', 0.6+0.3*p)}, opts.lnsMode || {}));
+    search = Object.assign({}, search || {}, {stage:(search && search.stage) || 'lns', polish:{iters:a.info.iters, accepted:a.info.accepted, byMove:a.info.byMove, truncated:!!a.info.truncated}, seed:a.info.seed, truncated:!!((search && search.truncated) || a.info.truncated)});
+    if(a.improved){
+      const sa = makeState(a.plan), sb = makeState(plan);
+      if(adoptsOver(sa, sb)){ plan = a.plan; val = sa.eval; }
     }
   }
   for(const w of pre.warnings || []) plan.genDiags.push(w);
   let status = 'valid';
   if(val.hard>0) status = pre.conflicts.length ? 'infeasible' : (opts.skipSearch ? 'invalid' : 'exhausted');
-  search = Object.assign({}, search || {}, {score:{hard:val.hardScore, intent:val.intentScore, soft:val.softScore}, lowerBound:null, optimal:false, seed:opts.seed==null ? null : opts.seed, truncated:!!(search && search.truncated)});
+  const ib = intentBound(win, requests);
+  const iu = intentUnits(val);
+  search = Object.assign({}, search || {}, {score:{hard:val.hardScore, intent:val.intentScore, soft:val.softScore}, lowerBound:{intentUnits:ib.shortfall, requested:ib.requested}, intentUnits:iu, optimalOnIntent:val.hard===0 && iu<=ib.shortfall, optimal:false, seed:opts.seed==null ? null : opts.seed, truncated:!!(search && search.truncated) || genAborted()});
   prog('explain', 0.92);
   if(!opts.skipSearch && !opts.skipExplain && plan.visits.length){
-    const capMs = (N<=7 ? 400 : (N<=31 ? 1500 : 5000))*0.2*tScale;
-    plan.why = explainPlan(plan, {ms:Math.max(120, capMs), seed:opts.seed});
+    plan.why = explainPlan(plan, {seed:opts.seed, quality:opts.quality});
   }
   prog('done', 1);
   plan.gen = genSnapshot({status, conflicts:pre.conflicts, search, layout:flowInfo.stage || null});
@@ -725,24 +742,22 @@ function generatePlanOnce(opts){
 
 function continueSearch(opts){
   const base = opts.continueFrom;
-  const tScale = opts.timeScale==null ? 4 : opts.timeScale;
   if(!base || !base.visits) return {error:'fail'};
   const prev = (base.gen && base.gen.search) || {};
   const round = (prev.rounds || 0)+1;
   const seed = (((prev.seed!=null ? prev.seed : (opts.seed!=null ? opts.seed : 20260101))>>>0)+Math.imul(round, 0x9E3779B1))>>>0;
   const span = base.days.length;
-  const bud = span<=7 ? {iters:6000, ms:2000} : (span<=31 ? {iters:16000, ms:6000} : {iters:30000, ms:15000});
-  const t0 = Date.now();
-  const a = lnsPlan(base, null, {seed, ms:opts.ms || bud.ms*tScale/4, iters:opts.iters || bud.iters});
+  const T = budgetFor(span, 'continue', base.visits.length);
+  const a = lnsPlan(base, null, {seed, iters:opts.iters || T.lnsIters, polish:true});
   const bv = validatePlan(base), av = validatePlan(a.plan);
   const better = cmpScore(av, bv)<0;
   const plan = better ? a.plan : clonePlan(base);
   const val = better ? av : bv;
   const conflicts = base.conflicts || [];
   const status = val.hard>0 ? (conflicts.length ? 'infeasible' : 'exhausted') : 'valid';
-  const search = Object.assign({}, prev, {rounds:round, seed:a.info.seed, truncated:!!a.info.truncated, iters:(prev.iters||0)+a.info.iters, ms:(prev.ms||0)+(Date.now()-t0),
+  const search = Object.assign({}, prev, {rounds:round, seed:a.info.seed, truncated:!!a.info.truncated || genAborted(), iters:(prev.iters||0)+a.info.iters,
     score:{hard:val.hardScore, intent:val.intentScore, soft:val.softScore}, found:val.hard===0 ? (prev.found || 'lns') : null, optimal:false, lowerBound:null});
-  if(better && !opts.skipExplain && plan.visits.length) plan.why = explainPlan(plan, {ms:Math.max(120, (span<=7 ? 400 : (span<=31 ? 1500 : 5000))*0.2*tScale), seed:opts.seed});
+  if(better && !opts.skipExplain && plan.visits.length) plan.why = explainPlan(plan, {seed:opts.seed});
   plan.gen = Object.assign({}, base.gen, {search, status, conflicts});
   plan.status = status;
   return {plan, status, conflicts, search};
@@ -750,22 +765,23 @@ function continueSearch(opts){
 
 function generatePlan(opts){
   opts = opts || {};
-  if(opts.continueFrom) return continueSearch(opts);
-  const t0 = Date.now();
-  const first = generatePlanOnce(Object.assign({}, opts, {flowPartial:true}));
-  const lay = first.plan && first.plan.gen && first.plan.gen.layout;
-  const a = first.search && first.search.score;
-  const wrong = !!a && (a.hard>0 || (a.intent||0)>0);
-  if(first.error || !lay || !lay.rolledBackUnits || !wrong) return first;
-  const budget = Object.assign({}, opts.budget);
-  budget.maxMs = Math.max(800, (budget.maxMs || 4000) - (Date.now()-t0));
-  const second = generatePlanOnce(Object.assign({}, opts, {flowPartial:false, budget}));
-  if(second.error || !second.plan) return first;
-  const better = cmpScore(second.search.score, a)<0;
-  const pick = better ? second : first;
-  const pl = pick.plan.gen && pick.plan.gen.layout;
-  if(pl) pl.retriedAllOrNothing = better ? 'kept' : 'discarded';
-  return pick;
+  const prevAbort = GenGuard.abort;
+  GenGuard.abort = typeof opts.abort==='function' ? opts.abort : null;
+  try{
+    if(opts.continueFrom) return continueSearch(opts);
+    const first = generatePlanOnce(Object.assign({}, opts, {flowPartial:true}));
+    const lay = first.plan && first.plan.gen && first.plan.gen.layout;
+    const a = first.search && first.search.score;
+    const wrong = !!a && (a.hard>0 || (a.intent||0)>0);
+    if(first.error || !lay || !lay.rolledBackUnits || !wrong) return first;
+    const second = generatePlanOnce(Object.assign({}, opts, {flowPartial:false, budgetScale:(opts.budgetScale==null ? 1 : opts.budgetScale)*0.5}));
+    if(second.error || !second.plan) return first;
+    const better = cmpScore(second.search.score, a)<0;
+    const pick = better ? second : first;
+    const pl = pick.plan.gen && pick.plan.gen.layout;
+    if(pl) pl.retriedAllOrNothing = better ? 'kept' : 'discarded';
+    return pick;
+  } finally { GenGuard.abort = prevAbort; }
 }
 
 function goalsPreview(){

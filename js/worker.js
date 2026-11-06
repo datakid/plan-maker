@@ -1,4 +1,4 @@
-importScripts('core.js', 'seed.js', 'store.js', 'i18n.js', 'rules-model.js', 'people-rules.js', 'engine.js', 'goals.js', 'requests.js', 'constraints.js', 'score.js', 'flow.js', 'assign.js', 'layout.js', 'solver.js', 'lns.js', 'explain.js', 'planner.js');
+importScripts('core.js', 'seed.js', 'store.js', 'i18n.js', 'rules-model.js', 'people-rules.js', 'engine.js', 'goals.js', 'requests.js', 'constraints.js', 'score.js', 'flow.js', 'assign.js', 'layout.js', 'solver.js', 'lns.js', 'explain.js', 'scope.js', 'planner.js');
 
 let lastPost = 0;
 self.onmessage = e=>{
@@ -11,6 +11,8 @@ self.onmessage = e=>{
       const now = Date.now();
       if(stage==='done' || now-lastPost>=60){ lastPost = now; self.postMessage({type:'progress', stage, pct}); }
     }});
+    const limit = Date.now()+(m.opts && m.opts.safetyMs || 120000);
+    opts.abort = ()=>Date.now()>limit;
     const res = generatePlan(opts);
     self.postMessage({type:'result', res});
   }catch(err){

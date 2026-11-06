@@ -1,5 +1,6 @@
 const GEN_WORKER_URL = 'js/worker.js?v='+APP_VERSION;
 const GenRun = {active:null, mode:null};
+const GEN_SAFETY_MS = 120000;
 
 function startGeneration(opts, onProgress){
   opts = Object.assign({}, opts || {});
@@ -17,7 +18,8 @@ function startGeneration(opts, onProgress){
     setTimeout(()=>{
       if(settled) return;
       let res;
-      try{ res = generatePlan(Object.assign({}, opts, onProgress ? {onProgress} : {})); }catch(e){ console.error(e); res = {error:'fail'}; }
+      const limit = Date.now()+(opts.safetyMs || GEN_SAFETY_MS);
+      try{ res = generatePlan(Object.assign({}, opts, {abort:()=>Date.now()>limit}, onProgress ? {onProgress} : {})); }catch(e){ console.error(e); res = {error:'fail'}; }
       finish(res);
     }, 0);
   };

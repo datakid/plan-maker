@@ -410,7 +410,7 @@ regress('H1 a heuristic failure under a tiny budget is never labelled infeasible
   const bad = [];
   FUZZ_SPECS.forEach((spec, i)=>{
     Fx.use(spec);
-    const r = generatePlan({budget:{ms:1, nodes:1}});
+    const r = generatePlan({budget:{nodes:1, evals:1, loops:1}});
     if(r.status==='infeasible') bad.push(i+1);
   });
   return verdict(bad.length===0, 'ok', 'infeasible on '+bad.join(','));
@@ -428,7 +428,7 @@ regress('H3 a skipped search reports an invalid draft, not infeasible, when no c
 regress('H4 the search reports its own limits', ()=>{
   Fx.use({days:3, facilities:Fx.fac(3), people:[{id:'C', off:OFF(1), quota:{min:1, max:1}}, {id:'B', off:OFF(0), quota:{min:1, max:1}}, {id:'A', off:OFF(2), quota:{min:1, max:1}}], volume:{mode:'exact', exact:{basic:3, contracted:0}}});
   const r = generatePlan();
-  return verdict(r.status==='valid' && (r.search===null || (r.search.ms>=0 && r.search.nodes>=0)), 'ok', r.status);
+  return verdict(r.status==='valid' && (r.search===null || (r.search.nodes>=0)), 'ok', r.status);
 });
 
 regress('I1 evaluating an edit never touches the live plan', ()=>{
@@ -508,7 +508,7 @@ regress('J3 a person pattern normalises to a known mode', ()=>{
 });
 
 function fuzzSpec(seed){
-  const r = mulberry32(seed);
+  const r = rng(seed);
   const rint = (a, b)=>a+Math.floor(r()*(b-a+1));
   const days = rint(3, 4), nf = rint(2, 4), np = rint(2, 4);
   const facilities = [];
@@ -650,7 +650,7 @@ regress('L10 LNS never returns a plan with more hard violations than it was give
   const r = lnsPlan(bad, null, {seed:3, ms:300});
   return verdict(hardOf(r.plan)<=before, 'hard '+before+' -> '+hardOf(r.plan), 'hard '+before+' -> '+hardOf(r.plan));
 });
-regress('L11 a failed generation records stage, attempts and time in plan.gen', ()=>{
+regress('L11 a failed generation records stage, attempts and node counts in plan.gen', ()=>{
   let hit = null;
   for(let seed=1;seed<=60 && !hit;seed++){
     const spec = fuzzSpec(seed);
@@ -662,13 +662,13 @@ regress('L11 a failed generation records stage, attempts and time in plan.gen', 
   }
   if(!hit) return 'no exhausted fixture found';
   const s = hit.plan.gen.search;
-  return verdict(!!s && s.attempts>=1 && typeof s.ms==='number' && ['search', 'lns'].includes(s.stage), JSON.stringify(s), JSON.stringify(s));
+  return verdict(!!s && s.attempts>=1 && typeof s.nodes==='number' && ['search', 'lns'].includes(s.stage), JSON.stringify(s), JSON.stringify(s));
 });
 regress('L12 team search does not mutate the caller options', ()=>{
   const p = Fx.gen({days:3, facilities:Fx.fac(3), people:Fx.ppl(['p1', 'p2', 'p3']), pools:[{id:'a', basic:1}], volume:{mode:'exact', exact:{basic:3, contracted:0}}});
   const o1 = {}, o2 = {noise:0.5};
-  solveTeams(p, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, mulberry32(1), o1);
-  solveTeams(p, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, mulberry32(1), o2);
+  solveTeams(p, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, rng(1), o1);
+  solveTeams(p, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, rng(1), o2);
   return verdict(JSON.stringify(o1)==='{}' && JSON.stringify(o2)==='{"noise":0.5}', 'unchanged', JSON.stringify([o1, o2]));
 });
 regress('L13 a person locked into two fixed visits on one day does not make the team search fail', ()=>{
@@ -680,7 +680,7 @@ regress('L13 a person locked into two fixed visits on one day does not make the 
   ]);
   plan.visits[0].locked = ['p1']; plan.visits[0].fixed = true;
   plan.visits[1].locked = ['p1']; plan.visits[1].fixed = true;
-  const r = solveTeams(plan, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, mulberry32(1), {});
+  const r = solveTeams(plan, {nodes:0, maxNodes:5000, deadline:Date.now()+1000}, rng(1), {});
   return verdict(!!(r && r.plan), 'solved', JSON.stringify(r));
 });
 regress('L14 seat-count conflicts are proofs only when the volume is exact; otherwise they are warnings', ()=>{
@@ -702,7 +702,7 @@ regress('L15 the visit room is sized by what each day can really staff, not by a
 });
 
 function familySpec(family, seed){
-  const r = mulberry32(seed*7919+13);
+  const r = rng(seed*7919+13);
   const rint = (a, b)=>a+Math.floor(r()*(b-a+1));
   const days = rint(4, 5);
   const offs = (p)=>{ const o = []; for(let d=0;d<days;d++) if(r()<p) o.push(d); return OFF(...o); };
@@ -774,7 +774,7 @@ regress('K3 generation is deterministic for the backup week and for a fuzz fixtu
 
 function tightSpec(kind, seed){
   const spec = familySpec(kind, 1000+seed);
-  const r = mulberry32(seed*6007+3);
+  const r = rng(seed*6007+3);
   for(const p of spec.people){
     if(r()<0.6){ const q = Math.floor(r()*3); p.quota = {min:q, max:q}; }
     if(kind!=='rest' && r()<0.2) p.pattern = {mode:'custom', minRest:1};
@@ -805,7 +805,7 @@ regress('S1 adversarial fuzz log: tight quotas, rest rules, rigid pairs and gend
   return verdict(true, summary+(missed.length ? ' | missed '+missed.join('; ') : ''), summary);
 });
 
-regress('S2 quarter under simulated 3x and 10x slower clocks: hard and soft scores against the normal clock', ()=>{
+regress('S2 quarter under simulated 3x and 10x slower clocks gives the identical plan', ()=>{
   const realNow = Date.now;
   const run = factor=>{
     App.data = normalizeData(JSON.parse(JSON.stringify(seedData())));
@@ -818,10 +818,10 @@ regress('S2 quarter under simulated 3x and 10x slower clocks: hard and soft scor
     const ms = realNow()-t0;
     if(!r.plan) return {factor, ms, status:r.error || 'none', hard:-1, soft:-1};
     const v = validatePlan(r.plan);
-    return {factor, ms, status:r.status, hard:v.hardScore, soft:Math.round(v.softScore*100)/100, visits:r.plan.visits.length};
+    return {factor, ms, status:r.status, hard:v.hardScore, soft:Math.round(v.softScore*100)/100, visits:r.plan.visits.length, sig:r.plan.visits.map(x=>x.date+':'+x.facilityId+':'+visitTeamIds(x).slice().sort().join('+')).sort().join(';')};
   };
   const a = run(1), b = run(3), c = run(10);
   const line = x=>'x'+x.factor+' '+x.status+' hard '+x.hard+' soft '+x.soft+' visits '+x.visits+' '+x.ms+'ms';
   for(const x of [a, b, c]) console.log('LOG S2 '+line(x));
-  return verdict(a.hard>=0 && b.hard>=0 && c.hard>=0, [a, b, c].map(line).join(' | '), 'no plan: '+[a, b, c].map(line).join(' | '));
+  return verdict(a.hard>=0 && b.hard>=0 && c.hard>=0 && a.sig===b.sig && b.sig===c.sig, [a, b, c].map(line).join(' | '), 'plans differ or none: '+[a, b, c].map(line).join(' | '));
 });

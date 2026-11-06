@@ -132,13 +132,13 @@ function dueIndex(startOrd){
 }
 
 function makeState(plan){
-  const st = {plan, due:dueIndex(ordOf(plan.start)), eval:null, hard:0, intent:0, soft:0, reward:0};
+  const st = {plan, due:dueIndex(ordOf(plan.start)), memo:new Map(), tally:planTally(plan), eval:null, hard:0, intent:0, soft:0, reward:0};
   evaluateState(st);
   return st;
 }
 
 function evaluateState(st){
-  const v = validatePlan(st.plan);
+  const v = validatePlan(st.plan, {memo:st.memo, tally:st.tally});
   const w = lvOf('due.priority').w;
   let reward = 0;
   const goalsOnly = S().volume.fill==='goals';
@@ -203,25 +203,30 @@ function applyMove(st, move){
   const inv = [];
   const visits = st.plan.visits;
   const bi = st.busyIdx || null;
+  const tl = st.tally || null;
   for(const op of move.ops){
     if(op.op==='set'){
       const v = stateVisit(st, op.id);
       const prev = {};
       if(bi) busyBump(bi, v, -1);
+      if(tl) tallyVisit(tl, v, -1);
       for(const k of Object.keys(op.fields)){ prev[k] = fastCopy(v[k]===undefined ? null : v[k]); v[k] = fastCopy(op.fields[k]); }
       if(op.fields.facilityId!==undefined && op.fields.kind===undefined){ prev.kind = v.kind; v.kind = visitKindOf(facilityById(v.facilityId)); }
       if(bi) busyBump(bi, v, 1);
+      if(tl) tallyVisit(tl, v, 1);
       inv.unshift({op:'set', id:op.id, fields:prev});
     } else if(op.op==='add'){
       visits.splice(op.at==null ? visits.length : op.at, 0, op.visit);
       if(st.vIdxArr===visits){ st.vIdx.set(op.visit.id, op.visit); st.vIdxLen = visits.length; }
       if(bi) busyBump(bi, op.visit, 1);
+      if(tl) tallyVisit(tl, op.visit, 1);
       inv.unshift({op:'remove', id:op.visit.id});
     } else if(op.op==='remove'){
       const i = visits.findIndex(x=>x.id===op.id);
       const [v] = visits.splice(i, 1);
       if(st.vIdxArr===visits){ st.vIdx.delete(v.id); st.vIdxLen = visits.length; }
       if(bi) busyBump(bi, v, -1);
+      if(tl) tallyVisit(tl, v, -1);
       inv.unshift({op:'add', visit:v, at:i});
     }
   }

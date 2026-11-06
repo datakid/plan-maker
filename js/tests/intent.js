@@ -150,7 +150,7 @@ intentCase('person never/only rules hold (F-POOL)', 'I7', INTENT_POOL, plan=>INT
 INTENT.stress = function(item, seed, moves){
   const e = INTENT.runOne(item.name, item.spec, seed, item.extra);
   App.data = e.data; App.plan = null;
-  const rnd = lnsRng(seed*7919);
+  const rnd = rng(seed*7919);
   lnsRulesCache = compilePeopleRules();
   const work = clonePlan(e.plan);
   const st = makeState(work);

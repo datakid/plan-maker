@@ -23,7 +23,7 @@ const GOLD = {
       for(const src of GOLD.sources()){
         for(const seed of GOLD.seeds){
           src.make();
-          const r = generatePlan({seed, iters:GOLD.iters, skipExplain:true, timeScale:40});
+          const r = generatePlan({seed, iters:GOLD.iters, skipExplain:true});
           out[src.name+'|'+seed] = r.plan ? GOLD.snapshot(r.plan) : {error:r.error || 'none'};
         }
       }

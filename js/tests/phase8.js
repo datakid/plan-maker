@@ -285,7 +285,7 @@ regress('ship: P1.6 corrupted data that restores can still generate a plan', ()=
       const r = restoreBackupObject(raw);
       if(!r.ok) continue;
       App.data = r.data;
-      const g = generatePlan({skipExplain:true, iters:10, budget:{ms:200, maxMs:400}});
+      const g = generatePlan({skipExplain:true, iters:10, budget:{nodes:2000, evals:200, loops:60}});
       if(!g.error && !g.plan) return verdict(false, '', 'no plan and no error on case '+i);
       made++;
     }
@@ -424,10 +424,10 @@ shipAsync('ship: P2.5 a second doGenerate while one runs does not start another'
   return verdict(same, 'single run', 'a second run replaced the active handle');
 });
 
-shipAsync('ship: P2.6 a search cut short by the clock is flagged in the plan and shown in Summary', async ()=>{
+shipAsync('ship: P2.6 a search cut short by the safety guard is flagged in the plan and shown in Summary', async ()=>{
   App.data = normalizeData(JSON.parse(SEED_JSON));
   shipSetSpan(93);
-  const r = generatePlan({seed:5, timeScale:0.05, skipExplain:true});
+  const r = generatePlan({seed:5, abort:()=>true, skipExplain:true});
   if(!r.plan) return verdict(false, '', 'no plan');
   const flagged = !!(r.plan.gen && r.plan.gen.search && r.plan.gen.search.truncated);
   const calm = generatePlan({seed:5, iters:30, skipExplain:true});
@@ -442,7 +442,7 @@ shipAsync('ship: P2.6 a search cut short by the clock is flagged in the plan and
 function shipMonthPlan(seed, extra){
   App.data = normalizeData(JSON.parse(SEED_JSON));
   shipSetSpan(27);
-  const r = generatePlan(Object.assign({seed:seed || 11, skipExplain:true, iters:60, timeScale:8}, extra || {}));
+  const r = generatePlan(Object.assign({seed:seed || 11, skipExplain:true, iters:60}, extra || {}));
   return r.plan;
 }
 
@@ -859,7 +859,7 @@ regress('ship: P4.7 first-run guidance: a three step checklist on an empty plan,
 regress('ship: P4.8 solvable conflicts carry a one-click fix that removes the conflict and shows as a button', ()=>{
   const keep = shipKeep(), tab = App.ui.tab;
   const results = [];
-  const run = ()=>generatePlan({seed:3, skipExplain:true, iters:20, timeScale:8});
+  const run = ()=>generatePlan({seed:3, skipExplain:true, iters:20});
   const scenario = (name, setup, keyOf, fixType)=>{
     App.data = normalizeData(JSON.parse(SEED_JSON));
     shipSetSpan(20);

@@ -1,24 +1,18 @@
-function mulberry32(a){
-  return function(){
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-function maxFlow(n, edges, s, t){
+function maxFlow(n, edges, s, t, out){
   const g = Array.from({length:n}, ()=>[]);
   const to = [], cap = [];
   const add = (u, v, c)=>{ g[u].push(to.length); to.push(v); cap.push(c); g[v].push(to.length); to.push(u); cap.push(0); };
-  for(const e of edges) if(e[2]>0) add(e[0], e[1], e[2]);
+  const fwd = [];
+  for(const e of edges){
+    if(e[2]>0){ fwd.push(to.length); add(e[0], e[1], e[2]); } else fwd.push(-1);
+  }
   let flow = 0;
   for(;;){
     const level = new Array(n).fill(-1);
     level[s] = 0;
     const q = [s];
     for(let i=0;i<q.length;i++) for(const id of g[q[i]]) if(cap[id]>0 && level[to[id]]<0){ level[to[id]] = level[q[i]]+1; q.push(to[id]); }
-    if(level[t]<0) break;
+    if(level[t]<0){ if(out){ out.reach = level.map(x=>x>=0); out.flowOf = fwd.map(id=>id<0 ? 0 : cap[id^1]); } break; }
     const it = new Array(n).fill(0);
     const dfs = (u, f)=>{
       if(u===t) return f;
@@ -78,6 +72,39 @@ function layoutDemand(plan){
     for(const pl of S().pools) d[pl.id] = (d[pl.id]||0) + (v.auto===false ? 0 : visitSeatNeed(v, pl, f));
   }
   return m;
+}
+
+function warmPrefer(plan){
+  const out = new Set();
+  for(const v of plan.visits) for(const pk of Object.keys(v.team || {})) for(const id of v.team[pk]) out.add(v.date+'|'+v.facilityId+'|'+id);
+  return out;
+}
+
+function intentBound(win, requests){
+  const days = win.days.filter(o=>normalWorkday(o));
+  const perDay = S().volume.perDay|0;
+  const cap = new Map(days.map(o=>[o, perDay>0 ? perDay : 1e9]));
+  for(const r of requests) if(r.source==='fixed' && cap.has(r.window.lo)) cap.set(r.window.lo, Math.max(0, cap.get(r.window.lo)-r.copies));
+  const specials = requests.filter(r=>r.source==='special' && r.copies>0);
+  const requested = specials.reduce((a, r)=>a+r.copies, 0);
+  if(!requested) return {requested:0, placeable:0, shortfall:0};
+  const dayIdx = new Map(days.map((o, i)=>[o, i]));
+  const n = 2+specials.length+days.length;
+  const S0 = 0, T0 = 1;
+  const edges = [];
+  specials.forEach((r, i)=>{
+    edges.push([S0, 2+i, r.copies]);
+    for(const o of days) if(o>=r.window.lo && o<=r.window.hi) edges.push([2+i, 2+specials.length+dayIdx.get(o), 1]);
+  });
+  days.forEach((o, j)=>edges.push([2+specials.length+j, T0, cap.get(o)]));
+  const placeable = maxFlow(n, edges, S0, T0);
+  return {requested, placeable, shortfall:requested-placeable};
+}
+
+function intentUnits(val){
+  let u = 0;
+  for(const v of val.violations) if(v.cls===CLS.SOFT && INTENT_RULES.has(v.rule)) u += v.units;
+  return u;
 }
 
 function flowDeficit(plan, bounds, caps, availFn){
@@ -184,6 +211,31 @@ function scopedDeficit(plan, rules){
   return total;
 }
 
+function seatsCut(members, cap, dayInfo){
+  const pi = new Map(members.map((p, i)=>[p.id, i]));
+  const base = 2;
+  const dBase = base+members.length;
+  const n = dBase+dayInfo.length;
+  const edges = [];
+  const dayEdge = [];
+  members.forEach((p, i)=>edges.push([0, base+i, cap.get(p.id)]));
+  dayInfo.forEach((d, j)=>{
+    for(const id of d.avail) edges.push([base+pi.get(id), dBase+j, 1]);
+    dayEdge.push(edges.length);
+    edges.push([dBase+j, 1, d.need]);
+  });
+  const out = {};
+  const flow = maxFlow(n, edges, 0, 1, out);
+  const got = out.flowOf || [];
+  const days = [], near = new Set();
+  dayInfo.forEach((d, j)=>{
+    const g = got[dayEdge[j]] || 0;
+    if(g<d.need){ days.push({date:d.iso, need:d.need, got:g}); for(const id of d.avail) near.add(id); }
+  });
+  const people = members.filter(p=>near.has(p.id)).map(p=>({id:p.id, cap:cap.get(p.id), used:got[pi.get(p.id)] || 0}));
+  return {flow, days, people};
+}
+
 function explainSeats(plan, win){
   const lines = [];
   if(!plan || !plan.visits || !plan.visits.length) return lines;
@@ -201,6 +253,7 @@ function explainSeats(plan, win){
       cap.set(p.id, Math.min((bounds.get(p.id)||{hi:Infinity}).hi, maxWorkable(p, workDays, hist) + lockedFixed));
     }
     let seatsTotal = 0;
+    const dayInfo = [];
     const dates = [...byDate.keys()].sort();
     for(const iso of dates){
       const vs = byDate.get(iso), ord = ordOf(iso);
@@ -217,6 +270,7 @@ function explainSeats(plan, win){
         else if(cap.get(p.id)<=0) who.push({id:p.id, reason:'quota'});
         else { avail.push(p); if(held.has(p.id)) who.push({id:p.id, reason:'held'}); }
       }
+      dayInfo.push({iso, need, avail:avail.map(p=>p.id)});
       const heldN = avail.filter(p=>held.has(p.id)).length;
       const needShown = need - heldN, availShown = avail.length - heldN;
       const short = needShown - availShown;
@@ -226,11 +280,11 @@ function explainSeats(plan, win){
       let fix = null;
       const editable = vs.filter(v=>(v.fixed || v.special) && seatOf(v)>0).sort((a,b)=>seatOf(b)-seatOf(a))[0];
       if(editable) fix = {type:'seatDown', pool:pool.id, overrideId:editable.fixed ? editable.overrideId : null, special:editable.fixed ? null : editable.special, to:Math.max(0, seatOf(editable)-short)};
-      lines.push({key:'xPoolDayShort', scope:'day', pool:pool.id, date:iso, short, need:needShown, avail:availShown, who, proven, fix, args:[poolName(pool), short, iso, needShown, availShown, who]});
+      lines.push({key:'xPoolDayShort', scope:'day', pool:pool.id, date:iso, short, need:needShown, avail:availShown, who, cut:{need:needShown, people:avail.map(p=>({id:p.id, cap:1, used:1})), short}, proven, fix, args:[poolName(pool), short, iso, needShown, availShown, who]});
     }
     const hi = sum(members, p=>cap.get(p.id));
     if(seatsTotal>hi){
-      lines.push({key:'xPoolSeatsHigh', scope:'window', pool:pool.id, short:seatsTotal-hi, need:seatsTotal, avail:hi, who:[], proven:exactMode || hi===0, fix:null, args:[poolName(pool), seatsTotal, hi]});
+      lines.push({key:'xPoolSeatsHigh', scope:'window', pool:pool.id, short:seatsTotal-hi, need:seatsTotal, avail:hi, who:[], proven:exactMode || hi===0, fix:null, cut:seatsCut(members, cap, dayInfo), args:[poolName(pool), seatsTotal, hi]});
     }
   }
   return lines;
@@ -567,7 +621,7 @@ function solveTeams(plan, budget, rnd, opts){
   const dfs = ()=>{
     if(aborted) return false;
     budget.nodes++;
-    if(budget.nodes>budget.maxNodes || (budget.nodes & 63)===0 && Date.now()>budget.deadline){ aborted = true; return false; }
+    if(budget.nodes>budget.maxNodes || ((budget.nodes & 63)===0 && genAborted())){ aborted = true; return false; }
     let pick = null, pickC = null;
     for(const g of groups){
       if(g.chosen.length>=g.seats) continue;
@@ -598,7 +652,8 @@ function solveTeams(plan, budget, rnd, opts){
       for(const q of c.unit){ if(!q.gender) u++; else if(q.gender==='m') m++; else w++; }
       return genderFeasible(rule, m, w, u, remainingTotal-c.unit.length, nSize) ? 0 : 1;
     };
-    const scored = pickC.map(c=>({c, k:[-urgency(c), genderPen(c), futureCost(c.p, px.ord, pick), (load(c.p.id)+0.5)/(c.p.share==null||c.p.share<=0 ? 1 : c.p.share)+rnd()*noise]}));
+    const prefer = opts.prefer || null;
+    const scored = pickC.map(c=>({c, k:[prefer && prefer.has(px.v.date+'|'+px.f.id+'|'+c.p.id) ? 0 : 1, prefer && prefer.has(px.v.date+'|'+px.f.id+'|'+c.p.id) ? idxOf.get(c.p.id) : 0, -urgency(c), genderPen(c), futureCost(c.p, px.ord, pick), (load(c.p.id)+0.5)/(c.p.share==null||c.p.share<=0 ? 1 : c.p.share)+rnd()*noise]}));
     scored.sort((a,b)=>{ for(let i=0;i<a.k.length;i++) if(a.k[i]!==b.k[i]) return a.k[i]-b.k[i]; return 0; });
     for(const e of scored){
       const rec = assign(pick, e.c);
@@ -712,30 +767,51 @@ function applyLayoutMove(plan, m){
   return out;
 }
 
+const BUDGET_SPAN = [
+  {max:7, ref:10, lns:2000, nodes:3000, evals:1200, loops:120, polish:80, probes:14, moves:60},
+  {max:31, ref:40, lns:2500, nodes:3000, evals:1200, loops:120, polish:300, probes:14, moves:60},
+  {max:Infinity, ref:120, lns:3000, nodes:3000, evals:1200, loops:120, polish:800, probes:14, moves:60}
+];
+const BUDGET_QUALITY = {fast:0.4, balanced:1, thorough:3, continue:2};
+
+function budgetFor(span, quality, size, scale){
+  const row = BUDGET_SPAN.find(r=>span<=r.max);
+  const q = (BUDGET_QUALITY[quality]!=null ? BUDGET_QUALITY[quality] : 1)*(scale==null ? 1 : scale);
+  const sf = size ? Math.min(2, Math.max(0.6, size/row.ref)) : 1;
+  const n = (x, f)=>Math.max(1, Math.round(x*f));
+  const lnsIters = n(row.lns, q*sf);
+  return {
+    layoutLoops:n(row.loops, q), teamNodes:n(row.nodes, q), layoutEvals:n(row.evals, q),
+    lnsIters, descentEvals:Math.max(60, Math.floor(lnsIters*0.15)),
+    polishIters:size ? Math.max(40, Math.min(200+60*size, n(row.polish, q))) : n(row.polish, q),
+    explainProbes:row.probes, explainMoves:row.moves
+  };
+}
+
 function searchPlan(plan, info, opts){
   opts = opts || {};
   const b = opts.budget || {};
-  const t0 = Date.now();
-  const budget = {nodes:0, maxNodes:b.nodes || 120000, deadline:t0 + (b.ms || 1500)};
-  const maxEvals = b.evals || 4000;
-  const rnd = mulberry32(opts.seed || 20260101);
-  const stats = {attempts:0, nodes:0, ms:0, exhausted:false, layoutMoves:0, restarts:0, evals:0, stage:'search'};
+  const T = budgetFor(opts.span || plan.days.length, opts.quality, plan.visits.length, opts.budgetScale);
+  const budget = {nodes:0, maxNodes:b.nodes || T.teamNodes};
+  const maxEvals = b.evals || T.layoutEvals;
+  const rnd = rng(opts.seed || 20260101);
+  const stats = {attempts:0, nodes:0, exhausted:false, layoutMoves:0, restarts:0, evals:0, stage:'search'};
   const rules = compilePeopleRules();
   const bounds = personBounds(rules);
   const avail = effectiveAvailability();
-  const finish = p=>{ stats.nodes = budget.nodes; stats.ms = Date.now()-t0; stats.truncated = Date.now()>=budget.deadline; return {plan:p, info:stats}; };
+  const finish = p=>{ stats.nodes = budget.nodes; stats.truncated = genAborted(); return {plan:p, info:stats}; };
 
   const tryTeams = (p, nodeCap, noise)=>{
-    const sub = {nodes:0, maxNodes:Math.min(nodeCap, budget.maxNodes-budget.nodes), deadline:budget.deadline};
+    const sub = {nodes:0, maxNodes:Math.min(nodeCap, budget.maxNodes-budget.nodes)};
     stats.attempts++;
-    const r = solveTeams(p, sub, rnd, {noise});
+    const r = solveTeams(p, sub, rnd, {noise, prefer:opts.prefer || null});
     budget.nodes += sub.nodes;
     if(r && r.plan){ polishSoft(r.plan); return r.plan; }
     return null;
   };
-  const maxLoops = b.loops || 1500;
-  const alive = ()=>budget.nodes<budget.maxNodes && Date.now()<budget.deadline && stats.evals<maxEvals && stats.layoutMoves<maxLoops;
-  const better = (v, w)=>v.hard<w.hard || (v.hard===w.hard && v.soft<w.soft);
+  const maxLoops = b.loops || T.layoutLoops;
+  const alive = ()=>budget.nodes<budget.maxNodes && stats.evals<maxEvals && stats.layoutMoves<maxLoops && !genAborted();
+  const better = (v, w)=>cmpScore(v, w)<0;
 
   let best = plan;
   let bestVal = validatePlan(plan);
