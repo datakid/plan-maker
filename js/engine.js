@@ -751,7 +751,13 @@ function pairBreaks(ids){
   return n;
 }
 
-function visitTeamIds(v){ return [].concat(...Object.values(v.team||{})); }
+function visitTeamIds(v){
+  const out = [];
+  const t = v.team;
+  if(!t) return out;
+  for(const k in t){ const a = t[k]; for(let i=0; i<a.length; i++) out.push(a[i]); }
+  return out;
+}
 function visitGuestLabels(v){ return (v.guests||[]).map(id=>guestById(id)).filter(Boolean).map(g=>g.name+' '+t('guestMark')); }
 
 const CHECK_ALWAYS = ['cOpen','cDup','cAvail','cBlocked','cGender','cSenior','cPairs','cRun','cPeople','cGoals','cPrefs'];

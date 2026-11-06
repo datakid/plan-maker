@@ -63,6 +63,10 @@ scopeWrap('activePeople', ()=>'', r=>Object.freeze(r));
 scopeWrap('dayRuleOf', o=>o);
 scopeWrap('poolsLive', ()=>'');
 scopeWrap('distBand', km=>km);
+scopeWrap('facilityKind', f=>scopeId(f));
+scopeWrap('categoryKind', n=>n);
+scopeWrap('visitKindOf', f=>scopeId(f));
+scopeWrap('dayCfg', o=>o);
 
 function scopeEntry(name){
   const raw = globalThis[name];

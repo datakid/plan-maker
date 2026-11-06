@@ -272,3 +272,57 @@ regress('R-SOL-23: every replacement offered by the shared eligibility check add
   }
   return verdict(tried>20 && bad===0, tried+' replacements, none break a hard rule', tried+' tried, '+bad+' broke a hard rule');
 });
+
+regress('R-SOL-24: the cached, incremental evaluator equals a fresh validatePlan on hard, intent, soft and violation keys after 400 moves in a search scope', ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  S().period = Object.assign({}, S().period, {goal:'range', preset:'custom', start:Fx.W1.start, end:'2026-12-31'});
+  const plan = generatePlan({seed:2, skipExplain:true}).plan;
+  const people = activePeople();
+  const facs = App.data.facilities.filter(f=>!f.retired);
+  const r = rng(21);
+  let drift = null, moves = 0;
+  scopeRun(()=>{
+    const st = makeState(clonePlan(plan));
+    lnsReindex(st);
+    for(let i=0; i<400 && !drift; i++){
+      const v = st.plan.visits[Math.floor(r()*st.plan.visits.length)];
+      if(!v) break;
+      const pick = r();
+      let fields;
+      if(pick<0.3) fields = {date:st.plan.days[Math.floor(r()*st.plan.days.length)]};
+      else if(pick<0.55) fields = {facilityId:facs[Math.floor(r()*facs.length)].id};
+      else {
+        const team = fastCopy(v.team);
+        const pk = Object.keys(team)[0];
+        const pool = people.filter(p=>p.pool===pk);
+        if(pk && pool.length && team[pk].length) team[pk][0] = pool[Math.floor(r()*pool.length)].id;
+        fields = {team};
+      }
+      const d = deltaMove(st, {name:'rand', ops:[{op:'set', id:v.id, fields}]});
+      moves++;
+      if(r()<0.5) d.revert();
+      if(moves%25===0){
+        const fresh = validatePlan(clonePlan(st.plan));
+        const keys = x=>x.violations.map(q=>q.key+'|'+(q.visits || []).slice().sort().join(',')+'|'+(q.people || []).slice().sort().join(',')).sort().join(';');
+        const mine = st.eval;
+        if(fresh.hardScore!==mine.hardScore || fresh.intentScore!==mine.intentScore || Math.abs(fresh.softScore-mine.softScore)>1e-6 || keys(fresh)!==keys(mine)) drift = 'move '+moves+' fresh '+[fresh.hardScore, fresh.intentScore, fresh.softScore]+' incremental '+[mine.hardScore, mine.intentScore, mine.softScore];
+      }
+    }
+  });
+  return verdict(!drift && moves>=300, moves+' moves, identical to a fresh validation', drift || ('only '+moves+' moves'));
+});
+
+regress('R-SOL-25: the proof pill tells a proven conflict, a search limit, a proven optimum and a plain valid plan apart', ()=>{
+  const mk = (status, search, conflicts)=>({visits:[{id:'v'}], gen:{search}, status, conflicts:conflicts || [], stale:false});
+  const cls = (plan, blocking)=>{ const n = proofPill(plan, {blocking}); return n ? n.className.replace('tag ', '') : null; };
+  const rows = [
+    cls(mk('infeasible', {}, [{key:'xPoolDayShort'}]), 2),
+    cls(mk('exhausted', {}), 2),
+    cls(mk('valid', {optimalOnIntent:true, lowerBound:{requested:2, intentUnits:0}}), 0),
+    cls(mk('valid', {optimalOnIntent:true, lowerBound:{requested:0, intentUnits:0}}), 0),
+    cls(Object.assign(mk('valid', {}), {stale:true}), 0)
+  ];
+  const ok = JSON.stringify(rows)==='["danger","warn","ok","mid",null]';
+  const labels = ['proofInfeasible', 'proofLimit', 'proofOptimal', 'proofValid'].every(k=>t(k)!==k && t(k+'Hint')!==k+'Hint');
+  return verdict(ok && labels, 'four states, strings present', JSON.stringify(rows)+' labels '+labels);
+});

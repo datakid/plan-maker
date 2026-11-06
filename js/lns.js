@@ -50,8 +50,11 @@ function lnsBusy(plan, date, exceptIds){
 }
 
 function lnsReindex(st){
+  st.epoch = (st.epoch || 0)+1;
+  st.rev = new Map();
   st.busyIdx = busyIndexBuild(st.plan);
   st.tally = planTally(st.plan);
+  st.worked = workedMap(st.plan);
   st.vIdxArr = null;
 }
 

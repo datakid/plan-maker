@@ -61,3 +61,14 @@
 - lnsEligibleKeep (lns.js) is the one candidate filter for seat replacements: the rule check plus keeping a qualified senior on the team. Swap, fill, replace, polish and explain all use it. R-SOL-23 checks every offered replacement against the validator on the seed month plan.
 - xPoolDayShort lines carry cut {need, people, short}, the day-level counterpart of the seat cut.
 - Golden re-baseline (soft only, hard and intent unchanged): plain-seed-week seed 1 2.665 to 4.665, seed 2 4.665 to 2.665, seed 3 2.665 to 4.665.
+
+- searchPlan memoizes candidate validation (layoutGroupsHard, layoutHot) with a per-search visit memo; hard-fixture search stage about 6% faster.
+
+## Evaluation speed (final)
+- Search states carry revision stamps per visit (st.rev, st.epoch; restored on revert) so validatePlan keys its per-visit, per-day and preference caches by id and revision instead of hashing JSON, share cached violation objects, and reuse the incrementally maintained goal tally and worked map. Cover goals cache their baseline per state; evaluateGoals counts visits by facility without allocating.
+- Identical-moves benchmark (500 random move-and-revert evaluations on the seed quarter plan, same plan in both trees, identical score checksum): 2.06 ms per evaluation on main, 0.37 ms now (5.6x). R-SOL-24 compares hard, intent, soft and violation keys with a fresh validatePlan every 25 moves.
+- End to end on the seed fixtures: week 250 to 177 ms, month 1311 to 790 ms, quarter 6379 to 2395 ms, with iteration budgets raised (LNS 4000, 5000 and 6000; polish 200, 700 and 2000; team nodes 6000, layout evals 2400, loops 240).
+- Tried and dropped (no measurable gain): per-person section memo with version counters.
+
+## Status pill (UI)
+- proofPill in views/plan.js shows one of four states above the KPIs: proven conflict (danger), search limit (warn), proven optimal on special requests (ok), valid but not proven best (neutral); AR and EN strings with hints. R-SOL-25 covers the four states.
