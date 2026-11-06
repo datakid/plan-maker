@@ -4,10 +4,11 @@ function collectPreferences(plan, ctx, add){
   const eligible = fr.days.filter(normalWorkday);
   const bandOf = f=>distBand(facilityKm(f));
   for(const o of eligible){
+    const dr = dayRuleOf(o);
+    if(!dr.min && !dr.kind && !dr.band && !dr.category) continue;
     const date = isoOf(o);
     const list = (byDate.get(date) || []).filter(x=>x.f);
     const ids = list.map(x=>x.v.id);
-    const dr = dayRuleOf(o);
     if(dr.min && list.length<dr.min.n) add({src:'day', group:'cPrefs', key:'dMinDay', dates:[date], visits:ids, actual:list.length, required:dr.min.n, units:dr.min.n-list.length, args:[date, list.length, dr.min.n]});
     const dayRule = (field, key, match, what)=>{
       const e = dr[field];
@@ -51,18 +52,33 @@ function collectPreferences(plan, ctx, add){
   const ordsBy = new Map();
   const rotatePref = rotatePreferActive();
   const fpv = (App.data.history && App.data.history.fpv) || {};
+  const pmemo = ctx.memo && !ctx.whyMap ? ctx.memo : null;
   for(const x of live){
+    const pk = pmemo && x.mk ? 'P|'+x.mk : null;
+    if(pk!==null){
+      const hit = pmemo.get(pk);
+      if(hit){
+        if(ctx.share) for(const o of hit.list) ctx.out.violations.push(o);
+        else for(const o of hit.list){ const c = Object.assign({}, o); c.id = 'x'+ctx.out.violations.length; ctx.out.violations.push(c); }
+        for(const [id, ord] of hit.ords){ if(!ordsBy.has(id)) ordsBy.set(id, []); ordsBy.get(id).push(ord); }
+        for(const id of hit.far) farBy.set(id, (farBy.get(id)||0)+1);
+        continue;
+      }
+    }
+    const pStart = pk!==null ? ctx.out.violations.length : 0;
+    const ordLog = [], farLog = [];
     for(const id of x.ids){
       const p = personById(id);
       if(!p) continue;
       const band = bandOf(x.f);
       if(!ordsBy.has(id)) ordsBy.set(id, []);
       ordsBy.get(id).push(ordOf(x.v.date));
+      if(pk!==null) ordLog.push([id, ordOf(x.v.date)]);
       const pband = distBand(personTravelKm(p, x.f));
       if(p.distPref && pband!==p.distPref && (pband!=='mid' || distStrict(p))) add({src:'person', group:'cPrefs', key:'dPersonDist', people:[id], visits:[x.v.id], dates:[x.v.date], facilities:[x.f.id], args:[p.name, x.f.name]});
       const trip = distBand(personTravelKm(p, x.f));
       if(dist.shortTrips && trip==='far') add({src:'person', group:'cPrefs', key:'dShortTrip', people:[id], visits:[x.v.id], dates:[x.v.date], facilities:[x.f.id], args:[p.name, x.f.name]});
-      if(trip==='far') farBy.set(id, (farBy.get(id)||0)+1);
+      if(trip==='far'){ farBy.set(id, (farBy.get(id)||0)+1); if(pk!==null) farLog.push(id); }
       const gp = set.genderPrefs && set.genderPrefs[p.gender];
       if(gp && gp.on){
         let mm = 0;
@@ -76,6 +92,7 @@ function collectPreferences(plan, ctx, add){
         if(v>0) add({src:'person', group:'cPrefs', key:'dRotate', units:Math.min(v, 6)/3, people:[id], visits:[x.v.id], dates:[x.v.date], facilities:[x.f.id], args:[p.name, x.f.name]});
       }
     }
+    if(pk!==null) pmemo.set(pk, {list:ctx.out.violations.slice(pStart), ords:ordLog, far:farLog});
   }
   for(const [id, list] of ordsBy){
     list.sort((a, b)=>a-b);
@@ -96,7 +113,12 @@ function collectPreferences(plan, ctx, add){
   }
   if(T && live.length){
     for(const pl of set.pools){
-      const members = activePeople().filter(p=>p.pool===pl.id && eligible.some(o=>personAvailable(p, o)));
+      const mk = ctx.share ? 'E|'+pl.id+'|'+fr.start+'|'+eligible.length : null;
+      let members = mk!==null ? ctx.memo.get(mk) : undefined;
+      if(members===undefined){
+        members = activePeople().filter(p=>p.pool===pl.id && eligible.some(o=>personAvailable(p, o)));
+        if(mk!==null) ctx.memo.set(mk, members);
+      }
       if(members.length<2) continue;
       const totalShare = sum(members, p=>p.share==null ? 1 : p.share) || 1;
       const total = sum(members, p=>T.assigned[p.id]||0);
@@ -132,13 +154,13 @@ function dueIndex(startOrd){
 }
 
 function makeState(plan){
-  const st = {plan, due:dueIndex(ordOf(plan.start)), memo:new Map(), tally:planTally(plan), eval:null, hard:0, intent:0, soft:0, reward:0};
+  const st = {plan, due:dueIndex(ordOf(plan.start)), memo:new Map(), rev:new Map(), revCtr:0, epoch:0, tally:planTally(plan), worked:workedMap(plan), eval:null, hard:0, intent:0, soft:0, reward:0};
   evaluateState(st);
   return st;
 }
 
 function evaluateState(st){
-  const v = validatePlan(st.plan, {memo:st.memo, tally:st.tally});
+  const v = validatePlan(st.plan, {memo:st.memo, tally:st.tally, worked:st.worked, rev:st.rev, epoch:st.epoch});
   const w = lvOf('due.priority').w;
   let reward = 0;
   const goalsOnly = S().volume.fill==='goals';
@@ -204,22 +226,29 @@ function applyMove(st, move){
   const visits = st.plan.visits;
   const bi = st.busyIdx || null;
   const tl = st.tally || null;
+  const wm = st.worked || null;
   for(const op of move.ops){
     if(op.op==='set'){
       const v = stateVisit(st, op.id);
       const prev = {};
       if(bi) busyBump(bi, v, -1);
       if(tl) tallyVisit(tl, v, -1);
+      if(wm) workedBump(wm, v, -1);
       for(const k of Object.keys(op.fields)){ prev[k] = fastCopy(v[k]===undefined ? null : v[k]); v[k] = fastCopy(op.fields[k]); }
       if(op.fields.facilityId!==undefined && op.fields.kind===undefined){ prev.kind = v.kind; v.kind = visitKindOf(facilityById(v.facilityId)); }
       if(bi) busyBump(bi, v, 1);
       if(tl) tallyVisit(tl, v, 1);
-      inv.unshift({op:'set', id:op.id, fields:prev});
+      if(wm) workedBump(wm, v, 1);
+      const prevRev = st.rev.get(op.id) || 0;
+      st.rev.set(op.id, op.rev!==undefined ? op.rev : ++st.revCtr);
+      inv.unshift({op:'set', id:op.id, fields:prev, rev:prevRev});
     } else if(op.op==='add'){
       visits.splice(op.at==null ? visits.length : op.at, 0, op.visit);
       if(st.vIdxArr===visits){ st.vIdx.set(op.visit.id, op.visit); st.vIdxLen = visits.length; }
       if(bi) busyBump(bi, op.visit, 1);
       if(tl) tallyVisit(tl, op.visit, 1);
+      if(wm) workedBump(wm, op.visit, 1);
+      st.rev.set(op.visit.id, op.rev!==undefined ? op.rev : ++st.revCtr);
       inv.unshift({op:'remove', id:op.visit.id});
     } else if(op.op==='remove'){
       const i = visits.findIndex(x=>x.id===op.id);
@@ -227,7 +256,8 @@ function applyMove(st, move){
       if(st.vIdxArr===visits){ st.vIdx.delete(v.id); st.vIdxLen = visits.length; }
       if(bi) busyBump(bi, v, -1);
       if(tl) tallyVisit(tl, v, -1);
-      inv.unshift({op:'add', visit:v, at:i});
+      if(wm) workedBump(wm, v, -1);
+      inv.unshift({op:'add', visit:v, at:i, rev:st.rev.get(v.id) || 0});
     }
   }
   return {ops:inv};

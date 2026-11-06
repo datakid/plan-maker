@@ -255,7 +255,16 @@ function isFixedLockedPerson(v, pid){
   return !!v.fixed && Array.isArray(v.locked) && v.locked.includes(pid);
 }
 
-function uniqIds(ids){ return [...new Set(ids)]; }
+function uniqIds(ids){
+  const out = [];
+  for(let i=0; i<ids.length; i++){
+    const id = ids[i];
+    let dup = false;
+    for(let j=0; j<out.length; j++) if(out[j]===id){ dup = true; break; }
+    if(!dup) out.push(id);
+  }
+  return out;
+}
 function seatTarget(v, f){
   const m = {};
   for(const pl of S().pools) m[pl.id] = visitSeatNeed(v, pl, f);
@@ -272,6 +281,28 @@ function planDayRules(){
   const sp = S().spacing;
   if(sp && sp.mode==='gap' && sp.gap>1) out.push({src:'spacing', hard:lvMust('vol.gap'), minRest:sp.gap-1, maxRun:null, group:'cSpacing'});
   return out;
+}
+
+function workedBump(m, v, d){
+  const f = facilityById(v.facilityId);
+  if(!f) return;
+  const o = ordOf(v.date);
+  for(const id of uniqIds(visitTeamIds(v))){
+    let dm = m.get(id);
+    if(d>0){
+      if(!dm){ dm = new Map(); m.set(id, dm); }
+      let a = dm.get(o);
+      if(!a){ a = []; dm.set(o, a); }
+      a.push(v);
+    } else if(dm){
+      const a = dm.get(o);
+      if(a){
+        const i = a.indexOf(v);
+        if(i>=0) a.splice(i, 1);
+        if(!a.length) dm.delete(o);
+      }
+    }
+  }
 }
 
 function workedMap(plan, fr){
@@ -338,6 +369,8 @@ function evaluateGoals(plan, T, ctx){
   const vis = ctx.vis.filter(x=>x.f);
   const requested = plan.requested!=null ? plan.requested : plan.visits.length;
   const visitsIn = scope=>vis.filter(x=>inScope(x.f, scope));
+  const visByFac = new Map();
+  for(const x of vis){ const a = visByFac.get(x.f.id); if(a) a.push(x); else visByFac.set(x.f.id, [x]); }
   const planWork = fr.days.filter(normalWorkday).length;
   for(const g of S().goals){
     if(!g.on) continue;
@@ -347,23 +380,35 @@ function evaluateGoals(plan, T, ctx){
     if(g.type==='cover'){
       const facs = goalFacilities(g);
       const times = Math.max(1, g.times||1);
-      let since = g.since || null;
-      let base = f=>baselineVisits(f, since, startOrd, plan);
-      let rolled = false;
-      if(facs.length && facs.every(f=>base(f)>=times) && g.repeat){ since = isoOf(startOrd); rolled = true; base = ()=>0; }
-      const sinceOrd = since ? ordOf(since) : -Infinity;
-      const need = {}, covered = {};
-      let remaining = 0, doneBase = 0;
-      for(const f of facs){
-        const b = Math.min(times, base(f));
-        doneBase += b;
-        const n = times - b;
-        if(n>0){
-          need[f.id] = n; remaining += n;
-          covered[f.id] = Math.min(n, vis.filter(x=>x.f.id===f.id && x.ord>=sinceOrd).length);
+      const gk = ctx.memo && !ctx.whyMap && !plan.approved ? 'G|'+g.id+'|'+(g.since || '')+'|'+startOrd+'|'+facs.length+'|'+times+'|'+(g.repeat ? 1 : 0) : null;
+      let cg = gk!==null ? ctx.memo.get(gk) : undefined;
+      if(cg===undefined){
+        let since0 = g.since || null;
+        let base = f=>baselineVisits(f, since0, startOrd, plan);
+        let rolled0 = false;
+        if(facs.length && facs.every(f=>base(f)>=times) && g.repeat){ since0 = isoOf(startOrd); rolled0 = true; base = ()=>0; }
+        const need0 = {};
+        let remaining0 = 0, doneBase0 = 0;
+        for(const f of facs){
+          const b = Math.min(times, base(f));
+          doneBase0 += b;
+          const n = times - b;
+          if(n>0){ need0[f.id] = n; remaining0 += n; }
         }
+        cg = {since:since0, rolled:rolled0, sinceOrd:since0 ? ordOf(since0) : -Infinity, need:need0, remaining:remaining0, doneBase:doneBase0};
+        if(gk!==null) ctx.memo.set(gk, cg);
       }
-      const inPlan = sum(Object.values(covered));
+      const since = cg.since, rolled = cg.rolled, sinceOrd = cg.sinceOrd, need = cg.need, remaining = cg.remaining, doneBase = cg.doneBase;
+      const covered = {};
+      let inPlan = 0;
+      for(const fid in need){
+        const arr = visByFac.get(fid);
+        let n = 0;
+        if(arr) for(let i=0; i<arr.length; i++) if(arr[i].ord>=sinceOrd) n++;
+        const c = Math.min(need[fid], n);
+        covered[fid] = c;
+        inPlan += c;
+      }
       const total = facs.length*times;
       const byFixed = coverByOrd(g, startOrd);
       let target = remaining, paced = false, open = byFixed==null, byOrd = null;
@@ -373,7 +418,7 @@ function evaluateGoals(plan, T, ctx){
         if(byOrd>=startOrd && byOrd<=endOrd){
           let ok = 0;
           for(const fid in need){
-            const c = Math.min(need[fid], vis.filter(x=>x.f.id===fid && x.ord>=sinceOrd && x.ord<=byOrd).length);
+            const c = Math.min(need[fid], (visByFac.get(fid) || []).filter(x=>x.ord>=sinceOrd && x.ord<=byOrd).length);
             ok += c;
             if(c<need[fid]) missing.push(fid);
           }
@@ -401,7 +446,7 @@ function evaluateGoals(plan, T, ctx){
       const detail = [];
       for(const f of facs){
         const last = lastVisitBefore(f, startOrd);
-        const ds = [...new Set(vis.filter(x=>x.f.id===f.id).map(x=>x.ord))].sort((a,b)=>a-b);
+        const ds = [...new Set((visByFac.get(f.id) || []).map(x=>x.ord))].sort((a,b)=>a-b);
         const ev = chainEval(last, ds, days, startOrd, endOrd);
         if(ev.noHistory) noHistory++;
         if(ev.inherited) inherited++;
@@ -444,7 +489,7 @@ function evaluateGoals(plan, T, ctx){
       const sw = specialWindow(g, {start:startOrd, end:endOrd});
       if(!sw){ row.state = 'new'; row.label = '—'; continue; }
       const lo = sw.lo, hi = sw.hi;
-      const q = vis.filter(x=>x.f.id===f.id && x.ord>=lo && x.ord<=hi && people.every(id=>x.ids.includes(id)));
+      const q = (visByFac.get(f.id) || []).filter(x=>x.ord>=lo && x.ord<=hi && people.every(id=>x.ids.includes(id)));
       row.inPlan = q.length; row.target = Math.max(1, g.times||1);
       row.met = q.length>=row.target;
       row.pct = Math.min(100, Math.round(q.length/row.target*100));
@@ -624,15 +669,18 @@ function validatePlan(plan, opts){
       if(guestSeen.has(gk) && guestSeen.get(gk)!==v.id){ const gg = guestById(gid); add({src:'visit', cls:CLS.HARD, group:'cDup', key:'dGuestDup', visits:[v.id, guestSeen.get(gk)], dates:[v.date], facilities:[f.id], args:[gg ? gg.name : '?', f.name, v.date]}); }
       else guestSeen.set(gk, v.id);
     }
-    const memoKey = memo && !whyMap ? JSON.stringify(v)+'|'+(plan.approved ? 1 : 0) : null;
+    const memoKey = memo && !whyMap ? (opts.rev ? v.id+'#'+(opts.rev.get(v.id) || 0)+'#'+(opts.epoch || 0)+(plan.approved ? 'a' : '') : JSON.stringify(v)+'|'+(plan.approved ? 1 : 0)) : null;
     if(memoKey!==null){
       const hit = memo.get(memoKey);
       if(hit){
-        for(const o of hit.list){ const c = Object.assign({}, o); c.id = 'x'+out.violations.length; out.violations.push(c); }
+        x.mk = memoKey;
+        if(opts.rev) for(const o of hit.list) out.violations.push(o);
+        else for(const o of hit.list){ const c = Object.assign({}, o); c.id = 'x'+out.violations.length; out.violations.push(c); }
         x.ids = hit.ids.slice(); x.open = hit.open;
         continue;
       }
     }
+    x.mk = memoKey;
     const memoStart = out.violations.length;
     const memoStore = ()=>{
       if(memoKey===null) return;
@@ -737,6 +785,16 @@ function validatePlan(plan, opts){
   const byDate = groupBy(vis.filter(x=>x.f), x=>x.v.date);
   out.perDay = byDate;
   for(const [date, list] of byDate){
+    let dk = null;
+    if(opts.rev && memo && !whyMap){
+      dk = 'D|'+date;
+      for(const x of list){ if(!x.mk){ dk = null; break; } dk += '#'+x.mk; }
+    }
+    if(dk!==null){
+      const hit = memo.get(dk);
+      if(hit){ for(const o of hit) out.violations.push(o); continue; }
+    }
+    const dStart = out.violations.length;
     const seen = new Map();
     for(const x of list) for(const id of uniqIds(x.ids)){
       if(seen.has(id)){
@@ -761,6 +819,7 @@ function validatePlan(plan, opts){
     const cfgCap = dayView(dayRuleOf(ord)).cap;
     if(perDay>0 && list.length>perDay) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:perDay, units:list.length-perDay, args:[date, list.length, perDay]});
     else if(cfgCap!=null && list.length>cfgCap) add({src:'day', cls:free>0 ? CLS.HARD : CLS.EXC, group:'cCaps', key:'dCapDay', rule:'day.cap', visits:list.map(x=>x.v.id), dates:[date], actual:list.length, required:cfgCap, units:list.length-cfgCap, args:[date, list.length, cfgCap]});
+    if(dk!==null) memo.set(dk, out.violations.slice(dStart));
   }
   if(set.volume.perWeek){
     const byWk = groupBy(vis.filter(x=>x.f), x=>weekKey(x.ord));
@@ -770,11 +829,11 @@ function validatePlan(plan, opts){
     }
   }
 
-  const worked = workedMap(plan, fr);
+  const worked = opts.worked || workedMap(plan, fr);
   const H = historyIndex(fr.start);
   const hasRules = activePeople().some(p=>{ const r = personPatternRules(p); return r.hard.length || r.soft.length; });
   if(hasRules && H.unresolved>0) out.notes.push({key:'dHistoryUnresolved', args:[H.unresolved]});
-  const ctxInfo = {fr, vis, worked, history:H};
+  const ctxInfo = {fr, vis, worked, history:H, memo, whyMap};
 
   const dayDates = [...byDate.keys()].map(ordOf).sort((a,b)=>a-b);
   const dayVisitsOf = o=>byDate.get(isoOf(o)) || [];
@@ -792,7 +851,7 @@ function validatePlan(plan, opts){
     const dm = worked.get(p.id) || new Map();
     const dates = [...dm.keys()];
     const histDates = H.map.get(p.id) ? [...H.map.get(p.id)] : [];
-    const all = [...new Set(dates.concat(histDates))].sort((a,b)=>a-b);
+    const all = histDates.length ? [...new Set(dates.concat(histDates))].sort((a,b)=>a-b) : dates.slice().sort((a,b)=>a-b);
     const rules = personPatternRules(p);
     const emit = (r, hard)=>{
       for(const x of ruleViolationsOn(r, all)){
@@ -820,7 +879,7 @@ function validatePlan(plan, opts){
   const T = opts.tally || planTally(plan);
   out.tally = T;
   const exemptQ = {};
-  for(const x of vis) if(x.f) for(const id of x.ids) if(isExemptLocked(x.v, id)) for(const r of T.rules.countsOf(id)) if(inScopeOpt(x.f, r.scope)) exemptQ[r.key] = (exemptQ[r.key]||0)+1;
+  for(const x of vis) if(x.f && x.v.fixed) for(const id of x.ids) if(isExemptLocked(x.v, id)) for(const r of T.rules.countsOf(id)) if(inScopeOpt(x.f, r.scope)) exemptQ[r.key] = (exemptQ[r.key]||0)+1;
   for(const r of T.rules.list){
     if(r.src!=='person') continue;
     const q = T.q[r.key]||0, p = personById(r.pid);
@@ -833,7 +892,7 @@ function validatePlan(plan, opts){
   }
   const ev = evaluateGoals(plan, T, ctxInfo);
   for(const o of ev.viols) add(o);
-  collectPreferences(plan, {set, fr, vis, byDate, worked, H, T}, add);
+  collectPreferences(plan, {set, fr, vis, byDate, worked, H, T, memo, out, whyMap, share:!!opts.rev}, add);
   out.goals = ev.rows;
   for(const row of out.goals) row.source = 'current';
 

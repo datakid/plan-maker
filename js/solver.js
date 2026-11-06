@@ -436,8 +436,8 @@ function preflightPlan(info, plan){
   return {conflicts, warnings, bounds, cap};
 }
 
-function layoutGroupsHard(plan){
-  const v = validatePlan(plan);
+function layoutGroupsHard(plan, memo){
+  const v = validatePlan(plan, memo ? {memo} : undefined);
   let n = 0;
   for(const x of v.violations){
     if(x.cls!=='hard') continue;
@@ -695,8 +695,8 @@ function polishSoft(plan){
   return plan;
 }
 
-function layoutHot(plan){
-  const v = validatePlan(plan);
+function layoutHot(plan, memo){
+  const v = validatePlan(plan, memo ? {memo} : undefined);
   const hot = new Set();
   let layoutHard = 0;
   for(const x of v.violations){
@@ -768,9 +768,9 @@ function applyLayoutMove(plan, m){
 }
 
 const BUDGET_SPAN = [
-  {max:7, ref:10, lns:2000, nodes:3000, evals:1200, loops:120, polish:80, probes:14, moves:60},
-  {max:31, ref:40, lns:2500, nodes:3000, evals:1200, loops:120, polish:300, probes:14, moves:60},
-  {max:Infinity, ref:120, lns:3000, nodes:3000, evals:1200, loops:120, polish:800, probes:14, moves:60}
+  {max:7, ref:10, lns:4000, nodes:6000, evals:2400, loops:240, polish:200, probes:14, moves:60},
+  {max:31, ref:40, lns:5000, nodes:6000, evals:2400, loops:240, polish:700, probes:14, moves:60},
+  {max:Infinity, ref:120, lns:6000, nodes:6000, evals:2400, loops:240, polish:2000, probes:14, moves:60}
 ];
 const BUDGET_QUALITY = {fast:0.4, balanced:1, thorough:3, continue:2};
 
@@ -826,6 +826,7 @@ function searchPlan(plan, info, opts){
 
   const defOf = p=>flowDeficit(p, bounds, null, avail) + scopedDeficit(p, rules);
   const sigOfPlan = p=>p.visits.map(v=>v.date+':'+v.facilityId).sort().join('|');
+  const layoutMemo = new Map();
   let cur = best;
   let curDef = defOf(cur);
   let bestLayoutDef = curDef;
@@ -833,7 +834,7 @@ function searchPlan(plan, info, opts){
   let stagnation = 0;
   let kick = 2;
   const maxKick = Math.max(3, Math.ceil(plan.visits.length/3));
-  let info0 = layoutHot(cur);
+  let info0 = layoutHot(cur, layoutMemo);
 
   while(alive()){
     const moves = sampleLayoutMoves(cur, rnd, info0.hot, 48);
@@ -846,7 +847,7 @@ function searchPlan(plan, info, opts){
       const d = defOf(cand);
       if(d>chosenDef) continue;
       stats.evals++;
-      if(layoutGroupsHard(cand)>info0.layoutHard) continue;
+      if(layoutGroupsHard(cand, layoutMemo)>info0.layoutHard) continue;
       const sf = genderDeficit(cand, avail);
       if(d===chosenDef && (sf>chosenSoft || (sf===chosenSoft && rnd()<0.5))) continue;
       chosen = cand; chosenDef = d; chosenSoft = sf;
@@ -875,7 +876,7 @@ function searchPlan(plan, info, opts){
       seen.add(sigOfPlan(cur));
       stagnation = 0;
     }
-    info0 = layoutHot(cur);
+    info0 = layoutHot(cur, layoutMemo);
   }
   stats.exhausted = !alive();
   return finish(best);

@@ -397,6 +397,20 @@ function applySeatFix(f){
   commit('settings');
   return true;
 }
+function proofPill(plan, A){
+  if(!plan.visits.length || plan.stale) return null;
+  const s = plan.gen && plan.gen.search;
+  const conflicts = plan.conflicts || [];
+  let kind = null;
+  if(A.blocking){
+    kind = plan.status==='infeasible' && conflicts.length ? 'proofInfeasible' : (plan.status==='exhausted' ? 'proofLimit' : null);
+  } else if(s && s.optimalOnIntent && s.lowerBound && s.lowerBound.requested>0) kind = 'proofOptimal';
+  else if(s) kind = 'proofValid';
+  if(!kind) return null;
+  const cls = {proofInfeasible:'danger', proofLimit:'warn', proofOptimal:'ok', proofValid:'mid'}[kind];
+  return el('span', {class:'tag '+cls, id:'gen-proof', title:t(kind+'Hint')}, t(kind));
+}
+
 function planStatusBanner(plan, A){
   if(plan.approved) return null;
   const hard = A.blocking;
@@ -661,6 +675,8 @@ function viewSummary(plan, A){
   const visitDays = new Set(plan.visits.map(v=>v.date)).size;
   const totalKm = Math.round(sum(Object.values(A.km)));
   const okChecks = A.checks.filter(c=>c.ok).length;
+  const pill = proofPill(plan, A);
+  if(pill) wrap.appendChild(el('div', {class:'row', style:{gap:'8px', margin:'0 0 10px'}}, [pill]));
   wrap.appendChild(el('div', {class:'kpis'}, [
     el('div', {class:'kpi'}, [el('div', {class:'n num'}, String(plan.visits.length)), el('div', {class:'l'}, t('kpiVisits')), el('div', {class:'split'}, [el('span', {class:'row', style:{gap:'5px'}}, [el('span', {class:'dot basic'}), String(A.kinds.basic||0)]), el('span', {class:'row', style:{gap:'5px'}}, [el('span', {class:'dot contracted'}), String(A.kinds.contracted||0)])])]),
     el('div', {class:'kpi'}, [el('div', {class:'n num ltr'}, visitDays+' / '+plan.days.length), el('div', {class:'l'}, t('kpiDays'))]),
