@@ -1,11 +1,9 @@
-const APP_VERSION = '5.3.0';
+const APP_VERSION = '5.3.1';
 const STORE_KEY = 'alkhitta.v5';
 const PLAN_KEY = 'alkhitta.plan.v5';
 const LEGACY_KEY = 'alkhitta.v4';
 const SETTINGS_REV = 6;
 const RULES_REV = 10;
-const RATINGS_REV = 1;
-const RATINGS_PREV = {p_amani:[50,100], p_asmaa:[50,75]};
 
 const App = {
   data: null,
@@ -115,7 +113,7 @@ function seedData(){
     };
   });
   const people = SEED_PEOPLE.map(p=>freshPerson(Object.assign({}, p, {origin: locIdFor(p.origin||'دمنهور')})));
-  return {version:5, rev:SETTINGS_REV, rulesRev:RULES_REV, ratingsRev:RATINGS_REV, settings:defaultSettings(), locations, categories, facilities, people,
+  return {version:5, rev:SETTINGS_REV, rulesRev:RULES_REV, settings:defaultSettings(), locations, categories, facilities, people,
     history:{fpv:{}, counts:{}, lastCycle:0, keys:[]}, aliases:{people:{}, facilities:{}, categories:{}}, unresolved:[]};
 }
 
@@ -288,13 +286,6 @@ function normalizeData(d){
   }
   if((d.rulesRev||0) < 7) migrateRules(d);
   d.rulesRev = RULES_REV;
-  if((d.ratingsRev||0) < RATINGS_REV){
-    for(const p of (d.people||[])){
-      const was = RATINGS_PREV[p.id];
-      if(was && p.skill && Number(p.skill.basic)===was[0] && Number(p.skill.contracted)===was[1]){ p.skill.basic = 75; p.skill.contracted = 75; }
-    }
-    d.ratingsRev = RATINGS_REV;
-  }
   const gp = d.settings.genderPrefs || {};
   d.settings.genderPrefs = {m:Object.assign(fresh.genderPrefs.m, gp.m||{}), f:Object.assign(fresh.genderPrefs.f, gp.f||{})};
   d.locations = d.locations||[]; d.categories = d.categories||[]; d.facilities = d.facilities||[];

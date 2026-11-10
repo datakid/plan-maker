@@ -342,6 +342,9 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
 [dir="rtl"] .actionbar-inner{padding:8px 16px 8px 8px}
 .actionbar .status{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; white-space:nowrap; flex:1 1 auto; min-width:0}
 .actionbar .status > span:last-child{overflow:hidden; text-overflow:ellipsis; min-width:0}
+.actionbar-inner > #gen-proof{flex:0 1 auto; min-width:0; max-width:40%; display:inline-block; height:auto; line-height:21px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-inline-start:2px}
+#gen-proof .txt-short{display:none}
+#gen-proof.mid{color:var(--ink-2)}
 .actionbar-inner > .btn{flex:0 0 auto}
 
 .pop{position:fixed; z-index:80; background:var(--raised); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--elev-3); padding:16px; max-width:calc(100% - 20px); max-height:calc(100vh - 20px); overflow:auto; animation:pop-in .14s var(--ease)}
@@ -592,6 +595,9 @@ textarea.input{height:auto; padding:9px 11px; resize:vertical; line-height:1.5}
   .actionbar-inner > .btn{padding-inline:9px; min-width:40px; min-height:40px}
   .actionbar-inner .btn .txt-long{display:none}
   .actionbar .status .txt-long{display:none}
+  #gen-proof .txt-long{display:none}
+  #gen-proof .txt-short{display:inline}
+  .actionbar-inner > #gen-proof{flex:0 0 auto; max-width:none; padding-inline:6px}
   .people-grid{grid-template-columns:1fr; padding:12px}
   .hero{padding:40px 16px 32px}
   .card-head{padding:14px 14px 0}

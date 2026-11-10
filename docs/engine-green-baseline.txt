@@ -1,0 +1,61 @@
+ENGINE GREEN BASELINE
+Tree: solver-all patch applied to main (commit "baseline: solver-all tree"), before any engine-green change.
+The runner named in PLAN-ENGINE-GREEN-FOR-SONNET.md section 0 is not in the repo or the zip; scripts/engine-run.js and scripts/jsdom-run.js were added in this work from the harnesses used for the solver patch.
+
+1. Engine runner (vm, no DOM), harness used for the solver patch (regress cases only, js/tests/phase8.js not loaded)
+   RESULT 213 pass 33 fail (32 UI-bound tests plus R-SOL-25), matches the plan table
+   - I4 approval is refused for hard-invalid and stale plans and allowed otherwise :: toast (ui.js) is not loaded; also localStorage stub was missing
+   - I5 unapproving restores facility and count history exactly :: toast (ui.js) is not loaded; also localStorage stub was missing
+   - v4: a saved plan from an older rulesRev loads as stale :: toast (ui.js) is not loaded; also localStorage stub was missing
+   - v4: LevelChip renders and edits in light, dark, RTL and LTR :: no document in the vm runner
+   - v4: no Must/Try Seg, rigid/flexible or light/medium/strong control remains in the views :: renderRules lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: every registry rule is reachable through a LevelChip :: goTab lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: toggling every rule chip between Must and Prefer regenerates without errors :: closePop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: People table edits name, pool, skill, per plan and max run inline for three people without a sheet :: closePop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: the docked panel stays open while switching rows by click and by keyboard :: closePop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: bulk edit of two people applies and undoes :: closePop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: People table works at narrow width and in Arabic and English :: sheet lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - team: availability popover re-renders on mode change :: no document in the vm runner
+   - team: off-days popover clear works from table :: no document in the vm runner
+   - team: panel edits repaint the row :: no document in the vm runner
+   - team: drawer is docked to the viewport edge :: no document in the vm runner
+   - team: table header is sticky inside the wrap :: no document in the vm runner
+   - v4: Goals manager adds every type, edits the main number inline, changes level, duplicates, deletes and undoes :: closePop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: Goals manager filters by level, off and Failing :: closePop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: Goals manager works in the Rules tab, the wide sheet and from the person Rules popover :: sheet lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v4: the summary lists rule contributions and the visit sheet shows the rules touching a visit :: ruleContribBlock lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P1.1: seat stepper with a default steps from the shown default, not from 0 or 9 :: Stepper lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v6 P5.1: steppers without a default start at min with either button and clear at min :: Stepper lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P1.1: the per-pool Default button clears the override and the chip marks a custom value :: visitSpecFields lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P2.4: the truncated banner offers Keep searching only while hard violations remain :: renderTab lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P3.1: the Visits popover has the up-to/exactly, per-day and use-all-days rows in order :: visitsPop lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P3.2: a guest in a pool takes a seat and is never part of the team, fairness or the people lists :: exportPlanRows lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P3.2: empty per-visit rules clean to null and the sheet block and guest picker render :: visitSpecFields lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P3.3: editing in ask mode offers Merge and Keep both once and stores the choice :: no document in the vm runner
+   - v5 P4.1: the Summary shows shortage lines, proven ones as bad with a fix button that applies :: renderTab lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5 P4.2: the Model card renders inside the Summary with Copy and two export buttons :: renderTab lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5.1 separate: the goal appears in the goals list, needs both sides and reads well in both languages :: goalFields lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - v5.1 guests: calendar pills and the matrix tooltip show guests, and the total visits control limits a fill plan :: teamPills lives in a DOM module (ui.js or views/*) that the vm runner does not load
+   - R-SOL-25: the proof pill tells a proven conflict, a search limit, a proven optimum and a plain valid plan apart :: proofPill lives in a DOM module (ui.js or views/*) that the vm runner does not load
+
+2. Full suite in jsdom (test.html), solver-all tree
+   RESULT pass=440 fail=8, the same 8 as main (main: pass=415 fail=8)
+   - v4: People table works at narrow width and in Arabic and English
+   - ship: P4.3 dialogs and sheets trap Tab, wrap focus and give focus back to the opener
+   - ship: P4.4 the action bar never overflows its container at a narrow width
+   - ship: P4.6 the Rules tab opens in Simple mode with key rules only and no weights, Advanced shows everything, and search finds rules in any mode
+   - v5 P4.2: the Model card renders inside the Summary with Copy and two export buttons
+   - ship: P2.2 progress arrives in order and a cancel stops the worker without touching App.plan
+   - ship: P5.4 index.html, sw.js and the app agree on one version and every asset is versioned and precached
+   - v6 P5.3: every index entry resolves to a visible element in at most two actions
+   The plan table names two of these differently: the real failures are "v5 P4.2 the Model card ..." (getComputedStyle does not resolve var(--font-num), needs layout) and "v6 P5.3 every index entry resolves to a visible element" (offsetParent, needs layout); the table lists a change-chip test and an xlsx test, which pass in jsdom.
+
+3. Full suite in real Chromium (playwright-core with @sparticuz/chromium from npm, because the usual Playwright download host is not reachable here)
+   1280 px: RESULT pass=448 fail=0
+   390 px, first run: pass=447 fail=1 "v6 P6: a person, a facility, a setting and a goal can be opened from the palette - setting not highlighted"; passed alone and passed in a second full run (pass=448 fail=0); main passed 423/0 at 390 px. Treated as a timing flake, see docs/engine-green-notes.md.
+   The 8 jsdom failures all pass in Chromium, so none is an app bug.
+
+4. Other baseline checks
+   Golden plans: identical 36 of 36.
+   Throttled-clock determinism (R-SOL-7): pass. Evaluation equivalence (R-SOL-12, R-SOL-24): pass.
+   scripts/ci-run.js app e2e in Chromium (CSP, worker mode, fonts, offline, service-worker cache list): ok. People matrix: pass=32 fail=0.

@@ -4,18 +4,19 @@ let lastPost = 0;
 self.onmessage = e=>{
   const m = e.data;
   if(!m || m.type!=='generate') return;
+  const runId = m.runId;
   try{
     App.ui.lang = m.lang==='en' ? 'en' : 'ar';
     App.data = normalizeData(m.data);
     const opts = Object.assign({}, m.opts, {onProgress:(stage, pct)=>{
       const now = Date.now();
-      if(stage==='done' || now-lastPost>=60){ lastPost = now; self.postMessage({type:'progress', stage, pct}); }
+      if(stage==='done' || now-lastPost>=60){ lastPost = now; self.postMessage({type:'progress', runId, stage, pct}); }
     }});
     const limit = Date.now()+(m.opts && m.opts.safetyMs || 120000);
     opts.abort = ()=>Date.now()>limit;
     const res = generatePlan(opts);
-    self.postMessage({type:'result', res});
+    self.postMessage({type:'result', runId, res});
   }catch(err){
-    self.postMessage({type:'error', message:String(err && err.message || err)});
+    self.postMessage({type:'error', runId, message:String(err && err.message || err)});
   }
 };

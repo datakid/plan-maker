@@ -10,7 +10,7 @@ regress('v5 P1.1: seat stepper with a default steps from the shown default, not 
   s2.querySelectorAll('button')[1].click();
   trail.push(got);
   return verdict(trail.join(',')==='1,0,1,3', 'null,-,-,+ gives 1,0,1 and a fresh + gives 3', trail.join(','));
-});
+}, {needs:['dom-render']});
 
 regress('v6 P5.1: steppers without a default start at min with either button and clear at min', ()=>{
   let got = 'unset';
@@ -26,7 +26,7 @@ regress('v6 P5.1: steppers without a default start at min with either button and
   c.querySelectorAll('button')[0].click();
   const clr = got;
   return verdict(up===1 && dn===1 && clr===null, 'null+ gives min, null- gives min, min- clears', 'up '+up+' dn '+dn+' clr '+clr);
-});
+}, {needs:['dom-render']});
 
 regress('v5 P1.1: the per-pool Default button clears the override and the chip marks a custom value', ()=>{
   Fx.use({days:6, pools:[{id:'a', basic:2, contracted:2}], facilities:Fx.fac(3), people:Fx.ppl(['p1','p2','p3'])});
@@ -39,7 +39,7 @@ regress('v5 P1.1: the per-pool Default button clears the override and the chip m
   if(!defBtn) return verdict(false, '', 'no Default button');
   defBtn.click();
   return verdict(chipOn && o.seats==null && n===1, 'chip shown, seats reset to null', 'chip '+chipOn+' seats '+JSON.stringify(o.seats)+' n '+n);
-});
+}, {needs:['dom-render']});
 
 regress('v5 P1.2: duplicate fixed visits and a special on the same place are detected', ()=>{
   Fx.use({days:10, facilities:Fx.fac(4), people:Fx.ppl(['p1','p2','p3','p4']),
@@ -162,7 +162,7 @@ regress('v5 P2.4: the truncated banner offers Keep searching only while hard vio
   const withHard = show(2), clean = show(0);
   App.plan = keep; App.ui.tab = tab; App.ui.view = view; renderTab();
   return verdict(withHard.banner && withHard.btn && clean.banner && !clean.btn, 'button only with hard>0', JSON.stringify({withHard, clean}));
-});
+}, {needs:['dom-render']});
 
 regress('v5 P3.1: old data migrates requireEveryEligibleDay to useAllDays and the level follows it', ()=>{
   const mk = flag=>{ const d = normalizeData(JSON.parse(SEED_JSON)); delete d.settings.volume.useAllDays; d.settings.volume.requireEveryEligibleDay = flag; return normalizeData(d); };
@@ -203,7 +203,7 @@ regress('v5 P3.1: the Visits popover has the up-to/exactly, per-day and use-all-
   const i1 = labels.indexOf(t('vPerDayMode')), i2 = labels.indexOf(t('vPerDay')), i3 = labels.indexOf(t('vUseAll'));
   const segs = box.querySelectorAll('.seg').length;
   return verdict(i1>=0 && i1<i2 && i2<i3 && segs>=3, 'order mode, per day, use all days', JSON.stringify([i1, i2, i3, segs]));
-});
+}, {needs:['dom-render']});
 
 regress('v5 P3.2: seat precedence is request, facility, location, pool by category, pool default', ()=>{
   Fx.use({days:4, pools:[{id:'a', basic:2, contracted:1}], facilities:[{id:'f1'}, {id:'f2'}, {id:'f3'}], people:Fx.ppl(['p1','p2'])});
@@ -264,7 +264,7 @@ regress('v5 P3.2: empty per-visit rules clean to null and the sheet block and gu
   const nodes = visitSpecFields(o, ()=>{}, (lab, ctl)=>el('div', {class:'field'}, [el('label', null, lab), ctl]));
   const host = el('div', null, nodes);
   return verdict(none===null && some && some.gender==='none' && some.senior==='on' && !!host.querySelector('details.vr-block') && [...host.querySelectorAll('button')].some(b=>b.textContent.includes(t('guestAdd'))), 'cleaning and render', JSON.stringify({none, some}));
-});
+}, {needs:['dom-render']});
 
 const dupFx = (policy, extra)=>{
   Fx.use(Object.assign({days:8, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(4), people:Fx.ppl(['p1','p2','p3','p4']),
@@ -327,7 +327,7 @@ regress('v5 P3.3: editing in ask mode offers Merge and Keep both once and stores
   const stored = S().overrides.map(o=>o.dupChoice).join(',');
   document.querySelectorAll('.toasts .toast').forEach(n=>n.remove());
   return verdict(btns.length===2 && count===1 && stored==='merge,merge', 'two buttons, once only, stored on both', JSON.stringify({btns, count, stored}));
-});
+}, {needs:['dom-render']});
 
 const seatFx = ()=>{
   Fx.use({days:6, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(4), people:Fx.ppl(['p1','p2','p3']), settings:{volume:{mode:'fill', perDay:2}}});
@@ -377,7 +377,7 @@ regress('v5 P4.1: the Summary shows shortage lines, proven ones as bad with a fi
   const after = S().overrides.find(o=>o.id==='o1').seats;
   App.plan = keep; App.ui.tab = tab; App.ui.view = view; renderTab();
   return verdict(bad===1 && !!btn && after && after.a===2, 'one bad line, fix lowers seats to 2', JSON.stringify({bad, after}));
-});
+}, {needs:['dom-render']});
 
 regress('v5 P4.2: the model numbers equal the search score and the terms add up', ()=>{
   App.data = normalizeData(JSON.parse(SEED_JSON));
@@ -418,7 +418,7 @@ regress('v5 P4.2: the Model card renders inside the Summary with Copy and two ex
   App.plan = keep; App.ui.tab = tab; App.ui.view = view; renderTab();
   const json = saved[1] ? saved[1][1] : '';
   return verdict(!!pre && btns.length===3 && /JetBrains|mono/i.test(font) && saved.length===2 && saved[0][0].endsWith('.txt') && saved[1][0].endsWith('.json') && json.includes('json'), 'card, 3 buttons, mono font, two exports', JSON.stringify({btns:btns.length, font, saved}));
-});
+}, {needs:['dom-render', 'layout']});
 
 regress('v5 migration: a rev 8 save gains the v5 settings with the same behaviour and moves to the current rev', ()=>{
   const old = JSON.parse(SEED_JSON);
@@ -518,7 +518,7 @@ regress('v5.1 separate: the goal appears in the goals list, needs both sides and
   App.ui.lang = 'en'; const en = goalTitle(g); App.ui.lang = 'ar'; const ar = goalTitle(g); App.ui.lang = keep;
   const host = el('div', null, goalFields(g, ()=>{}, ()=>{}));
   return verdict(PEOPLE_GOALS.includes('separate') && ready && !separateReady(bare) && !!bare.scope2 && en.includes('does not visit') && ar.length>10 && host.querySelectorAll('.rc-row').length===2, 'listed, readiness, titles, two scope rows', JSON.stringify({ready, en, rows:host.querySelectorAll('.rc-row').length}));
-});
+}, {needs:['dom-render']});
 
 regress('v5.1 guests: a pooled guest with a known gender counts in the gender rule, an unknown one pauses it', ()=>{
   Fx.use({days:4, pools:[{id:'a', basic:2, contracted:1}], facilities:Fx.fac(2), people:[{id:'p1', gender:'m', skill:10}, {id:'p2', gender:'m', skill:10}, {id:'p3', gender:'f', skill:10}],
@@ -552,4 +552,4 @@ regress('v5.1 guests: calendar pills and the matrix tooltip show guests, and the
   const popBox = visitsPop(()=>{});
   const labels = [...popBox.querySelectorAll('label')].map(l=>l.textContent);
   return verdict(pills.includes(t('guestMark')) && free>3 && capped===3 && exact===3 && labels.includes(t('vTotal')), 'guest pill, total capped at 3, control present', JSON.stringify({pills, free, capped, exact}));
-});
+}, {needs:['dom-render']});

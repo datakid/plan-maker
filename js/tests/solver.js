@@ -325,4 +325,36 @@ regress('R-SOL-25: the proof pill tells a proven conflict, a search limit, a pro
   const ok = JSON.stringify(rows)==='["danger","warn","ok","mid",null]';
   const labels = ['proofInfeasible', 'proofLimit', 'proofOptimal', 'proofValid'].every(k=>t(k)!==k && t(k+'Hint')!==k+'Hint');
   return verdict(ok && labels, 'four states, strings present', JSON.stringify(rows)+' labels '+labels);
+}, {needs:['dom-render']});
+
+regress('R-SOL-25 logic: statusPillInfo returns the kind, tone and string keys for each plan state', ()=>{
+  const mk = (status, search, conflicts)=>({visits:[{id:'v'}], gen:{search}, status, conflicts:conflicts || [], stale:false});
+  const info = (plan, blocking)=>{ const r = statusPillInfo(plan, {blocking}); return r ? r.kind+':'+r.tone+':'+r.labelKey+':'+r.hintKey : null; };
+  const rows = [
+    info(mk('infeasible', {}, [{key:'xPoolDayShort'}]), 2),
+    info(mk('exhausted', {}), 2),
+    info(mk('valid', {optimalOnIntent:true, lowerBound:{requested:2, intentUnits:0}}), 0),
+    info(mk('valid', {optimalOnIntent:true, lowerBound:{requested:0, intentUnits:0}}), 0),
+    info(Object.assign(mk('valid', {}), {stale:true}), 0),
+    info({visits:[], status:'valid'}, 0)
+  ];
+  const want = ['proofInfeasible:danger:proofInfeasible:proofInfeasibleHint', 'proofLimit:warn:proofLimit:proofLimitHint', 'proofOptimal:ok:proofOptimal:proofOptimalHint', 'proofValid:mid:proofValid:proofValidHint', null, null];
+  return verdict(JSON.stringify(rows)===JSON.stringify(want), 'six states', JSON.stringify(rows));
+});
+
+regress('R-SOL-26: every status pill kind has a non-empty label, short label and tooltip in Arabic and English', ()=>{
+  const keep = App.ui.lang;
+  const bad = [];
+  try{
+    for(const kind of Object.keys(PILL_TONES)){
+      for(const lang of ['ar', 'en']){
+        App.ui.lang = lang;
+        for(const key of [kind, kind+'Short', kind+'Hint']){
+          const s = t(key);
+          if(!s || s===key || /^\s*$/.test(s)) bad.push(lang+':'+key);
+        }
+      }
+    }
+  } finally { App.ui.lang = keep; }
+  return verdict(bad.length===0 && Object.keys(PILL_TONES).length>=5, Object.keys(PILL_TONES).join(', '), 'missing '+bad.join(', '));
 });

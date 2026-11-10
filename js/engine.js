@@ -991,3 +991,46 @@ function unapprovePlan(){
   plan.approved = false; delete plan.snapshot; delete plan.override;
   save(); savePlan(); emit('plan');
 }
+
+function diffPlans(a, b){
+  const group = p=>{
+    const m = new Map();
+    for(const v of p.visits){ if(!m.has(v.facilityId)) m.set(v.facilityId, []); m.get(v.facilityId).push(v); }
+    for(const l of m.values()) l.sort((x, y)=>x.date<y.date ? -1 : (x.date>y.date ? 1 : 0));
+    return m;
+  };
+  const key = v=>visitTeamIds(v).slice().sort().join(',');
+  const ga = group(a), gb = group(b);
+  const out = {added:0, removed:0, moved:0, changed:0};
+  for(const id of new Set([...ga.keys(), ...gb.keys()])){
+    const A = ga.get(id) || [], B = gb.get(id) || [];
+    const used = new Set(), left = [];
+    for(const x of A){
+      const j = B.findIndex((y, k)=>!used.has(k) && y.date===x.date);
+      if(j>=0){ used.add(j); if(key(x)!==key(B[j])) out.changed++; }
+      else left.push(x);
+    }
+    const rest = B.filter((_, k)=>!used.has(k));
+    out.moved += Math.min(left.length, rest.length);
+    out.added += Math.max(0, rest.length-left.length);
+    out.removed += Math.max(0, left.length-rest.length);
+  }
+  return out;
+}
+
+const PILL_TONES = {proofInfeasible:'danger', proofTruncated:'warn', proofLimit:'warn', proofOptimal:'ok', proofValid:'mid'};
+
+function statusPillInfo(plan, A){
+  if(!plan || !plan.visits || !plan.visits.length || plan.stale) return null;
+  const s = plan.gen && plan.gen.search;
+  const conflicts = plan.conflicts || [];
+  let kind = null;
+  if(A.blocking){
+    if(plan.status==='infeasible' && conflicts.length) kind = 'proofInfeasible';
+    else if(s && s.truncated) kind = 'proofTruncated';
+    else if(plan.status==='exhausted') kind = 'proofLimit';
+  } else if(s && s.optimalOnIntent && s.lowerBound && s.lowerBound.requested>0) kind = 'proofOptimal';
+  else if(s) kind = 'proofValid';
+  if(!kind) return null;
+  return {kind, labelKey:kind, shortKey:kind+'Short', hintKey:kind+'Hint', tone:PILL_TONES[kind]};
+}

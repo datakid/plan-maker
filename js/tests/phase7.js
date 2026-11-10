@@ -34,7 +34,7 @@ regress('v4: the summary lists rule contributions and the visit sheet shows the 
     const okSheet = !!sec.querySelector('.section-title') && sec.textContent.includes(t('rcTitle'));
     return verdict(okBlock && okSheet, 'contributions shown', 'block '+okBlock+' sheet '+okSheet);
   } finally { App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
-});
+}, {needs:['dom-render']});
 
 regress('v4: a Tuesday that cannot be staffed shows the blocking reason', ()=>{
   Fx.w1({shuffle:1, leans:{2:'contracted'}});

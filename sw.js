@@ -1,4 +1,4 @@
-const VERSION = '5.3.0';
+const VERSION = '5.3.1';
 const CACHE = 'alkhitta-'+VERSION;
 const ASSETS = [
   "./",

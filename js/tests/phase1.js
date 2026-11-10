@@ -178,4 +178,4 @@ regress('v4: LevelChip renders and edits in light, dark, RTL and LTR', ()=>{
     if(keepTheme==null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', keepTheme);
   }
   return verdict(!bad.length, 'ok', bad.join(' | '));
-});
+}, {needs:['dom-render']});

@@ -457,7 +457,7 @@ shipAsync('v6 P5.3: every index entry resolves to a visible element in at most t
   if(renderTeam.api) renderTeam.api.closePanel();
   goTab('plan');
   return verdict(bad.length===0, buildSettingsIndex().length+' entries resolve and are visible', bad.slice(0, 6).join(' | '));
-});
+}, {needs:['dom-render', 'layout']});
 
 shipAsync('v6 P5.3: a deep link opens the setting and highlights it for two seconds', async ()=>{
   App.data = normalizeData(JSON.parse(SEED_JSON));
@@ -579,7 +579,7 @@ shipAsync('v6 P6: a person, a facility, a setting and a goal can be opened from 
   ids = await palType(buildSettingsIndex().find(x=>x.id==='vol.week').en);
   const st = Palette.items.find(c=>c.id==='set:vol.week');
   st ? palRun(st) : bad.push('setting missing');
-  await new Promise(r=>setTimeout(r, 250));
+  for(let waited = 0; waited<1500 && !(App.ui.tab==='rules' && document.querySelector('.setting-hl')); waited += 50) await new Promise(r=>setTimeout(r, 50));
   if(App.ui.tab!=='rules' || !document.querySelector('.setting-hl')) bad.push('setting not highlighted');
   goTab('plan');
   return verdict(bad.length===0, 'person, facility and setting open', bad.join(' | '));

@@ -331,3 +331,12 @@ This is a static site with no build step. On Vercel, serve the repo root: `.verc
 - People goals measured across several plans (e.g. "at most 2 far trips a month").
 - Goal templates (e.g. "all hospitals monthly"); recurring fixed visits (every first Sunday).
 - Comparing several plans side by side.
+
+## Running the tests
+
+- Engine suite (no browser): `QUIET=1 node scripts/engine-run.js`
+- Full suite in jsdom: `npm i jsdom` then `node scripts/jsdom-run.js test.html`
+- Browser suite, app checks and people matrix: `npm i playwright && npx playwright install chromium` then `node scripts/ci-run.js` (set CHROME_PATH to use another Chromium)
+- Screenshots of the status pill: `node scripts/pill-shots.js`
+
+A test that needs something an environment lacks declares it with `{needs:[...]}`; the skips each environment may have are listed in js/tests/env-manifest.js, and any other skip fails the run.

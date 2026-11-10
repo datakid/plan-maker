@@ -76,7 +76,7 @@ regress('v4: Goals manager adds every type, edits the main number inline, change
     if(ps.length<2) bad.push('people');
   } finally { closePop(); document.querySelectorAll('.toasts .toast').forEach(n=>n.remove()); if(mount) mount.host.remove(); App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, GOAL_TYPES.length+' types', bad.join(' | '));
-});
+}, {needs:['dom-render']});
 
 regress('v4: Goals manager filters by level, off and Failing', ()=>{
   const keep = App.data, keepPlan = App.plan, keepTab = App.ui.tab;
@@ -103,7 +103,7 @@ regress('v4: Goals manager filters by level, off and Failing', ()=>{
     if(failing<1 || !failIds.includes(a.id)) bad.push('failing '+failIds.join(','));
   } finally { closePop(); if(mount) mount.host.remove(); App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'filters', bad.join(' | '));
-});
+}, {needs:['dom-render']});
 
 regress('v4: Goals manager works in the Rules tab, the wide sheet and from the person Rules popover', ()=>{
   const keep = App.data, keepPlan = App.plan, keepTab = App.ui.tab, keepUi = Object.assign({}, App.ui);
@@ -131,4 +131,4 @@ regress('v4: Goals manager works in the Rules tab, the wide sheet and from the p
     if(!sh2 || !sh2.querySelector('.gm-detail [data-goal="'+g.id+'"]')) bad.push('deep link');
   } finally { delete App.ui.gmForceWide; if(sheet.current) sheet.current.close(true); closePop(); Object.assign(App.ui, keepUi); App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'three entry points', bad.join(' | '));
-});
+}, {needs:['dom-render']});

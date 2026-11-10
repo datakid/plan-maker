@@ -69,7 +69,7 @@ regress('v4: People table edits name, pool, skill, per plan and max run inline f
     if(sheet.current) bad.push('a sheet opened');
   } finally { closePop(); Object.assign(App.ui, keepUi); App.data = keepData; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'inline edits saved', bad.join(' | '));
-});
+}, {needs:['dom-render']});
 
 regress('v4: the docked panel stays open while switching rows by click and by keyboard', ()=>{
   const keepUi = Object.assign({}, App.ui), keepData = App.data, keepPlan = App.plan, keepTab = App.ui.tab;
@@ -97,7 +97,7 @@ regress('v4: the docked panel stays open while switching rows by click and by ke
     if(sheet.current) bad.push('modal sheet opened');
   } finally { closePop(); Object.assign(App.ui, keepUi); App.data = keepData; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'panel persists', bad.join(' | '));
-});
+}, {needs:['dom-render']});
 
 regress('v4: bulk edit of two people applies and undoes', ()=>{
   const keepUi = Object.assign({}, App.ui), keepData = App.data, keepPlan = App.plan, keepTab = App.ui.tab;
@@ -121,7 +121,7 @@ regress('v4: bulk edit of two people applies and undoes', ()=>{
     if(a2.pool!==beforeA || b2.pool!==beforeB) bad.push('undo restored '+a2.pool+' '+b2.pool);
   } finally { closePop(); document.querySelectorAll('.toasts .toast').forEach(n=>n.remove()); Object.assign(App.ui, keepUi); App.data = keepData; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'bulk and undo', bad.join(' | '));
-});
+}, {needs:['dom-render']});
 
 regress('v4: People table works at narrow width and in Arabic and English', ()=>{
   const keepUi = Object.assign({}, App.ui), keepData = App.data, keepPlan = App.plan, keepTab = App.ui.tab;
@@ -143,7 +143,7 @@ regress('v4: People table works at narrow width and in Arabic and English', ()=>
     }
   } finally { if(sheet.current) sheet.current.close(true); closePop(); Object.assign(App.ui, keepUi); document.documentElement.dir = keepUi.lang==='ar' ? 'rtl' : 'ltr'; App.data = keepData; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length, 'ar and en', bad.join(' | '));
-});
+}, {needs:['dom-render', 'layout']});
 
 P5.check = function(fn){
   const ui = Object.assign({}, App.ui), data = App.data, plan = App.plan;
@@ -183,7 +183,7 @@ regress('team: availability popover re-renders on mode change', ()=>P5.check(()=
   closePop();
   const updated = P5.rows().find(r=>r.dataset.pid===p.id);
   P5.assert(updated!==row && updated.querySelector('.pt-c-avail .chip').textContent===availSummary(p), 'deferred row refresh missing');
-}));
+}), {needs:['dom-render']});
 
 regress('team: off-days popover clear works from table', ()=>P5.check(()=>{
   const row = P5.rows()[0], p = personById(row.dataset.pid);
@@ -200,7 +200,7 @@ regress('team: off-days popover clear works from table', ()=>P5.check(()=>{
   clear.click();
   P5.assert(p.off.length===0 && chip.textContent==='0', 'clear did not reset model and count');
   P5.assert(!document.querySelector('.pop .mc-day.sel, .pop .chips .chip'), 'stale selected days or chips');
-}));
+}), {needs:['dom-render']});
 
 regress('team: panel edits repaint the row', ()=>P5.check(()=>{
   const id = P5.rows()[0].dataset.pid, p = personById(id);
@@ -211,7 +211,7 @@ regress('team: panel edits repaint the row', ()=>P5.check(()=>{
   const row = P5.rows().find(r=>r.dataset.pid===id);
   P5.assert(row.querySelector('.pt-c-avail .chip').textContent===availSummary(p), 'availability cell stale');
   P5.assert(row.classList.contains('open'), 'open row marker lost');
-}));
+}), {needs:['dom-render']});
 
 regress('team: drawer is docked to the viewport edge', ()=>P5.check(()=>{
   const id = P5.rows()[0].dataset.pid;
@@ -225,7 +225,7 @@ regress('team: drawer is docked to the viewport edge', ()=>P5.check(()=>{
     const viewport = document.documentElement.getBoundingClientRect();
     P5.assert(Math.abs(dir==='rtl' ? r.left-viewport.left : r.right-viewport.right)<=1, 'drawer not flush in '+dir);
   }
-}));
+}), {needs:['dom-render']});
 
 regress('team: table header is sticky inside the wrap', ()=>P5.check(()=>{
   const wrap = document.querySelector('.pt-wrap');
@@ -235,4 +235,4 @@ regress('team: table header is sticky inside the wrap', ()=>P5.check(()=>{
   const th = wrap.querySelector('th');
   P5.assert(getComputedStyle(th).position==='sticky', 'header not sticky');
   P5.assert(Math.abs(th.getBoundingClientRect().top-wrap.getBoundingClientRect().top)<=1, 'header scrolled out of wrap');
-}));
+}), {needs:['dom-render']});

@@ -214,32 +214,6 @@ function setGenProgress(stage, pct){
   n.querySelector('.gs-label').textContent = t('generating')+' · '+(key ? t(key) : '')+' '+p+'%';
   n.querySelector('.gs-fill').style.width = p+'%';
 }
-function diffPlans(a, b){
-  const group = p=>{
-    const m = new Map();
-    for(const v of p.visits){ if(!m.has(v.facilityId)) m.set(v.facilityId, []); m.get(v.facilityId).push(v); }
-    for(const l of m.values()) l.sort((x, y)=>x.date<y.date ? -1 : (x.date>y.date ? 1 : 0));
-    return m;
-  };
-  const key = v=>visitTeamIds(v).slice().sort().join(',');
-  const ga = group(a), gb = group(b);
-  const out = {added:0, removed:0, moved:0, changed:0};
-  for(const id of new Set([...ga.keys(), ...gb.keys()])){
-    const A = ga.get(id) || [], B = gb.get(id) || [];
-    const used = new Set(), left = [];
-    for(const x of A){
-      const j = B.findIndex((y, k)=>!used.has(k) && y.date===x.date);
-      if(j>=0){ used.add(j); if(key(x)!==key(B[j])) out.changed++; }
-      else left.push(x);
-    }
-    const rest = B.filter((_, k)=>!used.has(k));
-    out.moved += Math.min(left.length, rest.length);
-    out.added += Math.max(0, rest.length-left.length);
-    out.removed += Math.max(0, left.length-rest.length);
-  }
-  return out;
-}
-
 function diffChipNode(d){
   const keep = ()=>{ App.plan = d.prev; App.ui.diff = null; PlanHistory.undo = []; PlanHistory.redo = []; savePlan(); emit('plan'); };
   return el('div', {class:'banner info', id:'diff-chip', role:'status'}, [
@@ -398,17 +372,9 @@ function applySeatFix(f){
   return true;
 }
 function proofPill(plan, A){
-  if(!plan.visits.length || plan.stale) return null;
-  const s = plan.gen && plan.gen.search;
-  const conflicts = plan.conflicts || [];
-  let kind = null;
-  if(A.blocking){
-    kind = plan.status==='infeasible' && conflicts.length ? 'proofInfeasible' : (plan.status==='exhausted' ? 'proofLimit' : null);
-  } else if(s && s.optimalOnIntent && s.lowerBound && s.lowerBound.requested>0) kind = 'proofOptimal';
-  else if(s) kind = 'proofValid';
-  if(!kind) return null;
-  const cls = {proofInfeasible:'danger', proofLimit:'warn', proofOptimal:'ok', proofValid:'mid'}[kind];
-  return el('span', {class:'tag '+cls, id:'gen-proof', title:t(kind+'Hint')}, t(kind));
+  const info = statusPillInfo(plan, A);
+  if(!info) return null;
+  return el('span', {class:'tag '+info.tone, id:'gen-proof', role:'status', 'aria-live':'polite', title:t(info.hintKey)}, [el('span', {class:'txt-long'}, t(info.labelKey)), el('span', {class:'txt-short'}, t(info.shortKey))]);
 }
 
 function planStatusBanner(plan, A){
@@ -675,8 +641,6 @@ function viewSummary(plan, A){
   const visitDays = new Set(plan.visits.map(v=>v.date)).size;
   const totalKm = Math.round(sum(Object.values(A.km)));
   const okChecks = A.checks.filter(c=>c.ok).length;
-  const pill = proofPill(plan, A);
-  if(pill) wrap.appendChild(el('div', {class:'row', style:{gap:'8px', margin:'0 0 10px'}}, [pill]));
   wrap.appendChild(el('div', {class:'kpis'}, [
     el('div', {class:'kpi'}, [el('div', {class:'n num'}, String(plan.visits.length)), el('div', {class:'l'}, t('kpiVisits')), el('div', {class:'split'}, [el('span', {class:'row', style:{gap:'5px'}}, [el('span', {class:'dot basic'}), String(A.kinds.basic||0)]), el('span', {class:'row', style:{gap:'5px'}}, [el('span', {class:'dot contracted'}), String(A.kinds.contracted||0)])])]),
     el('div', {class:'kpi'}, [el('div', {class:'n num ltr'}, visitDays+' / '+plan.days.length), el('div', {class:'l'}, t('kpiDays'))]),
@@ -765,7 +729,7 @@ function buildActionBar(plan, A){
   let main;
   if(plan.approved) main = el('button', {type:'button', class:'btn ghost', onclick:()=>{ unapprovePlan(); }}, t('unapprove'));
   else main = el('button', {type:'button', class:'btn primary', disabled: !n, onclick:()=>{ const r = approvePlan(); if(r.ok) toast(t('approved')); else showApprovalBlockers(r.blockers); }}, [el('span', {html:ICON.check, style:{display:'flex'}}), t('approve')]);
-  bar.appendChild(el('div', {class:'actionbar-inner'}, [status, el('span', {style:{width:'10px'}}), plan.approved ? null : undoBtn, plan.approved ? null : redoBtn, printBtn, exportBtn, main]));
+  bar.appendChild(el('div', {class:'actionbar-inner'}, [status, proofPill(plan, A), el('span', {style:{width:'10px'}}), plan.approved ? null : undoBtn, plan.approved ? null : redoBtn, printBtn, exportBtn, main]));
   return bar;
 }
 

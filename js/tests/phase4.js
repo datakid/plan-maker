@@ -54,7 +54,7 @@ regress('v4: no Must/Try Seg, rigid/flexible or light/medium/strong control rema
   const pats = [/t\('gMust'\)/, /t\('gTry'\)/, /prFlexible|prRigid|prLight|prMedium|prStrong/, /senRequire|senPrefer/, /\['sLight'\]|t\('sLight'\)|t\('sNormal'\)|t\('sStrong'\)/, /strict\s*=\s*v\b/];
   for(const p of pats) if(p.test(joined)) bad.push(String(p));
   return verdict(!bad.length, 'clean', bad.join(' | '));
-});
+}, {needs:['dom-render']});
 
 regress('v4: every registry rule is reachable through a LevelChip', ()=>{
   const keep = App.data, keepPlan = App.plan, keepTab = App.ui.tab;
@@ -63,7 +63,7 @@ regress('v4: every registry rule is reachable through a LevelChip', ()=>{
     const missing = RULES.filter(r=>!labels.some(l=>l.endsWith(' · '+t(r.name)))).map(r=>r.id);
     return verdict(!missing.length, RULES.length+' rules', 'missing '+missing.join(','));
   } finally { App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
-});
+}, {needs:['dom-render']});
 
 regress('v4: toggling every rule chip between Must and Prefer regenerates without errors', ()=>{
   const keep = App.data, keepPlan = App.plan, keepTab = App.ui.tab, keepMode = App.ui.rulesMode;
@@ -97,4 +97,4 @@ regress('v4: toggling every rule chip between Must and Prefer regenerates withou
     }
   } finally { closePop(); App.ui.rulesMode = keepMode; App.data = keep; App.plan = keepPlan; App.ui.tab = keepTab; }
   return verdict(!bad.length && toggled>30, toggled+' chips toggled', bad.slice(0, 5).join(' | ')+' toggled '+toggled);
-});
+}, {needs:['dom-render']});

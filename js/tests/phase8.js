@@ -10,8 +10,10 @@ function shipFreshStorage(){
 function shipRestoreApp(keep){
   App.data = keep.data; App.plan = keep.plan;
   App.readOnly = false; App.recovered = false; App.corrupt = false;
-  const b = document.getElementById('ro-banner'); if(b) b.remove();
-  document.querySelectorAll('.dialog, .scrim').forEach(n=>n.remove());
+  if(typeof document!=='undefined'){
+    const b = document.getElementById('ro-banner'); if(b) b.remove();
+    document.querySelectorAll('.dialog, .scrim').forEach(n=>n.remove());
+  }
   shipFreshStorage();
   saveNow(); savePlan();
 }
@@ -40,7 +42,7 @@ regress('ship: P1.1 a foreign write makes this window read-only and nothing is w
     if(document.getElementById('ro-banner')) return verdict(false, '', 'banner still shown after take over');
     return verdict(true, 'read-only until take over');
   } finally { shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.1 unrelated storage keys do not trigger read-only', ()=>{
   const keep = shipKeep();
@@ -48,7 +50,7 @@ regress('ship: P1.1 unrelated storage keys do not trigger read-only', ()=>{
     window.dispatchEvent(new StorageEvent('storage', {key:'alkhitta.theme'}));
     return verdict(!App.readOnly, 'ignored', 'theme key flipped read-only');
   } finally { shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.2 a full store keeps memory data, never writes partial data and offers a backup', ()=>{
   const keep = shipKeep();
@@ -71,7 +73,7 @@ regress('ship: P1.2 a full store keeps memory data, never writes partial data an
     if(![...dlg.querySelectorAll('button')].some(b=>b.textContent===t('bkExport'))) return verdict(false, '', 'dialog has no backup button');
     return verdict(true, 'dialog shown, memory kept');
   } finally { sh.setItem = realSet; shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.2 a failed plan save is reported and the old plan stays intact', ()=>{
   const keep = shipKeep();
@@ -87,7 +89,7 @@ regress('ship: P1.2 a failed plan save is reported and the old plan stays intact
     sh.setItem = realSet;
     return verdict(localStorage.getItem(PLAN_KEY)===good && localStorage.getItem(PLAN_KEY+'.tmp')===null, 'old plan intact', 'plan store changed or tmp left');
   } finally { sh.setItem = realSet; shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.3 atomic save leaves no tmp key and a leftover tmp is recovered when the main value is broken', ()=>{
   const keep = shipKeep();
@@ -151,7 +153,7 @@ regress('ship: P1.4 snapshots keep the last 3, are size capped, and are taken be
     if(readSnapshots().slice(-1)[0].reason!=='restore') return verdict(false, '', 'restore did not snapshot first');
     return verdict(true, 'approve, import, restore snapshots');
   } finally { shipRestoreApp(keep); localStorage.removeItem(SNAP_KEY); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.4 a snapshot that cannot fit is dropped without breaking the app', ()=>{
   const keep = shipKeep();
@@ -179,7 +181,7 @@ regress('ship: P1.4 the Data tab shows storage size, version and a restorable sn
     const okList = !!list && list.querySelectorAll('button').length===1;
     return verdict(okSize && okList, 'size + 1 snapshot row', 'size '+okSize+' list '+okList);
   } finally { App.ui.tab = tab; renderTab(); shipRestoreApp(keep); localStorage.removeItem(SNAP_KEY); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.5 names with markup stay text in every tab and html: only accepts static svg', ()=>{
   const keep = shipKeep(), tab = App.ui.tab;
@@ -209,7 +211,7 @@ regress('ship: P1.5 names with markup stay text in every tab and html: only acce
     if(!/^<svg/.test(WORDMARK) || !el('span', {html:WORDMARK}).querySelector('svg')) return verdict(false, '', 'WORDMARK rejected');
     return verdict(window.__xss===0, 'no markup executed', 'xss flag '+window.__xss);
   } finally { App.ui.tab = tab; App.ui.view = 'list'; renderTab(); shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 function shipMutate(base, rnd){
   const raw = JSON.parse(JSON.stringify(base));
@@ -272,7 +274,7 @@ regress('ship: P1.6 fifty corrupted backups never throw through restore or load 
     }
     return verdict(n>=15, n+' of 50 restored cleanly, none threw', 'only '+n+' restorable');
   } finally { shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P1.6 corrupted data that restores can still generate a plan', ()=>{
   const keep = shipKeep();
@@ -305,13 +307,15 @@ regress('ship: P1.7 erase-all stops further writes so a reload cannot resurrect 
     for(let i=0; i<sh.length; i++){ const k = sh.key(i); if(k && k.startsWith('alkhitta.')) left.push(k); }
     return verdict(removed>0 && left.length===0, 'storage empty after the unload handler ran', 'left '+left.join(','));
   } finally { shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 const SHIP_ASYNC = [];
-function shipAsync(name, fn){ SHIP_ASYNC.push({name, fn}); }
+function shipAsync(name, fn, opts){ SHIP_ASYNC.push({name, fn, needs:(opts && opts.needs) || []}); }
 async function runShipAsync(filter){
   for(const c of SHIP_ASYNC){
     if(filter && !filter.test(c.name)) continue;
+    const missing = missingNeeds(c.needs);
+    if(missing.length){ skipCase(c.name, missing); continue; }
     const keep = shipKeep();
     try{
       const r = await c.fn();
@@ -379,7 +383,7 @@ shipAsync('ship: P2.2 progress arrives in order and a cancel stops the worker wi
   let last = -1;
   for(const [, p] of seen.slice(n)){ if(p<last-1e-9) return verdict(false, '', 'progress went backwards'); last = p; }
   return verdict(!!full.plan && seen.length>n, (GenRun.mode)+' mode, '+(seen.length-n)+' progress messages');
-});
+}, {needs:['worker']});
 
 shipAsync('ship: P2.3 the page stays responsive while a quarter is generated', async ()=>{
   App.data = normalizeData(JSON.parse(SEED_JSON));
@@ -596,7 +600,7 @@ regress('ship: P4.1 manual edits can be undone and redone with the keyboard, his
     if(historyState().undo!==0 || stepHistory(-1)) return verdict(false, '', 'history survived a replaced plan');
     return verdict(true, 'undo, redo, input guard, cap '+HISTORY_LIMIT+', reset on new plan');
   } finally { App.ui.tab = tab; PlanHistory.undo = []; PlanHistory.redo = []; PlanHistory.owner = null; renderTab(); shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P4.1 undoing an edit to a fixed visit puts its saved override back as well', ()=>{
   const keep = shipKeep(), tab = App.ui.tab;
@@ -612,7 +616,7 @@ regress('ship: P4.1 undoing an edit to a fixed visit puts its saved override bac
     stepHistory(-1);
     return verdict(overrideById(v.overrideId).date===was, 'override restored', 'override date '+overrideById(v.overrideId).date+' expected '+was);
   } finally { PlanHistory.undo = []; PlanHistory.redo = []; PlanHistory.owner = null; shipRestoreApp(keep); App.ui.tab = tab; }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P4.2 diffPlans counts added, removed, moved and team-changed visits', ()=>{
   const keep = shipKeep();
@@ -692,7 +696,7 @@ regress('ship: P4.3 dialogs and sheets trap Tab, wrap focus and give focus back 
     if(TrapStack.length!==0) return verdict(false, '', 'trap left behind: '+TrapStack.length);
     return verdict(true, 'dialog and sheet trap focus');
   } finally { opener.remove(); document.querySelectorAll('.dialog, .scrim, .sheet').forEach(n=>n.remove()); }
-});
+}, {needs:['dom-render', 'focus']});
 
 regress('ship: P4.4 the action bar never overflows its container at a narrow width', ()=>{
   const keep = shipKeep(), tab = App.ui.tab;
@@ -706,7 +710,7 @@ regress('ship: P4.4 the action bar never overflows its container at a narrow wid
     const css = [...document.styleSheets].some(s=>{ try{ return [...s.cssRules].some(r=>r.cssText && r.cssText.includes('.actionbar .status') && r.cssText.includes('min-width: 0')); }catch(e){ return false; } });
     return verdict(css && kids.length>=3 && !overflow, 'status shrinks, bar fits', 'css '+css+' kids '+kids.length+' overflow '+overflow);
   } finally { App.ui.tab = tab; renderTab(); shipRestoreApp(keep); }
-});
+}, {needs:['dom-render', 'layout']});
 
 shipAsync('ship: P4.5 at a narrow width a goal opens in its own sheet, and the wide layout is pinned for the master-detail tests', async ()=>{
   const tab = App.ui.tab;
@@ -747,7 +751,7 @@ regress('ship: P5.1 the error diagnostic carries version and place but no names,
     document.querySelectorAll('.toasts .toast').forEach(n=>n.remove());
     return verdict(first===true && second===false && toasts.length===1, 'diagnostic is clean, one toast with a copy button', 'first '+first+' second '+second+' toasts '+toasts.length);
   } finally { shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P5.2 backups carry the app version and still restore', ()=>{
   const keep = shipKeep();
@@ -796,7 +800,7 @@ shipAsync('ship: P5.4 index.html, sw.js and the app agree on one version and eve
   if(/googleapis|gstatic/.test(html + (await (await fetch('css/app.css')).text()))) return verdict(false, '', 'external font reference');
   const man = await (await fetch('manifest.webmanifest')).json();
   return verdict(man.icons.length>=3 && /Content-Security-Policy/.test(html), refs.length+' assets versioned and precached', 'manifest or CSP meta missing');
-});
+}, {needs:['fetch']});
 
 regress('ship: P4.6 the Rules tab opens in Simple mode with key rules only and no weights, Advanced shows everything, and search finds rules in any mode', ()=>{
   const keep = shipKeep(), tab = App.ui.tab, mode = App.ui.rulesMode;
@@ -831,7 +835,7 @@ regress('ship: P4.6 the Rules tab opens in Simple mode with key rules only and n
     if(!chips2.some(c=>c.dataset.level==='prefer' && c.textContent.includes(t('lvPrefer')) && /\d/.test(c.textContent))) return verdict(false, '', 'advanced mode shows no weights');
     return verdict(true, 'simple hides '+advIds.length+' sections and weights, advanced shows all, search works');
   } finally { App.ui.rulesMode = mode; store.removeItem('alkhitta.rulesmode'); App.ui.tab = tab; renderTab(); shipRestoreApp(keep); }
-});
+}, {needs:['dom-render', 'layout']});
 
 regress('ship: P4.7 first-run guidance: a three step checklist on an empty plan, and empty states for facilities and team', ()=>{
   const keep = shipKeep(), tab = App.ui.tab;
@@ -854,7 +858,7 @@ regress('ship: P4.7 first-run guidance: a three step checklist on an empty plan,
     if(!document.getElementById('team-empty')) return verdict(false, '', 'no empty state for team');
     return verdict(true, 'checklist, facilities and team empty states');
   } finally { App.ui.tab = tab; renderTab(); shipRestoreApp(keep); }
-});
+}, {needs:['dom-render']});
 
 regress('ship: P4.8 solvable conflicts carry a one-click fix that removes the conflict and shows as a button', ()=>{
   const keep = shipKeep(), tab = App.ui.tab;
@@ -889,4 +893,237 @@ regress('ship: P4.8 solvable conflicts carry a one-click fix that removes the co
     if(errs.length) return verdict(false, '', errs.join(' | '));
     return verdict(results.length===4, results.join(', ')+' fixed', 'only '+results.length);
   } finally { App.ui.tab = tab; renderTab(); shipRestoreApp(keep); }
+}, {needs:['dom-render']});
+
+const W_RANK = {select:0, layout:1, teams:2, repair:2, search:3, lns:3, polish:4, explain:5, done:6};
+
+async function wWithCtor(ctor, fn){
+  const keep = GenRun._WorkerCtor;
+  GenRun._WorkerCtor = ctor;
+  try{ return await fn(); } finally { GenRun._WorkerCtor = keep; }
+}
+
+function wSpyCtor(spy){
+  return class extends Worker{
+    constructor(u){ super(u); spy.instances++; }
+    terminate(){ spy.terminated++; super.terminate(); }
+  };
+}
+
+function wFakeCtor(box, onPost){
+  return class{
+    constructor(){ this.terminated = false; box.last = this; box.all.push(this); }
+    postMessage(m){ this.msg = m; if(onPost) onPost(this, m); }
+    terminate(){ this.terminated = true; if(box.onTerminate) box.onTerminate(this); }
+  };
+}
+
+shipAsync('ship: W1 cancel during each stage stops the run, the worker and every callback', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(93);
+  const spy = {instances:0, terminated:0};
+  return wWithCtor(wSpyCtor(spy), async ()=>{
+    for(const stage of ['select', 'search', 'polish', 'explain']){
+      const before = App.plan;
+      let cancelledAt = null, after = 0, settles = 0;
+      const h = startGeneration({seed:1}, (st)=>{
+        if(cancelledAt!==null){ after++; return; }
+        if(W_RANK[st]>=W_RANK[stage]){ cancelledAt = st; h.cancel(); }
+      });
+      h.promise.then(()=>{ settles++; });
+      const res = await h.promise;
+      await sleep(300);
+      if(!res.cancelled || res.plan) return verdict(false, '', stage+': not a cancelled result '+JSON.stringify(Object.keys(res)));
+      if(GenRun.active!==null) return verdict(false, '', stage+': active handle not cleared');
+      if(App.plan!==before) return verdict(false, '', stage+': App.plan replaced');
+      if(after!==0) return verdict(false, '', stage+': '+after+' progress callbacks after cancel');
+      if(settles!==1) return verdict(false, '', stage+': promise settled '+settles+' times');
+      if(cancelledAt===null) return verdict(false, '', stage+': no progress message ever arrived');
+    }
+    return verdict(spy.instances===4 && spy.terminated===4, 'four stages, each worker terminated once', 'workers '+spy.instances+' terminated '+spy.terminated);
+  });
+}, {needs:['worker']});
+
+shipAsync('ship: W2 cancel then regenerate: late messages are ignored and the new plan equals a clean run', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(27);
+  let late = 0;
+  const h1 = startGeneration({seed:5}, ()=>{ if(h1.cancelled) late++; });
+  await sleep(120);
+  h1.cancelled = true;
+  h1.cancel();
+  const h2 = startGeneration({seed:5});
+  const r2 = await h2.promise;
+  await sleep(200);
+  const clean = await startGeneration({seed:5}).promise;
+  if(!r2.plan || !clean.plan) return verdict(false, '', 'no plan');
+  if(!(h2.runId>h1.runId)) return verdict(false, '', 'run ids not increasing '+h1.runId+' '+h2.runId);
+  if(late) return verdict(false, '', late+' callbacks from the cancelled run');
+  return verdict(shipPlanKey(r2.plan)===shipPlanKey(clean.plan) && GenRun.active===null, 'new plan equals a clean run', 'plans differ or active handle left');
+}, {needs:['worker']});
+
+shipAsync('ship: W3 a result that arrives in the same tick as cancel is not applied, and stale run ids are ignored', async ()=>{
+  const box = {all:[]};
+  box.onTerminate = w=>{ if(w.onmessage && w.msg) w.onmessage({data:{type:'result', runId:w.msg.runId, res:{plan:{marker:'late'}}}}); };
+  const keepPlan = App.plan;
+  return wWithCtor(wFakeCtor(box), async ()=>{
+    const h = startGeneration({seed:1});
+    let settles = 0;
+    h.promise.then(()=>{ settles++; });
+    h.cancel();
+    const res = await h.promise;
+    await sleep(20);
+    if(!res.cancelled || res.plan) return verdict(false, '', 'cancelled result expected, got '+JSON.stringify(res));
+    if(settles!==1 || GenRun.active!==null || App.plan!==keepPlan) return verdict(false, '', 'settles '+settles+' active '+(GenRun.active!==null));
+    const h2 = startGeneration({seed:1});
+    const w2 = box.last;
+    w2.onmessage({data:{type:'result', runId:h2.runId-1, res:{plan:{marker:'stale'}}}});
+    w2.onmessage({data:{type:'progress', runId:h2.runId-1, stage:'select', pct:0.5}});
+    if(GenRun.active!==h2) return verdict(false, '', 'a stale run id settled the active run');
+    w2.onmessage({data:{type:'result', runId:h2.runId, res:{plan:{marker:'live'}}}});
+    const r2 = await h2.promise;
+    return verdict(r2.plan && r2.plan.marker==='live' && w2.terminated, 'late result dropped, stale ids ignored, live result applied', JSON.stringify(r2));
+  });
 });
+
+shipAsync('ship: W4 a worker that cannot start, or errors before progress, falls back to one inline run with the same plan', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(6);
+  const inline = await startGeneration({seed:7, inline:true}).promise;
+  const keepGen = generatePlan;
+  let calls = 0;
+  globalThis.generatePlan = function(){ calls++; return keepGen.apply(this, arguments); };
+  try{
+    const thrower = class{ constructor(){ throw new Error('no worker'); } };
+    const a = await wWithCtor(thrower, ()=>startGeneration({seed:7}).promise);
+    const modeA = GenRun.mode, callsA = calls;
+    calls = 0;
+    const box = {all:[]};
+    const erroring = wFakeCtor(box, (w, m)=>{ setTimeout(()=>{ if(w.onmessage) w.onmessage({data:{type:'error', runId:m.runId, message:'boom'}}); }, 0); });
+    const b = await wWithCtor(erroring, ()=>startGeneration({seed:7}).promise);
+    const modeB = GenRun.mode, callsB = calls;
+    const same = shipPlanKey(a.plan)===shipPlanKey(inline.plan) && shipPlanKey(b.plan)===shipPlanKey(inline.plan);
+    return verdict(same && modeA==='inline' && modeB==='inline' && callsA===1 && callsB===1 && box.all[0].terminated, 'both fallbacks ran inline once and match', 'same '+same+' modes '+modeA+','+modeB+' calls '+callsA+','+callsB);
+  } finally { globalThis.generatePlan = keepGen; }
+});
+
+shipAsync('ship: W5 a double click on Generate starts one worker and one plan', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(27);
+  App.ui.tab = 'plan'; renderTab();
+  const btn = document.querySelector('.gen-btn');
+  const spy = {instances:0, terminated:0};
+  return wWithCtor(wSpyCtor(spy), async ()=>{
+    const p1 = doGenerate(btn);
+    const p2 = doGenerate(btn);
+    const r1 = await p1, r2 = await p2;
+    return verdict(spy.instances===1 && r1===r2 && !!r1.plan && App.plan===r1.plan, 'one worker, one plan', 'workers '+spy.instances+' same result '+(r1===r2));
+  });
+}, {needs:['worker']});
+
+shipAsync('ship: W6 the Cancel button in the status bar gives the same outcome as cancel()', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(93);
+  App.ui.tab = 'plan'; renderTab();
+  const before = App.plan;
+  const btn = document.querySelector('.gen-btn');
+  const p = doGenerate(btn);
+  await sleep(150);
+  const cancelBtn = document.getElementById('gen-cancel');
+  if(!cancelBtn) return verdict(false, '', 'no cancel button while running');
+  cancelBtn.click();
+  const res = await p;
+  await sleep(100);
+  const gone = !document.getElementById('gen-status');
+  const enabled = [...document.querySelectorAll('.gen-btn')].every(b=>!b.disabled && !b.classList.contains('busy'));
+  return verdict(res.cancelled===true && gone && enabled && GenRun.active===null && App.plan===before, 'cancelled, bar removed, button enabled', 'cancelled '+res.cancelled+' gone '+gone+' enabled '+enabled+' plan same '+(App.plan===before));
+}, {needs:['worker']});
+
+shipAsync('ship: W7 a cancelled run leaves undo history and the diff chip unchanged', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(27);
+  App.ui.tab = 'plan'; renderTab();
+  await doGenerate(document.querySelector('.gen-btn'));
+  const plan = App.plan, diff = App.ui.diff;
+  const undo = PlanHistory.undo.length, redo = PlanHistory.redo.length;
+  const p = doGenerate(document.querySelector('.gen-btn'));
+  await sleep(100);
+  GenRun.active.cancel();
+  const res = await p;
+  return verdict(res.cancelled===true && App.plan===plan && App.ui.diff===diff && PlanHistory.undo.length===undo && PlanHistory.redo.length===redo, 'plan, diff and history untouched', 'cancelled '+res.cancelled+' plan same '+(App.plan===plan)+' diff same '+(App.ui.diff===diff)+' undo '+PlanHistory.undo.length+'/'+undo);
+}, {needs:['worker']});
+
+function pContrast(fg, bg){
+  const parse = c=>{
+    let m = /rgba?\(([^)]+)\)/.exec(c);
+    if(m){ const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2]]; }
+    m = /color\(srgb ([^)]+)\)/.exec(c);
+    if(m){ const p = m[1].split(/[ \/]+/).filter(Boolean).map(Number); return [p[0]*255, p[1]*255, p[2]*255]; }
+    return null;
+  };
+  const lum = rgb=>{
+    const f = v=>{ v /= 255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+    return 0.2126*f(rgb[0])+0.7152*f(rgb[1])+0.0722*f(rgb[2]);
+  };
+  const a = parse(fg), b = parse(bg);
+  if(!a || !b) return 0;
+  const l1 = lum(a), l2 = lum(b);
+  return (Math.max(l1, l2)+0.05)/(Math.min(l1, l2)+0.05);
+}
+
+shipAsync('ship: P4pill the status pill sits in the action bar, never overflows or clips, keeps 4.5:1 contrast and does not take focus, in both languages and themes', async ()=>{
+  App.data = normalizeData(JSON.parse(SEED_JSON));
+  shipSetSpan(27);
+  App.ui.tab = 'plan'; renderTab();
+  await doGenerate(document.querySelector('.gen-btn'));
+  const keepLang = App.ui.lang, keepTheme = App.ui.theme;
+  const mk = (status, search, conflicts, blocking)=>({plan:{visits:[{id:'v'}], gen:{search}, status, conflicts:conflicts || [], stale:false}, A:{blocking}});
+  const states = {
+    proofInfeasible:mk('infeasible', {}, [{key:'x'}], 2),
+    proofTruncated:mk('exhausted', {truncated:true}, [], 2),
+    proofLimit:mk('exhausted', {}, [], 2),
+    proofOptimal:mk('valid', {optimalOnIntent:true, lowerBound:{requested:2, intentUnits:0}}, [], 0),
+    proofValid:mk('valid', {}, [], 0)
+  };
+  const bad = [];
+  try{
+    for(const lang of ['ar', 'en']) for(const theme of ['light', 'dark']){
+      setLang(lang); setTheme(theme);
+      App.ui.tab = 'plan'; renderTab();
+      await sleep(60);
+      const bar = document.querySelector('#plan-actionbar .actionbar-inner');
+      if(!bar){ bad.push(lang+'/'+theme+': no action bar'); continue; }
+      for(const kind of Object.keys(states)){
+        const old = document.getElementById('gen-proof');
+        const fresh = proofPill(states[kind].plan, states[kind].A);
+        if(!fresh){ bad.push(lang+'/'+theme+'/'+kind+': no pill'); continue; }
+        if(old) old.replaceWith(fresh); else bar.insertBefore(fresh, bar.children[1] || null);
+        const where = lang+'/'+theme+'/'+kind+' @'+window.innerWidth;
+        const focusBefore = document.activeElement;
+        if(!bar.contains(fresh)) bad.push(where+': pill outside .actionbar-inner');
+        if(bar.scrollWidth>bar.clientWidth+1) bad.push(where+': action bar overflows '+bar.scrollWidth+'>'+bar.clientWidth);
+        const root = document.documentElement;
+        if(root.scrollWidth>root.clientWidth+1) bad.push(where+': page scrolls sideways');
+        const cs = getComputedStyle(fresh);
+        const clipped = fresh.scrollWidth>fresh.clientWidth+1;
+        if(clipped && !(cs.textOverflow==='ellipsis' && fresh.getAttribute('title'))) bad.push(where+': text clipped without ellipsis and title');
+        if(fresh.getAttribute('role')!=='status' || fresh.getAttribute('aria-live')!=='polite') bad.push(where+': role or aria-live missing');
+        if(document.activeElement!==focusBefore || fresh.tabIndex>=0) bad.push(where+': pill takes focus');
+        const ratio = pContrast(cs.color, cs.backgroundColor);
+        if(ratio<4.5) bad.push(where+': contrast '+ratio.toFixed(2));
+      }
+    }
+  } finally { setLang(keepLang); setTheme(keepTheme); App.ui.tab = 'plan'; renderTab(); }
+  return verdict(bad.length===0, '20 combinations clean', bad.slice(0, 6).join(' | '));
+}, {needs:['dom-render', 'layout']});
+
+shipAsync('ship: P4pill the pill rules in css/app.css use logical properties only', async ()=>{
+  const css = await (await fetch('css/app.css')).text();
+  const rules = [];
+  const re = /([^{}]*#gen-proof[^{}]*)\{([^}]*)\}/g;
+  let m;
+  while((m = re.exec(css))) rules.push(m[2]);
+  const physical = /(^|[;\s])((margin|padding|border)-(left|right)|left|right)\s*:/;
+  const hits = rules.filter(r=>physical.test(r));
+  return verdict(rules.length>=3 && hits.length===0, rules.length+' pill rules, none physical', rules.length+' rules, physical in: '+hits.join(' || '));
+}, {needs:['fetch']});

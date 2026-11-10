@@ -200,6 +200,6 @@ window.addEventListener('load', async ()=>{
     try{ await runShipAsync(ONLY_RE); }catch(e){ ok('async regression suite ran', false, 'EXC '+e.message); }
     await sleep(200);
     ok('no uncaught errors', TEST.errors.length===0, TEST.errors.join(' | '));
-    console.log('RESULT pass='+TEST.pass+' fail='+TEST.fail);
+    console.log(suiteFinish(TEST.cases.map(c=>c.name).concat(SHIP_ASYNC.map(c=>c.name)), !!ONLY_RE));
   }catch(e){ console.log('EXC', e.message, e.stack); }
 });

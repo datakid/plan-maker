@@ -36,7 +36,7 @@ async function runSuite(browser, base, width){
   while(!result && Date.now()-t0<900000) await page.waitForTimeout(500);
   await page.close();
   note('suite '+width+'px: '+(result || 'NO RESULT'));
-  if(!result || !/fail=0/.test(result) || bad.length) fail('suite '+width+'px '+(result || 'no result')+' '+bad.slice(0, 5).join(' | '));
+  if(!result || !/fail=0/.test(result) || !/skip=0/.test(result) || bad.length) fail('suite '+width+'px '+(result || 'no result')+' '+bad.slice(0, 5).join(' | '));
 }
 
 async function runMatrix(browser, base){
@@ -128,7 +128,7 @@ async function runApp(browser, base){
     const only = process.env.ONLY || 'all';
     if(only==='all' || only==='app') await runApp(browser, base);
     if(only==='all' || only==='matrix') await runMatrix(browser, base);
-    if(only==='all' || only==='suite') await runSuite(browser, base, 1280);
+    if(only==='all' || only==='suite'){ await runSuite(browser, base, 1280); await runSuite(browser, base, 390); }
   }catch(e){ fail('runner crashed: '+e.message); }
   await browser.close();
   server.close();
